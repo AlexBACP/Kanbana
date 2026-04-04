@@ -1,85 +1,155 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* ── CSS Variables for theming ─────────────────────── */
+/* ── Variables globales ─────────────────────────────────────────────── */
 :root {
-  --color-primary-300: #c4b5fd;
-  --color-primary-400: #a78bfa;
-  --color-primary-500: #8b5cf6;
-  --color-primary-600: #7c3aed;
-  --color-primary-700: #6d28d9;
+  --bg:          #0d1117;
+  --card:        #161b22;
+  --elevated:    #1c2128;
+  --border:      #30363d;
+  --border-soft: #21262d;
+  --text:        #e6edf3;
+  --muted:       #8b949e;
+  --accent:      #4f46e5;
+  --accent-soft: rgba(79,70,229,0.12);
+  --success:     #3fb950;
+  --warning:     #d29922;
+  --danger:      #f85149;
+  --radius:      10px;
+  --radius-lg:   14px;
 }
 
-[data-theme='blue'] {
-  --color-primary-300: #93c5fd;
-  --color-primary-400: #60a5fa;
-  --color-primary-500: #3b82f6;
-  --color-primary-600: #2563eb;
-  --color-primary-700: #1d4ed8;
-}
-[data-theme='emerald'] {
-  --color-primary-300: #6ee7b7;
-  --color-primary-400: #34d399;
-  --color-primary-500: #10b981;
-  --color-primary-600: #059669;
-  --color-primary-700: #047857;
-}
-[data-theme='rose'] {
-  --color-primary-300: #fda4af;
-  --color-primary-400: #fb7185;
-  --color-primary-500: #f43f5e;
-  --color-primary-600: #e11d48;
-  --color-primary-700: #be123c;
-}
-[data-theme='amber'] {
-  --color-primary-300: #fcd34d;
-  --color-primary-400: #fbbf24;
-  --color-primary-500: #f59e0b;
-  --color-primary-600: #d97706;
-  --color-primary-700: #b45309;
-}
-[data-theme='cyan'] {
-  --color-primary-300: #67e8f9;
-  --color-primary-400: #22d3ee;
-  --color-primary-500: #06b6d4;
-  --color-primary-600: #0891b2;
-  --color-primary-700: #0e7490;
+/* ── Base ───────────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; }
+
+html { font-size: 14px; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Inter', system-ui, sans-serif;
+  font-feature-settings: 'cv02','cv03','cv04','cv11';
+  -webkit-font-smoothing: antialiased;
+  line-height: 1.5;
 }
 
-@layer base {
-  body {
-    @apply bg-dark-bg text-dark-text;
-    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+/* ── Scrollbar ──────────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 99px; }
+::-webkit-scrollbar-thumb:hover { background: #484f58; }
+
+/* ── ✅ CAMBIO: Definición de utilidades personalizadas ────────────── */
+@layer utilities {
+  .bg-accent-soft {
+    background-color: var(--accent-soft);
   }
 }
 
-/* ── Scrollbar ─────────────────────────────────────── */
-::-webkit-scrollbar { width: 6px; height: 6px; }
-::-webkit-scrollbar-track { @apply bg-dark-bg; }
-::-webkit-scrollbar-thumb { @apply bg-dark-border rounded-full; }
-::-webkit-scrollbar-thumb:hover { @apply bg-slate-600; }
-.scrollbar-hide::-webkit-scrollbar { display: none; }
-.scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+/* ── Clases de utilidad ─────────────────────────────────────────────── */
+@layer components {
+  /* Inputs unificados */
+  .input-base {
+    @apply w-full bg-surface-hover border border-surface-border rounded-xl
+           text-ink-primary text-sm px-3 py-2.5
+           placeholder:text-ink-muted
+           focus:outline-none focus:ring-1 focus:ring-primary-500 focus:border-primary-500
+           transition-colors;
+  }
+  .input-dark { @apply input-base; }
 
-/* ── Animations ────────────────────────────────────── */
-.animate-in {
-  animation: fadeIn 0.4s ease-out forwards;
-}
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: translateY(0); }
+  /* Cards */
+  .card {
+    @apply bg-surface-card border border-surface-border rounded-2xl;
+  }
+  .card-elevated {
+    @apply bg-surface-elevated border border-surface-border rounded-2xl;
+  }
+
+  /* Badges de estado */
+  .badge {
+    @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium;
+  }
+  .badge-success { @apply badge bg-success-light text-success border border-success-border; }
+  .badge-warning { @apply badge bg-warning-light text-warning border border-warning-border; }
+  .badge-danger  { @apply badge bg-danger-light  text-danger  border border-danger-border;  }
+  .badge-info    { @apply badge bg-info-light    text-info    border border-info-border;    }
+  .badge-gray    { @apply badge bg-surface-hover text-ink-secondary border border-surface-border; }
+
+  /* Botón primario */
+  .btn-primary {
+    @apply bg-primary-600 hover:bg-primary-500 text-white font-medium text-sm
+           px-4 py-2 rounded-xl transition-colors cursor-pointer
+           disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  .btn-secondary {
+    @apply bg-surface-hover hover:bg-surface-elevated text-ink-primary font-medium text-sm
+           px-4 py-2 rounded-xl border border-surface-border transition-colors cursor-pointer;
+  }
+  .btn-ghost {
+    @apply text-ink-secondary hover:text-ink-primary hover:bg-surface-hover
+           text-sm px-3 py-1.5 rounded-lg transition-colors cursor-pointer;
+  }
+
+  /* Sidebar nav item */
+  .nav-item {
+    @apply flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium
+           text-ink-secondary hover:text-ink-primary hover:bg-surface-hover
+           transition-colors cursor-pointer w-full text-left;
+  }
+  .nav-item.active {
+    /* ✅ Ahora @apply bg-accent-soft funcionará porque la definimos arriba */
+    @apply bg-accent-soft text-primary-400 hover:bg-accent-soft;
+  }
+
+  /* Section headers */
+  .section-header {
+    @apply flex items-center justify-between mb-6;
+  }
+  .section-title {
+    @apply text-base font-semibold text-ink-primary;
+  }
+  .section-subtitle {
+    @apply text-sm text-ink-secondary mt-0.5;
+  }
+
+  /* Table */
+  .table-base {
+    @apply w-full text-sm;
+  }
+  .table-base thead tr {
+    @apply border-b border-surface-border;
+  }
+  .table-base th {
+    @apply text-left px-4 py-3 text-xs font-medium text-ink-secondary uppercase tracking-wider;
+  }
+  .table-base tbody tr {
+    @apply border-b border-surface-border last:border-0 hover:bg-surface-hover transition-colors;
+  }
+  .table-base td {
+    @apply px-4 py-3 text-ink-secondary;
+  }
+
+  /* Stat card */
+  .stat-card {
+    @apply card p-4 flex flex-col gap-1;
+  }
+  .stat-value {
+    @apply text-2xl font-semibold text-ink-primary;
+  }
+  .stat-label {
+    @apply text-xs text-ink-secondary;
+  }
+
+  /* Animación de entrada */
+  .animate-in {
+    animation: fade-in 0.2s ease-out;
+  }
 }
 
-/* ── Utilities ─────────────────────────────────────── */
-.input-dark {
-  @apply w-full px-4 py-3.5 bg-dark-bg border border-dark-border rounded-2xl 
-         text-dark-text text-sm outline-none transition-all;
-}
-.input-dark:focus {
-  @apply border-primary-500;
-  box-shadow: 0 0 0 1px rgba(139, 92, 246, 0.2);
-}
-.input-dark::placeholder {
-  @apply text-dark-muted/40;
+/* ── Framer Motion: reduce animations si el usuario lo prefiere ─────── */
+@media (prefers-reduced-motion: reduce) {
+  * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }

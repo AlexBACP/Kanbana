@@ -1,4 +1,3 @@
-// ProtectedRoute.tsx
 import { Navigate, Outlet } from 'react-router-dom';
 import { useAuthStore } from '../store/auth.store';
 
@@ -11,27 +10,28 @@ export const ProtectedRoute = ({
   allowedRoles,
   redirectTo = '/login',
 }: ProtectedRouteProps) => {
-  // ✅ CAMBIO 1: VOLVEMOS a extraer isLoading. Es vital para evitar el rebote.
-  const { isAuthenticated, user, isLoading } = useAuthStore();
+  const { isAuthenticated, isLoading, user } = useAuthStore();
 
-  // ✅ CAMBIO 2: Si el sistema está cargando o inicializando, NO HACE NADA.
-  // Esto detiene el "Navigate" prematuro que causa el bucle.
+  // Mientras AuthInit verifica el token: spinner neutral
   if (isLoading) {
-    return null; // O un spinner pequeño si prefieres
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-dark-bg">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-8 h-8 border-2 border-dark-border border-t-primary-500 rounded-full animate-spin" />
+          <p className="text-dark-muted text-xs">Verificando sesión...</p>
+        </div>
+      </div>
+    );
   }
 
-  // Ahora que sabemos que YA CARGÓ, evaluamos si tiene permiso
   if (!isAuthenticated) {
     return <Navigate to={redirectTo} replace />;
   }
 
+  // Rol no permitido: redirigir al dashboard correcto
   if (allowedRoles && user && !allowedRoles.includes(user.rol)) {
-    const roleRedirect =
-      user.rol === 'coordinador' || user.rol === 'instructor' || user.rol === 'lider_tecnico'
-        ? '/dashboard'
-        : '/kanban';
-    
-    return <Navigate to={roleRedirect} replace />;
+    const dest = user.rol === 'aprendiz' ? '/kanban' : '/dashboard';
+    return <Navigate to={dest} replace />;
   }
 
   return <Outlet />;

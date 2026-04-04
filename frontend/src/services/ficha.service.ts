@@ -22,6 +22,11 @@ export const fichaService = {
     return data;
   },
 
+  getById: async (id: number): Promise<Ficha> => {
+    const { data } = await api.get(`/fichas/${id}`);
+    return data;
+  },
+
   create: async (dto: CreateFichaDto): Promise<Ficha> => {
     const { data } = await api.post('/fichas', dto);
     return data;

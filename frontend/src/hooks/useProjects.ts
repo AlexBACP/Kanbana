@@ -7,7 +7,7 @@ export const useProjects = () => {
 
   const { data: projects = [], isLoading } = useQuery({
     queryKey: ['projects'],
-    queryFn: projectService.getAll,
+    queryFn: () => projectService.getAll(),
   });
 
   const createMutation = useMutation({

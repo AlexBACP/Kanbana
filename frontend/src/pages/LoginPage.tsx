@@ -1,30 +1,37 @@
-import { useState, useEffect } from 'react';
+/**
+ * LoginPage — funciona en dos modos:
+ *
+ * 1. POPUP (abierto desde el landing):
+ *    window.opener existe → al loguearse exitosamente envía postMessage al padre
+ *    con { type: 'LOGIN_SUCCESS', rol } y cierra la ventana.
+ *
+ * 2. DIRECTO (navegación normal a /login):
+ *    window.opener es null → al loguearse navega al dashboard normalmente.
+ */
+import { useState } from 'react';
 import { useForm } from 'react-hook-form';
-import { Link, useNavigate } from 'react-router-dom';
-import { Mail, Lock, Eye, EyeOff, AlertCircle, ArrowRight } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Mail, Lock, Eye, EyeOff, AlertCircle } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
-import { useAuthStore } from '../store/auth.store';
-import { Button } from '../components/Button';
 
 interface LoginCredentials {
   email: string;
   password: string;
 }
 
+const isPopup = () => {
+  try {
+    return !!(window.opener && !window.opener.closed && window.opener !== window);
+  } catch {
+    return false;
+  }
+};
+
 export const LoginPage = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { login } = useAuth();
-  const navigate = useNavigate();
-  const { isAuthenticated, user } = useAuthStore();
-
-  // 1. LOGICA ANTI-BUCLE: Protege la ruta de login si el usuario ya está autenticado.
-  useEffect(() => {
-    if (isAuthenticated && user) {
-      const destination = user.rol === 'aprendiz' ? '/kanban' : '/dashboard';
-      navigate(destination, { replace: true });
-    }
-  }, [isAuthenticated, user, navigate]);
+  const popup = isPopup();
 
   const {
     register,
@@ -32,117 +39,139 @@ export const LoginPage = () => {
     formState: { errors, isSubmitting },
   } = useForm<LoginCredentials>({ defaultValues: { email: '', password: '' } });
 
-  // 2. LOGICA DE ENVÍO: Se añadió redirección manual tras el éxito.
   const onSubmit = async (data: LoginCredentials) => {
     try {
       setError(null);
-      // Suponiendo que tu función login devuelve los datos del usuario tras el éxito
-      const loggedUser = await login(data.email, data.password);
-      
-      // CAMBIO: Navegación inmediata. Esto evita esperar al ciclo de renderizado del useEffect.
-      if (loggedUser) {
-        const destination = loggedUser.rol === 'aprendiz' ? '/kanban' : '/dashboard';
-        navigate(destination, { replace: true });
+
+      if (popup) {
+        // Modo popup: hacer login manual sin navegar
+        const { authService } = await import('../services/auth.service');
+        const response = await authService.login({ email: data.email, password: data.password });
+        const { access_token, refresh_token } = response.tokens;
+        localStorage.setItem('access_token', access_token);
+        localStorage.setItem('refresh_token', refresh_token);
+
+        // Notificar a la ventana padre
+        window.opener.postMessage(
+          { type: 'LOGIN_SUCCESS', rol: response.user.rol },
+          window.location.origin
+        );
+
+        // Cerrar el popup tras un breve delay
+        setTimeout(() => window.close(), 300);
+      } else {
+        // Modo normal: navegar al dashboard según rol
+        await login(data.email, data.password);
       }
     } catch (err: any) {
-      setError(
-        err?.response?.data?.message || 'Credenciales incorrectas. Verifica e intenta de nuevo.'
-      );
+      setError(err?.response?.data?.message || 'Credenciales incorrectas. Intenta de nuevo.');
     }
   };
 
   return (
-    <div className="w-full max-w-md animate-in">
-      <div className="bg-dark-card p-10 rounded-[2.5rem] shadow-2xl border border-dark-border relative overflow-hidden">
-        {/* Decoración superior */}
-        <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-primary-600 to-indigo-500" />
-
-        {/* Logo y Encabezado */}
-        <div className="text-center mb-10">
-          <div className="inline-flex items-center justify-center w-20 h-20 bg-primary-600/10 rounded-3xl mb-6 border border-primary-500/20 shadow-xl shadow-primary-500/5 hover:scale-105 transition-transform duration-500">
-            <span className="text-4xl font-black text-primary-500 tracking-tighter italic">K</span>
+    <div className={`w-full ${popup ? 'min-h-screen bg-[#0d1117] flex items-center justify-center p-6' : ''}`}>
+      <div className={`w-full ${popup ? 'max-w-sm' : ''}`}>
+        {/* Logo */}
+        <div className="text-center mb-6">
+          <div className="inline-flex items-center justify-center w-10 h-10 bg-indigo-600 rounded-xl mb-3">
+            <span className="text-base font-bold text-white">K</span>
           </div>
-          <h2 className="text-3xl font-black text-dark-text tracking-tight mb-1">Bienvenido</h2>
-          <p className="text-dark-muted text-sm font-medium">Sistema de gestión de proyectos SENA · ADSO</p>
+          <h1 className="text-base font-semibold text-dark-text">Kanbana</h1>
+          <p className="text-xs text-dark-muted mt-0.5">
+            {popup ? 'Inicia sesión para continuar' : 'Sistema de gestión SENA · ADSO'}
+          </p>
         </div>
 
-        {/* Mensaje de Error */}
-        {error && (
-          <div className="mb-6 p-4 bg-rose-500/10 border border-rose-500/20 rounded-2xl flex items-start gap-3 text-rose-400 text-sm">
-            <AlertCircle size={18} className="shrink-0 mt-0.5" />
-            <p className="font-bold">{error}</p>
+        {/* Card */}
+        <div className="bg-dark-card border border-dark-border rounded-2xl p-6 space-y-4">
+          <div>
+            <h2 className="text-sm font-semibold text-dark-text">Iniciar sesión</h2>
           </div>
-        )}
 
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
-          {/* Email */}
-          <div className="space-y-2">
-            <label className="block text-[10px] font-black text-dark-muted uppercase tracking-widest ml-1">
-              Correo Electrónico
-            </label>
-            <div className="relative group">
-              <Mail size={17} className="absolute left-4 top-1/2 -translate-y-1/2 text-dark-muted group-focus-within:text-primary-500 transition-colors" />
-              <input
-                {...register('email', {
-                  required: 'El correo es obligatorio',
-                  pattern: { value: /^[^\s@]+@[^\s@]+\.[^\s@]+$/, message: 'Correo inválido' },
-                })}
-                type="email"
-                placeholder="ejemplo@sena.edu.co"
-                className={`block w-full pl-12 pr-4 py-4 bg-dark-bg/50 border rounded-2xl text-dark-text text-sm transition-all outline-none placeholder:text-dark-muted/40 ${
-                  errors.email ? 'border-rose-500/50' : 'border-dark-border focus:border-primary-500 focus:ring-1 focus:ring-primary-500/20'
-                }`}
-              />
+          {error && (
+            <div className="flex items-start gap-2 p-3 bg-rose-500/10 border border-rose-500/20 rounded-lg text-rose-400 text-xs">
+              <AlertCircle size={13} className="shrink-0 mt-0.5" />
+              <span>{error}</span>
             </div>
-            {errors.email && <p className="text-xs text-rose-400 ml-1 font-bold">{errors.email.message}</p>}
-          </div>
+          )}
 
-          {/* Password */}
-          <div className="space-y-2">
-            <label className="block text-[10px] font-black text-dark-muted uppercase tracking-widest ml-1">
-              Contraseña
-            </label>
-            <div className="relative group">
-              <Lock size={17} className="absolute left-4 top-1/2 -translate-y-1/2 text-dark-muted group-focus-within:text-primary-500 transition-colors" />
-              <input
-                {...register('password', { required: 'La contraseña es obligatoria' })}
-                type={showPassword ? 'text' : 'password'}
-                placeholder="••••••••••"
-                className={`block w-full pl-12 pr-12 py-4 bg-dark-bg/50 border rounded-2xl text-dark-text text-sm transition-all outline-none placeholder:text-dark-muted/40 ${
-                  errors.password ? 'border-rose-500/50' : 'border-dark-border focus:border-primary-500 focus:ring-1 focus:ring-primary-500/20'
-                }`}
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-4 top-1/2 -translate-y-1/2 text-dark-muted hover:text-dark-text transition-colors"
-              >
-                {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
-              </button>
+          <form onSubmit={handleSubmit(onSubmit)} className="space-y-3.5">
+            {/* Email */}
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-dark-muted">Correo electrónico</label>
+              <div className="relative">
+                <Mail size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-dark-muted/60" />
+                <input
+                  {...register('email', {
+                    required: 'Campo obligatorio',
+                    pattern: { value: /^[^\s@]+@[^\s@]+\.[^\s@]+$/, message: 'Correo inválido' },
+                  })}
+                  type="email"
+                  placeholder="ejemplo@sena.edu.co"
+                  className="input-dark pl-9 text-sm py-2.5"
+                />
+              </div>
+              {errors.email && <p className="text-xs text-rose-400">{errors.email.message}</p>}
             </div>
-            {errors.password && <p className="text-xs text-rose-400 ml-1 font-bold">{errors.password.message}</p>}
-          </div>
 
-          <div className="flex justify-end">
-            <Link to="/forgot-password" className="text-xs font-bold text-primary-400 hover:text-primary-300 transition-colors">
-              ¿Olvidaste tu contraseña?
-            </Link>
-          </div>
+            {/* Password */}
+            <div className="space-y-1">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-medium text-dark-muted">Contraseña</label>
+                {!popup && (
+                  <Link to="/forgot-password" className="text-xs text-primary-400 hover:text-primary-300 transition-colors">
+                    ¿Olvidaste tu contraseña?
+                  </Link>
+                )}
+              </div>
+              <div className="relative">
+                <Lock size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-dark-muted/60" />
+                <input
+                  {...register('password', { required: 'Campo obligatorio' })}
+                  type={showPassword ? 'text' : 'password'}
+                  placeholder="••••••••"
+                  className="input-dark pl-9 pr-10 text-sm py-2.5"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-dark-muted/60 hover:text-dark-muted transition-colors"
+                >
+                  {showPassword ? <EyeOff size={13} /> : <Eye size={13} />}
+                </button>
+              </div>
+              {errors.password && <p className="text-xs text-rose-400">{errors.password.message}</p>}
+            </div>
 
-          <Button
-            type="submit"
-            isLoading={isSubmitting}
-            className="w-full py-4 flex items-center justify-center gap-2 mt-2"
-          >
-            Iniciar Sesión
-            {!isSubmitting && <ArrowRight size={16} />}
-          </Button>
-        </form>
+            <button
+              type="submit"
+              disabled={isSubmitting}
+              className="w-full py-2.5 bg-primary-600 hover:bg-primary-500 disabled:opacity-60 text-white text-sm font-medium rounded-xl transition-colors flex items-center justify-center gap-2"
+            >
+              {isSubmitting ? (
+                <>
+                  <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  Verificando...
+                </>
+              ) : 'Iniciar sesión'}
+            </button>
+          </form>
 
-        {/* Info de demostración */}
-        <div className="mt-6 p-4 bg-dark-bg/50 rounded-2xl border border-dark-border/60 text-center">
-          <p className="text-[10px] text-dark-muted font-bold uppercase tracking-widest">Acceso de demostración</p>
-          <p className="text-xs text-dark-muted/70 mt-1">coordinador@sena.edu.co · contraseña: kanbana2026</p>
+          {!popup && (
+            <p className="text-xs text-dark-muted text-center">
+              ¿No tienes cuenta?{' '}
+              <Link to="/register" className="text-primary-400 hover:text-primary-300 transition-colors font-medium">
+                Regístrate
+              </Link>
+            </p>
+          )}
+        </div>
+
+        {/* Demo hint */}
+        <div className="mt-3 p-3 border border-dark-border/60 rounded-xl">
+          <p className="text-[10px] text-dark-muted text-center">
+            Demo: coordinador@sena.edu.co · kanbana2026
+          </p>
         </div>
       </div>
     </div>

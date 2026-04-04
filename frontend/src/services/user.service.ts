@@ -1,49 +1,35 @@
 import api from './api';
 
-const ENDPOINT = '/users';
-
 export const userService = {
-  getAll: async () => {
-    const res = await api.get(ENDPOINT);
-    return res.data;
-  },
+  // Lista completa (coordinador)
+  getAll: (rol?: string) =>
+    api.get(`/users${rol ? `?rol=${rol}` : ''}`).then(r => r.data),
 
-  getById: async (id: number) => {
-    const res = await api.get(`${ENDPOINT}/${id}`);
-    return res.data;
-  },
+  // Usuarios visibles para el usuario autenticado (filtrado por rol en backend)
+  getMyContext: () => api.get('/users/me/context').then(r => r.data),
 
-  create: async (data: any) => {
-    const res = await api.post(ENDPOINT, data);
-    return res.data;
-  },
+  // Usuarios de una ficha específica
+  getByFicha: (fichaId: number) =>
+    api.get(`/users/by-ficha/${fichaId}`).then(r => r.data),
 
-  update: async (id: number, data: any) => {
-    const res = await api.patch(`${ENDPOINT}/${id}`, data);
-    return res.data;
-  },
+  // Miembros de un proyecto
+  getByProyecto: (proyectoId: number) =>
+    api.get(`/users/by-proyecto/${proyectoId}`).then(r => r.data),
 
-  delete: async (id: number) => {
-    await api.delete(`${ENDPOINT}/${id}`);
-  },
+  getById: (id: number) => api.get(`/users/${id}`).then(r => r.data),
 
-  updateRole: async (id: number, rol: string) => {
-    const res = await api.patch(`${ENDPOINT}/${id}`, { rol });
-    return res.data;
-  },
+  create: (dto: any) => api.post('/users', dto).then(r => r.data),
 
-  toggleStatus: async (id: number) => {
-    const res = await api.patch(`${ENDPOINT}/${id}/toggle`);
-    return res.data;
-  },
+  update: (id: number, dto: any) => api.patch(`/users/${id}`, dto).then(r => r.data),
 
-  getLeaderStats: async (leaderId: number) => {
-    const res = await api.get(`${ENDPOINT}/leaders/${leaderId}/stats`);
-    return res.data;
-  },
+  updateRole: (id: number, rol: string) =>
+    api.patch(`/users/${id}/role`, { rol }).then(r => r.data),
 
-  getLeaderTeam: async (leaderId: number) => {
-    const res = await api.get(`${ENDPOINT}/leaders/${leaderId}/team`);
-    return res.data;
-  },
+  toggleStatus: (id: number) => api.patch(`/users/${id}/toggle`).then(r => r.data),
+
+  delete: (id: number) => api.delete(`/users/${id}`).then(r => r.data),
+
+  getLeaderStats: (id: number) => api.get(`/users/leaders/${id}/stats`).then(r => r.data),
+
+  getLeaderTeam: (id: number) => api.get(`/users/leaders/${id}/team`).then(r => r.data),
 };

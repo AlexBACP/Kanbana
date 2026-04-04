@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { ThemeApplier } from './components/ThemeApplier';
@@ -8,6 +8,7 @@ import { AdminDashboard } from './layouts/AdminDashboard';
 import { AprendizDashboard } from './layouts/AprendizDashboard';
 import { LandingPage } from './pages/LandingPage';
 import { LoginPage } from './pages/LoginPage';
+import { RegisterPage } from './pages/RegisterPage';
 import { TicketDetailPage } from './pages/TicketDetailPage';
 import { CalendarPage } from './pages/CalendarPage';
 import { ProfilePage } from './pages/ProfilePage';
@@ -17,8 +18,8 @@ const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       retry: 1,
-      staleTime: 1000 * 60,        // 1 minute cache
-      refetchOnWindowFocus: false,  // prevents re-fetches that can re-trigger auth
+      staleTime: 1000 * 60,
+      refetchOnWindowFocus: false,
     },
   },
 });
@@ -26,29 +27,35 @@ const queryClient = new QueryClient({
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      {/* AuthInit is OUTSIDE BrowserRouter — it uses useAuthStore.getState(), not useNavigate */}
+      {/*
+        AuthInit está FUERA del BrowserRouter.
+        No usa useNavigate. Solo verifica el token y actualiza el store.
+        Esto rompe el bucle: AuthLayout ya no redirige mientras carga.
+      */}
       <AuthInit />
       <ThemeApplier />
       <BrowserRouter>
         <Routes>
-          {/* 1. EL LANDING ES AHORA LA RUTA RAIZ */}
-        <Route path="/" element={<LandingPage />} />
-          {/* Public routes */}
+          {/* ── Landing pública ───────────────────────────────── */}
+          <Route path="/" element={<LandingPage />} />
+
+          {/* ── Auth (login / registro) ───────────────────────── */}
           <Route element={<AuthLayout />}>
             <Route path="/login" element={<LoginPage />} />
+            <Route path="/register" element={<RegisterPage />} />
           </Route>
 
-          {/* Admin roles */}
+          {/* ── Coordinador · Instructor · Líder técnico ─────── */}
           <Route element={<ProtectedRoute allowedRoles={['coordinador', 'instructor', 'lider_tecnico']} />}>
             <Route path="/dashboard" element={<AdminDashboard />} />
           </Route>
 
-          {/* Aprendiz */}
+          {/* ── Aprendiz ─────────────────────────────────────── */}
           <Route element={<ProtectedRoute allowedRoles={['aprendiz']} />}>
             <Route path="/kanban" element={<AprendizDashboard />} />
           </Route>
 
-          {/* Shared protected routes */}
+          {/* ── Rutas protegidas compartidas ─────────────────── */}
           <Route element={<ProtectedRoute />}>
             <Route path="/tickets/:id" element={<TicketDetailPage />} />
             <Route path="/calendar" element={<CalendarPage />} />

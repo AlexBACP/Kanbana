@@ -1,10 +1,9 @@
-import { User, Mail, Lock, AlertCircle } from 'lucide-react';
-import { useForm } from 'react-hook-form';
-import { CreateUserDto, UserRole } from '../types/user.types';
-import { userService } from '../services/user.service';
-import { useNavigate, Link } from 'react-router-dom';
 import { useState } from 'react';
-import { Button } from '../components/Button';
+import { useForm } from 'react-hook-form';
+import { Link, useNavigate } from 'react-router-dom';
+import { User, Mail, Lock, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { userService } from '../services/user.service';
+import { CreateUserDto, UserRole } from '../types/user.types';
 
 export const RegisterPage = () => {
   const navigate = useNavigate();
@@ -16,131 +15,131 @@ export const RegisterPage = () => {
     handleSubmit,
     formState: { errors, isSubmitting },
   } = useForm<CreateUserDto>({
-    defaultValues: {
-      nombre: '',
-      correo: '',
-      contrasena: '',
-      rol: 'aprendiz' as UserRole,
-    },
+    defaultValues: { nombre: '', correo: '', contrasena: '', rol: 'aprendiz' as UserRole },
   });
 
   const onSubmit = async (data: CreateUserDto) => {
     try {
       setError(null);
-      // Aseguramos que el rol sea aprendiz para registros públicos
-      const registrationData: CreateUserDto = { 
-        ...data, 
-        rol: 'aprendiz' as UserRole 
-      };
-      await userService.create(registrationData);
+      await userService.create({ ...data, rol: 'aprendiz' as UserRole });
       setSuccess(true);
-      setTimeout(() => navigate('/login'), 2000);
-    } catch (err) {
-      const errorResponse = err as any;
-      setError(
-        errorResponse.response?.data?.message || 'Error al crear la cuenta. Intenta con otro correo.'
-      );
+      // Si esta página fue abierta como ventana nueva (popup), notificar a la ventana padre
+      if (window.opener && !window.opener.closed) {
+        window.opener.postMessage({ type: 'REGISTER_SUCCESS' }, window.location.origin);
+        setTimeout(() => window.close(), 1500);
+      } else {
+        setTimeout(() => navigate('/login'), 1500);
+      }
+    } catch (err: any) {
+      setError(err?.response?.data?.message || 'Error al crear la cuenta. Intenta con otro correo.');
     }
   };
 
   return (
-    <div className="w-full max-w-md animate-in">
-      <div className="bg-dark-card p-10 rounded-[2.5rem] shadow-2xl border border-dark-border relative overflow-hidden group">
-        <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-primary-600 to-indigo-600" />
-        
-        <div className="mb-10 text-center">
-          <div className="w-16 h-16 bg-primary-600/10 rounded-2xl flex items-center justify-center text-primary-500 mx-auto mb-6 border border-primary-500/20 shadow-xl shadow-primary-500/5">
-            <User size={32} />
-          </div>
-          <h2 className="text-3xl font-black text-dark-text tracking-tight mb-2">Crear Cuenta</h2>
-          <p className="text-dark-muted font-medium">Únete a la gestión de proyectos ADSO</p>
+    <div className="w-full max-w-sm animate-in">
+      {/* Logo */}
+      <div className="text-center mb-8">
+        <div className="inline-flex items-center justify-center w-12 h-12 bg-primary-600 rounded-xl mb-4">
+          <span className="text-xl font-bold text-white">K</span>
+        </div>
+        <h1 className="text-xl font-semibold text-ink-primary">Kanbana</h1>
+        <p className="text-sm text-ink-secondary mt-1">Sistema de gestión SENA · ADSO</p>
+      </div>
+
+      <div className="card p-6 space-y-5">
+        <div>
+          <h2 className="text-base font-semibold text-ink-primary">Crear cuenta</h2>
+          <p className="text-xs text-ink-secondary mt-0.5">Las cuentas nuevas ingresan como aprendices</p>
         </div>
 
         {error && (
-          <div className="mb-8 p-4 bg-rose-500/10 border border-rose-500/20 rounded-2xl flex items-start gap-3 text-rose-400 text-sm animate-shake">
-            <AlertCircle size={18} className="shrink-0 mt-0.5" />
-            <p className="font-bold">{error}</p>
+          <div className="flex items-start gap-2 p-3 bg-danger-light border border-danger-border rounded-lg text-danger text-sm">
+            <AlertCircle size={15} className="shrink-0 mt-0.5" />
+            <span>{error}</span>
           </div>
         )}
 
         {success && (
-          <div className="mb-8 p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl text-emerald-400 text-sm font-bold text-center">
-            ¡Cuenta creada con éxito! Redirigiendo...
+          <div className="flex items-start gap-2 p-3 bg-success-light border border-success-border rounded-lg text-success text-sm">
+            <CheckCircle2 size={15} className="shrink-0 mt-0.5" />
+            <span>¡Cuenta creada! {window.opener ? 'Cerrando ventana...' : 'Redirigiendo al login...'}</span>
           </div>
         )}
 
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-          <div className="space-y-2">
-            <label className="block text-xs font-black text-dark-muted uppercase tracking-widest ml-1">Nombre Completo</label>
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+          {/* Nombre */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-ink-secondary">Nombre completo</label>
             <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-dark-muted group-focus-within:text-primary-500 transition-colors">
-                <User size={18} />
-              </div>
+              <User size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-muted" />
               <input
-                {...register('nombre', { required: 'El nombre es obligatorio' })}
+                {...register('nombre', { required: 'Campo obligatorio' })}
                 type="text"
-                placeholder="Tu nombre"
-                className="block w-full pl-12 pr-4 py-4 bg-dark-bg/50 border border-dark-border rounded-2xl text-sm text-dark-text outline-none focus:ring-4 focus:ring-primary-500/10 focus:border-primary-500 transition-all placeholder:text-dark-muted/50"
+                placeholder="Tu nombre completo"
+                className={`input-base pl-9 ${errors.nombre ? 'border-danger' : ''}`}
               />
             </div>
-            {errors.nombre && <p className="mt-1 text-xs text-rose-500 font-bold ml-1">{errors.nombre.message}</p>}
+            {errors.nombre && <p className="text-xs text-danger">{errors.nombre.message}</p>}
           </div>
 
-          <div className="space-y-2">
-            <label className="block text-xs font-black text-dark-muted uppercase tracking-widest ml-1">Correo Electrónico</label>
+          {/* Correo */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-ink-secondary">Correo electrónico</label>
             <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-dark-muted group-focus-within:text-primary-500 transition-colors">
-                <Mail size={18} />
-              </div>
+              <Mail size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-muted" />
               <input
-                {...register('correo', { 
-                  required: 'El correo es obligatorio',
-                  pattern: { value: /^\S+@\S+$/i, message: 'Correo inválido' }
+                {...register('correo', {
+                  required: 'Campo obligatorio',
+                  pattern: { value: /^\S+@\S+$/i, message: 'Correo inválido' },
                 })}
                 type="email"
                 placeholder="ejemplo@sena.edu.co"
-                className="block w-full pl-12 pr-4 py-4 bg-dark-bg/50 border border-dark-border rounded-2xl text-sm text-dark-text outline-none focus:ring-4 focus:ring-primary-500/10 focus:border-primary-500 transition-all placeholder:text-dark-muted/50"
+                className={`input-base pl-9 ${errors.correo ? 'border-danger' : ''}`}
               />
             </div>
-            {errors.correo && <p className="mt-1 text-xs text-rose-500 font-bold ml-1">{errors.correo.message}</p>}
+            {errors.correo && <p className="text-xs text-danger">{errors.correo.message}</p>}
           </div>
 
-          <div className="space-y-2">
-            <label className="block text-xs font-black text-dark-muted uppercase tracking-widest ml-1">Contraseña</label>
+          {/* Contraseña */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-ink-secondary">Contraseña</label>
             <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-dark-muted group-focus-within:text-primary-500 transition-colors">
-                <Lock size={18} />
-              </div>
+              <Lock size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-muted" />
               <input
                 {...register('contrasena', {
-                  required: 'La contraseña es obligatoria',
-                  minLength: { value: 6, message: 'Mínimo 6 caracteres' }
+                  required: 'Campo obligatorio',
+                  minLength: { value: 6, message: 'Mínimo 6 caracteres' },
                 })}
                 type="password"
-                placeholder="••••••••"
-                className="block w-full pl-12 pr-4 py-4 bg-dark-bg/50 border border-dark-border rounded-2xl text-sm text-dark-text outline-none focus:ring-4 focus:ring-primary-500/10 focus:border-primary-500 transition-all placeholder:text-dark-muted/50"
+                placeholder="Mínimo 6 caracteres"
+                className={`input-base pl-9 ${errors.contrasena ? 'border-danger' : ''}`}
               />
             </div>
-            {errors.contrasena && <p className="mt-1 text-xs text-rose-500 font-bold ml-1">{errors.contrasena.message}</p>}
+            {errors.contrasena && <p className="text-xs text-danger">{errors.contrasena.message}</p>}
           </div>
 
-          <Button 
-            type="submit" 
-            isLoading={isSubmitting} 
-            className="w-full py-4 bg-primary-600 hover:bg-primary-700 text-white rounded-2xl font-black text-sm shadow-xl shadow-primary-500/20 active:scale-[0.98] transition-all"
+          <button
+            type="submit"
+            disabled={isSubmitting || success}
+            className="btn-primary w-full py-2.5 flex items-center justify-center gap-2"
           >
-            Registrarme ahora
-          </Button>
-
-          <div className="pt-4 text-center">
-            <p className="text-sm text-dark-muted font-bold">
-              ¿Ya tienes cuenta?{' '}
-              <Link to="/login" className="text-primary-400 hover:text-primary-300 transition-colors">
-                Inicia sesión
-              </Link>
-            </p>
-          </div>
+            {isSubmitting ? (
+              <>
+                <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                Creando cuenta...
+              </>
+            ) : (
+              'Crear cuenta'
+            )}
+          </button>
         </form>
+
+        <p className="text-xs text-ink-secondary text-center">
+          ¿Ya tienes cuenta?{' '}
+          <Link to="/login" className="text-primary-400 hover:text-primary-300 transition-colors font-medium">
+            Inicia sesión
+          </Link>
+        </p>
       </div>
     </div>
   );

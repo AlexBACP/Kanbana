@@ -1,16 +1,9 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { User, UserRole } from '../types/user.types';
 
 // 1. Definición de interfaces (Asegúrate de que coincidan con tu base de datos)
-export type ThemeColor = 'violet' | 'blue' | 'emerald' | 'rose' | 'amber';
-
-export interface User {
-  id: string;
-  email: string;
-  nombre: string;
-  rol: 'admin' | 'coordinador' | 'instructor' | 'aprendiz';
-  avatar?: string;
-}
+export type ThemeColor = 'violet' | 'blue' | 'emerald' | 'rose' | 'amber' | 'cyan';
 
 export interface AppSettings {
   themeColor: ThemeColor;

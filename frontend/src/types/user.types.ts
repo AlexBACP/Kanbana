@@ -5,6 +5,9 @@ export interface User {
   rol: 'coordinador' | 'instructor' | 'lider_tecnico' | 'aprendiz';
   activo: boolean;
   creado_en: string;
+  avatar_url?: string;
+  telefono?: string;
+  bio?: string;
 }
 
 export type UserRole = 'coordinador' | 'instructor' | 'lider_tecnico' | 'aprendiz';

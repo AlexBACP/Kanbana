@@ -1,85 +1,54 @@
 import api from './api';
-import { Project, CreateProjectDto, Sprint, CreateSprintDto } from '../types/project.types';
 
 export const projectService = {
-  getAll: async (): Promise<Project[]> => {
-    const { data } = await api.get('/projects');
-    return data;
+  // Todos los proyectos (coordinador)
+  getAll: (params?: { fichaId?: number; instructorId?: number; liderId?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.fichaId)      q.set('fichaId',      String(params.fichaId));
+    if (params?.instructorId) q.set('instructorId', String(params.instructorId));
+    if (params?.liderId)      q.set('liderId',      String(params.liderId));
+    return api.get(`/projects${q.toString() ? `?${q}` : ''}`).then(r => r.data);
   },
 
-  getById: async (id: number): Promise<Project> => {
-    const { data } = await api.get(`/projects/${id}`);
-    return data;
-  },
+  // Proyectos filtrados por rol del usuario autenticado
+  getForMe: () => api.get('/projects/for-me').then(r => r.data),
 
-  create: async (dto: CreateProjectDto): Promise<Project> => {
-    const { data } = await api.post('/projects', dto);
-    return data;
-  },
+  getById: (id: number) => api.get(`/projects/${id}`).then(r => r.data),
 
-  update: async (id: number, dto: Partial<CreateProjectDto>): Promise<Project> => {
-    const { data } = await api.patch(`/projects/${id}`, dto);
-    return data;
-  },
+  create: (dto: any) => api.post('/projects', dto).then(r => r.data),
 
-  delete: async (id: number): Promise<void> => {
-    await api.delete(`/projects/${id}`);
-  },
+  update: (id: number, dto: any) => api.patch(`/projects/${id}`, dto).then(r => r.data),
 
-  // --- NUEVO: Gestión de Estados del Proyecto ---
-  // Permite al Administrador activar, pausar o finalizar una celda de desarrollo
-  updateStatus: async (id: number, estado: 'activo' | 'pausado' | 'finalizado'): Promise<Project> => {
-    const { data } = await api.patch(`/projects/${id}/status`, { estado });
-    return data;
-  },
+  updateStatus: (id: number, estado: string) =>
+    api.patch(`/projects/${id}/status`, { estado }).then(r => r.data),
 
-  // --- NUEVO: Asignación Masiva / Cambio de Líder ---
-  // Útil si un Líder Técnico se retira y necesitas mover el proyecto a otro
-  reassignLeader: async (projectId: number, leaderId: number): Promise<Project> => {
-    const { data } = await api.patch(`/projects/${projectId}/reassign`, { leaderId });
-    return data;
-  },
+  assignLider: (id: number, liderId: number) =>
+    api.patch(`/projects/${id}/assign-lider`, { liderId }).then(r => r.data),
 
-  // Sprints
-  getSprints: async (projectId: number): Promise<Sprint[]> => {
-    const { data } = await api.get(`/projects/${projectId}/sprints`);
-    return data;
-  },
+  delete: (id: number) => api.delete(`/projects/${id}`).then(r => r.data),
 
-  getActiveSprint: async (projectId: number): Promise<Sprint | null> => {
-    const { data } = await api.get(`/projects/${projectId}/sprints/active`);
-    return data;
-  },
+  getMembers: (id: number) => api.get(`/projects/${id}/members`).then(r => r.data),
 
-  createSprint: async (projectId: number, dto: CreateSprintDto): Promise<Sprint> => {
-    const { data } = await api.post(`/projects/${projectId}/sprints`, dto);
-    return data;
-  },
+  addMember: (id: number, userId: number) =>
+    api.post(`/projects/${id}/members`, { userId }).then(r => r.data),
 
-  startSprint: async (sprintId: number): Promise<Sprint> => {
-    const { data } = await api.patch(`/projects/sprints/${sprintId}/start`);
-    return data;
-  },
+  removeMember: (id: number, userId: number) =>
+    api.delete(`/projects/${id}/members/${userId}`).then(r => r.data),
 
-  closeSprint: async (sprintId: number): Promise<Sprint> => {
-    const { data } = await api.patch(`/projects/sprints/${sprintId}/close`);
-    return data;
-  },
+  getSprints: (id: number) => api.get(`/projects/${id}/sprints`).then(r => r.data),
 
-  getVelocity: async (projectId: number): Promise<any[]> => {
-    const { data } = await api.get(`/projects/${projectId}/stats/velocity`);
-    return data;
-  },
+  getActiveSprint: (id: number) => api.get(`/projects/${id}/sprints/active`).then(r => r.data),
 
-  getBurnup: async (projectId: number): Promise<any[]> => {
-    const { data } = await api.get(`/projects/${projectId}/stats/burnup`);
-    return data;
-  },
+  createSprint: (id: number, dto: any) =>
+    api.post(`/projects/${id}/sprints`, dto).then(r => r.data),
 
-  // --- NUEVO: Estadísticas de Salud del Proyecto ---
-  // Para mostrar en el panel de Proyectos si el proyecto va a tiempo o retrasado
-  getProjectHealth: async (projectId: number): Promise<{ progress: number; healthScore: number }> => {
-    const { data } = await api.get(`/projects/${projectId}/health`);
-    return data;
-  }
+  startSprint: (sprintId: number) =>
+    api.patch(`/projects/sprints/${sprintId}/start`).then(r => r.data),
+
+  closeSprint: (sprintId: number) =>
+    api.patch(`/projects/sprints/${sprintId}/close`).then(r => r.data),
+
+  getVelocity: (id: number) => api.get(`/projects/${id}/velocity`).then(r => r.data),
+
+  getBurnup:   (id: number) => api.get(`/projects/${id}/burnup`).then(r => r.data),
 };

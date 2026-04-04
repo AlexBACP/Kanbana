@@ -18,16 +18,16 @@ export const ProjectsPage = () => {
 
   const { data: projects = [], isLoading } = useQuery({
     queryKey: ['projects'],
-    queryFn: projectService.getAll,
+    queryFn: () => projectService.getAll(),
   });
 
   const { data: fichas = [] } = useQuery({
     queryKey: ['fichas'],
-    queryFn: fichaService.getAll,
+    queryFn: () => fichaService.getAll(),
   });
 
   const createMutation = useMutation({
-    mutationFn: projectService.create,
+    mutationFn: (dto: any) => projectService.create(dto),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['projects'] });
       setIsModalOpen(false);
@@ -46,10 +46,15 @@ export const ProjectsPage = () => {
     });
   };
 
-  const filteredProjects = projects.filter(p => 
+  const filteredProjects = projects.filter((p: any) => 
     p.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
     p.descripcion.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  const stats = [
+    { label: 'Total', value: projects.length },
+    { label: 'Activos', value: projects.filter((project: any) => project.estado === 'activo').length },
+  ];
 
   return (
     <div className="space-y-10 animate-in">
@@ -77,7 +82,7 @@ export const ProjectsPage = () => {
         </div>
       ) : filteredProjects.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-          {filteredProjects.map((project) => (
+          {filteredProjects.map((project: any) => (
             <Link
               key={project.id}
               to={`/projects/${project.id}/kanban`}

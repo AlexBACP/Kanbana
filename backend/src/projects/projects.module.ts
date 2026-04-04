@@ -4,9 +4,10 @@ import { ProjectsService } from './projects.service';
 import { ProjectsController } from './projects.controller';
 import { Project } from './entities/project.entity';
 import { Sprint } from './entities/sprint.entity';
+import { User } from '../users/entities/user.entity';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Project, Sprint])],
+  imports: [TypeOrmModule.forFeature([Project, Sprint, User])],
   controllers: [ProjectsController],
   providers: [ProjectsService],
   exports: [ProjectsService],

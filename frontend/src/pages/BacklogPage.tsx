@@ -149,7 +149,7 @@ export const BacklogPage = () => {
       <div className="grid grid-cols-1 gap-12">
         {/* Sprints */}
         <div className="space-y-8">
-          {sprints.map(sprint => (
+          {sprints.map((sprint: any) => (
             <div key={sprint.id} className="bg-dark-card rounded-[2.5rem] border border-dark-border shadow-2xl overflow-hidden group hover:border-primary-500/20 transition-all duration-500">
               <div className="bg-dark-bg/40 px-8 py-6 flex items-center justify-between border-b border-dark-border">
                 <div className="flex items-center gap-5">
@@ -193,7 +193,7 @@ export const BacklogPage = () => {
               <div className="p-4 bg-dark-card/30">
                 {sprint.tickets && sprint.tickets.length > 0 ? (
                   <div className="space-y-2">
-                    {sprint.tickets.map(ticket => (
+                    {sprint.tickets.map((ticket: any) => (
                       <div key={ticket.id} className="group/item flex items-center gap-5 p-4 bg-dark-bg/40 hover:bg-dark-bg/80 border border-dark-border rounded-2xl transition-all">
                         <GripVertical size={16} className="text-dark-muted/30 cursor-grab active:cursor-grabbing" />
                         <div className="flex-1 min-w-0">
@@ -221,7 +221,7 @@ export const BacklogPage = () => {
                           >
                             <option value="" disabled>Mover</option>
                             <option value="backlog">Backlog</option>
-                            {sprints.filter(s => s.id !== (sprint as any).id && !s.esta_finalizado).map(s => (
+                            {sprints.filter((s: any) => s.id !== (sprint as any).id && !s.esta_finalizado).map((s: any) => (
                               <option key={s.id} value={s.id}>{s.nombre}</option>
                             ))}
                           </select>
@@ -281,9 +281,9 @@ export const BacklogPage = () => {
                         value=""
                       >
                         <option value="" disabled>Mover a</option>
-                        {sprints.filter(s => !s.esta_finalizado).map(s => (
-                          <option key={s.id} value={s.id}>{s.nombre}</option>
-                        ))}
+                        {sprints.filter((s: any) => !s.esta_finalizado).map((s: any) => (
+                            <option key={s.id} value={s.id}>{s.nombre}</option>
+                          ))}
                       </select>
                     </div>
                   </div>

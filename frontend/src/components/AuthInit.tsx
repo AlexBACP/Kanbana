@@ -1,55 +1,57 @@
+/**
+ * AuthInit — FIX DEFINITIVO DEL BUCLE
+ *
+ * El bucle ocurría porque:
+ * 1. AuthLayout redirigía a /dashboard mientras isLoading=true
+ * 2. ProtectedRoute mostraba spinner porque isLoading=true
+ * 3. Nadie bajaba isLoading a false porque el código que lo hacía
+ *    estaba dentro de componentes bloqueados por el spinner
+ *
+ * Solución: AuthInit vive FUERA del BrowserRouter.
+ * Corre UNA sola vez al montar la app, verifica el token,
+ * y siempre termina bajando isLoading a false.
+ *
+ * useAuthStore.getState() — NO crea suscripción reactiva,
+ * solo lee el estado puntualmente. Esto evita re-renders.
+ */
 import { useEffect, useRef } from 'react';
 import { useAuthStore } from '../store/auth.store';
 import { authService } from '../services/auth.service';
 
-/**
- * AuthInit — Se ejecuta una sola vez al montar la app.
- * Responsabilidad: Verificar si el token almacenado sigue siendo válido
- * y recuperar la sesión del usuario.
- */
 export const AuthInit = () => {
-  // ✅ CAMBIO 1: Acceder a las acciones de forma segura
-  const setUser = useAuthStore((state) => state.setUser);
-  const clearUser = useAuthStore((state) => state.clearUser);
-  const setLoading = useAuthStore((state) => state.setLoading);
-  
   const ran = useRef(false);
 
   useEffect(() => {
+    // StrictMode ejecuta efectos dos veces en desarrollo — el ref lo previene
     if (ran.current) return;
     ran.current = true;
 
+    const { setUser, clearUser, setLoading } = useAuthStore.getState();
     const token = localStorage.getItem('access_token');
-    
-    // Si no hay token, simplemente dejamos de cargar
+
     if (!token) {
+      // Sin token: nada que verificar, liberar el spinner inmediatamente
       setLoading(false);
       return;
     }
 
-    // Iniciamos la carga mientras validamos el token con el backend
-    setLoading(true);
-
+    // Con token: verificar con el backend
     authService
-      .me() // ✅ Asumo que .me() es tu endpoint /auth/profile
+      .me()
       .then((user) => {
-        // ✅ CAMBIO 2: Si el backend responde, hidratamos el store
+        // setUser internamente llama setLoading(false) — ver auth.store.ts
         setUser(user);
       })
       .catch(() => {
-        // ✅ CAMBIO 3: Limpieza centralizada si el token falló
+        // Token inválido o expirado: limpiar todo
         localStorage.removeItem('access_token');
         localStorage.removeItem('refresh_token');
+        // clearUser internamente llama setLoading(false) — ver auth.store.ts
         clearUser();
-      })
-      .finally(() => {
-        // Finalizamos el estado de carga global
-        setLoading(false);
       });
-      
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); 
+    // NO hay .finally() porque setUser y clearUser ya bajan isLoading.
+    // Un .finally() extra causaría una doble llamada que puede generar race conditions.
+  }, []);
 
-  // Este componente no renderiza nada visual, es un guardián lógico
   return null;
 };
