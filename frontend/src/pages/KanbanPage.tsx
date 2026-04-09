@@ -1,23 +1,44 @@
-import { useParams, Link } from 'react-router-dom';
+/**
+ * KanbanPage — Tablero Kanban de un proyecto específico
+ * Ruta: /projects/:id/kanban
+ *
+ * Muestra: proyecto, sprint activo, tickets con DnD, estadísticas,
+ * panel de miembros, acceso al backlog y creación de tickets inline.
+ */
+import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { ChevronLeft, Settings, Search, ListTodo, CheckCircle2 } from 'lucide-react';
+import {
+  ChevronLeft, Search, ListTodo, CheckCircle2,
+  Users, Plus, Clock, AlertCircle, LayoutGrid, Flag,
+} from 'lucide-react';
 import { projectService } from '../services/project.service';
 import { ticketService } from '../services/ticket.service';
+import { userService } from '../services/user.service';
 import { KanbanBoard } from '../components/KanbanBoard';
+import { Modal } from '../components/Modal';
 import { Button } from '../components/Button';
 import { useState } from 'react';
 import { TicketStatus } from '../types/ticket.types';
 import { useAuthStore } from '../store/auth.store';
+
+const FormField = ({ label, children }: { label: string; children: React.ReactNode }) => (
+  <div className="space-y-1.5">
+    <label className="text-[10px] font-black text-dark-muted uppercase tracking-widest">{label}</label>
+    {children}
+  </div>
+);
 
 export const KanbanPage = () => {
   const { id } = useParams<{ id: string }>();
   const projectId = Number(id);
   const queryClient = useQueryClient();
   const { user } = useAuthStore();
+  const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState('');
+  const [showTicketModal, setShowTicketModal] = useState(false);
+  const [showMembers, setShowMembers] = useState(false);
 
-  const isAdmin = user?.rol === 'coordinador' || user?.rol === 'instructor';
-  const isLead = user?.rol === 'lider_tecnico';
+  const canManage = user?.rol === 'coordinador' || user?.rol === 'instructor' || user?.rol === 'lider_tecnico';
 
   const { data: project } = useQuery({
     queryKey: ['projects', projectId],
@@ -31,10 +52,17 @@ export const KanbanPage = () => {
     enabled: !!projectId,
   });
 
-  const { data: tickets = [], isLoading } = useQuery({
+  const { data: tickets = [], isLoading: ticketsLoading } = useQuery({
     queryKey: ['tickets', projectId, activeSprint?.id],
     queryFn: () => ticketService.getAll(projectId, activeSprint?.id),
-    enabled: !!projectId && !!activeSprint,
+    enabled: !!projectId,
+    staleTime: 30_000,
+  });
+
+  const { data: members = [] } = useQuery({
+    queryKey: ['projects', projectId, 'members'],
+    queryFn: () => projectService.getMembers(projectId),
+    enabled: !!projectId,
   });
 
   const updateStatusMutation = useMutation({
@@ -49,6 +77,15 @@ export const KanbanPage = () => {
     mutationFn: () => projectService.closeSprint(activeSprint!.id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['projects', projectId] });
+      queryClient.invalidateQueries({ queryKey: ['tickets', projectId] });
+    },
+  });
+
+  const createTicketMutation = useMutation({
+    mutationFn: (dto: any) => ticketService.create({ ...dto, proyecto_id: projectId }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tickets', projectId] });
+      setShowTicketModal(false);
     },
   });
 
@@ -56,118 +93,246 @@ export const KanbanPage = () => {
     updateStatusMutation.mutate({ ticketId, status: newStatus });
   };
 
-  const filteredTickets = tickets.filter(t => 
+  const filteredTickets = tickets.filter(t =>
     t.titulo.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  if (!project && !isLoading) return <div className="p-8 text-center">Proyecto no encontrado</div>;
+  const done       = tickets.filter(t => t.estado === 'done').length;
+  const inProgress = tickets.filter(t => t.estado === 'in_progress').length;
+  const blocked    = tickets.filter(t => (t as any).esta_bloqueado).length;
+  const progress   = tickets.length ? Math.round((done / tickets.length) * 100) : 0;
+
+  const aprendices = (members as any[]).filter(m => m.rol === 'aprendiz' || m.rol === 'lider_tecnico');
+
+  if (!project && !ticketsLoading) {
+    return (
+      <div className="h-screen flex flex-col items-center justify-center bg-dark-bg gap-4">
+        <LayoutGrid size={40} className="text-dark-muted opacity-30" />
+        <p className="text-dark-muted font-black uppercase tracking-widest text-sm">Proyecto no encontrado</p>
+        <button onClick={() => navigate('/dashboard')} className="text-xs text-primary-400 hover:text-primary-300 transition-colors">
+          ← Volver al dashboard
+        </button>
+      </div>
+    );
+  }
 
   return (
-    <div className="h-full flex flex-col gap-10 animate-in">
-      {/* Header del Kanban */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-8 px-2">
-        <div className="flex items-center gap-6">
-          <Link 
-            to="/projects" 
-            className="p-3 bg-dark-card hover:bg-dark-border rounded-2xl text-dark-muted hover:text-primary-400 border border-dark-border transition-all shadow-xl"
-          >
-            <ChevronLeft size={24} />
-          </Link>
-          <div>
-            <div className="flex items-center gap-4">
-              <h1 className="text-3xl font-black text-dark-text tracking-tight">{project?.nombre}</h1>
-              {activeSprint ? (
-                <div className="flex items-center gap-2 px-3 py-1 bg-emerald-500/10 border border-emerald-500/20 rounded-full shadow-lg shadow-emerald-500/5">
-                  <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                  <span className="text-[10px] font-black text-emerald-400 uppercase tracking-widest">
-                    {activeSprint.nombre}
-                  </span>
-                </div>
-              ) : (
-                <div className="px-3 py-1 bg-amber-500/10 border border-amber-500/20 rounded-full">
-                  <span className="text-[10px] font-black text-amber-400 uppercase tracking-widest">
-                    Sin Sprint Activo
-                  </span>
-                </div>
-              )}
+    <div className="h-screen flex flex-col bg-dark-bg overflow-hidden">
+
+      {/* ── Header ─────────────────────────────────────────────── */}
+      <div className="bg-dark-card border-b border-dark-border px-6 py-4 shrink-0">
+        <div className="flex items-center justify-between gap-4 flex-wrap">
+          {/* Left */}
+          <div className="flex items-center gap-4">
+            <button
+              onClick={() => navigate(-1)}
+              className="p-2 bg-dark-bg hover:bg-dark-border rounded-xl text-dark-muted hover:text-primary-400 border border-dark-border transition-all"
+            >
+              <ChevronLeft size={18} />
+            </button>
+            <div>
+              <div className="flex items-center gap-3">
+                <h1 className="text-lg font-black text-dark-text tracking-tight">{project?.nombre || '...'}</h1>
+                {activeSprint ? (
+                  <div className="flex items-center gap-1.5 px-2.5 py-1 bg-emerald-500/10 border border-emerald-500/20 rounded-full">
+                    <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                    <span className="text-[10px] font-black text-emerald-400 uppercase tracking-widest">{activeSprint.nombre}</span>
+                  </div>
+                ) : (
+                  <div className="px-2.5 py-1 bg-amber-500/10 border border-amber-500/20 rounded-full">
+                    <span className="text-[10px] font-black text-amber-400 uppercase tracking-widest">Sin Sprint Activo</span>
+                  </div>
+                )}
+              </div>
+              <p className="text-xs text-dark-muted mt-0.5 line-clamp-1 max-w-lg">{project?.descripcion}</p>
             </div>
-            <p className="text-sm text-dark-muted font-medium mt-1 line-clamp-1 opacity-80 max-w-xl">{project?.descripcion}</p>
+          </div>
+
+          {/* Right actions */}
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Stats rápidos */}
+            <div className="hidden lg:flex items-center gap-3 bg-dark-bg border border-dark-border rounded-xl px-4 py-2 text-xs font-black">
+              <span className="text-emerald-400">{done} ✓</span>
+              <span className="text-dark-border">|</span>
+              <span className="text-blue-400">{inProgress} ⟳</span>
+              {blocked > 0 && <><span className="text-dark-border">|</span><span className="text-rose-400">{blocked} ⚑</span></>}
+              <span className="text-dark-border">|</span>
+              <span className="text-primary-400">{progress}%</span>
+            </div>
+
+            {/* Buscador */}
+            <div className="relative">
+              <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-dark-muted" />
+              <input
+                type="text"
+                placeholder="Filtrar tareas..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-9 pr-4 py-2 bg-dark-bg border border-dark-border rounded-xl text-xs text-dark-text outline-none focus:border-primary-500 transition-all w-44 placeholder:text-dark-muted/50"
+              />
+            </div>
+
+            {/* Miembros */}
+            <button
+              onClick={() => setShowMembers(!showMembers)}
+              className="flex items-center gap-1.5 px-3 py-2 bg-dark-bg border border-dark-border rounded-xl text-xs font-black text-dark-muted hover:text-dark-text hover:border-primary-500/40 transition-all"
+            >
+              <Users size={14} /> {aprendices.length}
+            </button>
+
+            {/* Crear ticket */}
+            {canManage && (
+              <button
+                onClick={() => setShowTicketModal(true)}
+                className="flex items-center gap-1.5 px-3 py-2 bg-primary-600/15 border border-primary-500/25 text-primary-400 rounded-xl text-xs font-black hover:bg-primary-600/25 transition-all"
+              >
+                <Plus size={14} /> Ticket
+              </button>
+            )}
+
+            {/* Backlog */}
+            <button
+              onClick={() => navigate(`/projects/${projectId}/backlog`)}
+              className="flex items-center gap-1.5 px-3 py-2 bg-dark-bg border border-dark-border rounded-xl text-xs font-black text-dark-muted hover:text-dark-text transition-all"
+            >
+              <ListTodo size={14} /> Backlog
+            </button>
+
+            {/* Cerrar sprint */}
+            {activeSprint && canManage && (
+              <button
+                onClick={() => { if (confirm('¿Finalizar el sprint actual?')) closeSprintMutation.mutate(); }}
+                className="flex items-center gap-1.5 px-3 py-2 bg-rose-500/10 border border-rose-500/20 text-rose-400 rounded-xl text-xs font-black hover:bg-rose-500/20 transition-all"
+              >
+                <CheckCircle2 size={14} /> Finalizar Sprint
+              </button>
+            )}
           </div>
         </div>
-        
-        <div className="flex items-center gap-4">
-          <div className="relative hidden xl:block group">
-            <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-dark-muted group-focus-within:text-primary-500 transition-colors">
-              <Search size={16} />
-            </div>
-            <input
-              type="text"
-              placeholder="Filtrar tareas..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10 pr-4 py-3 bg-dark-card border border-dark-border rounded-2xl text-sm text-dark-text outline-none focus:ring-4 focus:ring-primary-500/10 focus:border-primary-500 transition-all w-56 placeholder:text-dark-muted/30 shadow-xl"
+
+        {/* Barra de progreso */}
+        {tickets.length > 0 && (
+          <div className="mt-3 h-1 bg-dark-bg rounded-full overflow-hidden">
+            <div
+              className="h-full bg-gradient-to-r from-primary-600 to-primary-400 rounded-full transition-all duration-700"
+              style={{ width: `${progress}%` }}
             />
           </div>
-
-          <Link to={`/projects/${projectId}/backlog`}>
-            <Button variant="secondary" className="flex items-center gap-2 px-6 py-3 bg-dark-bg border border-dark-border text-dark-text hover:bg-dark-border rounded-2xl font-black text-xs transition-all">
-              <ListTodo size={16} />
-              Planificar Backlog
-            </Button>
-          </Link>
-
-          {activeSprint && (isAdmin || isLead) && (
-            <Button 
-              variant="secondary" 
-              className="flex items-center gap-2 px-6 py-3 bg-rose-500/10 border border-rose-500/20 text-rose-400 hover:bg-rose-500/20 rounded-2xl font-black text-xs transition-all shadow-lg shadow-rose-500/5"
-              onClick={() => {
-                if (window.confirm('¿Estás seguro de cerrar el sprint actual?')) {
-                  closeSprintMutation.mutate();
-                }
-              }}
-            >
-              <CheckCircle2 size={16} />
-              Finalizar Sprint
-            </Button>
-          )}
-          
-          <Button variant="ghost" className="p-3 bg-dark-card border border-dark-border rounded-2xl text-dark-muted hover:text-dark-text transition-all shadow-xl">
-            <Settings size={20} />
-          </Button>
-        </div>
+        )}
       </div>
 
-      {/* Tablero Kanban */}
-      <div className="flex-1 min-h-0 overflow-x-auto pb-8 scrollbar-hide">
+      {/* ── Panel de miembros (colapsable) ───────────────────────── */}
+      {showMembers && (
+        <div className="bg-dark-card/80 border-b border-dark-border px-6 py-3 shrink-0">
+          <div className="flex items-center gap-3 flex-wrap">
+            <span className="text-[10px] font-black text-dark-muted uppercase tracking-widest">Equipo:</span>
+            {aprendices.length === 0 ? (
+              <span className="text-xs text-dark-muted italic">Sin integrantes asignados</span>
+            ) : aprendices.map((m: any) => (
+              <div key={m.id} className="flex items-center gap-1.5 px-2 py-1 bg-dark-bg rounded-lg border border-dark-border text-xs">
+                <div className="w-4 h-4 rounded-full bg-gradient-to-br from-primary-600 to-indigo-700 flex items-center justify-center text-[8px] font-black text-white">
+                  {m.nombre?.slice(0,1).toUpperCase()}
+                </div>
+                <span className="text-dark-text font-bold">{m.nombre.split(' ')[0]}</span>
+                <span className="text-dark-muted text-[10px] capitalize">{m.rol === 'lider_tecnico' ? 'Líder' : 'Aprendiz'}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── Tablero Kanban ─────────────────────────────────────────── */}
+      <div className="flex-1 overflow-x-auto overflow-y-hidden p-6">
         {!activeSprint ? (
-          <div className="h-full flex flex-col items-center justify-center bg-dark-card/30 rounded-[3rem] border-4 border-dashed border-dark-border p-20 text-center shadow-inner animate-in">
-            <div className="w-28 h-28 bg-dark-card rounded-[2.5rem] shadow-2xl flex items-center justify-center mb-8 border border-dark-border relative group">
-              <div className="absolute inset-0 bg-primary-500/10 rounded-[2.5rem] blur-xl opacity-0 group-hover:opacity-100 transition-opacity" />
-              <ListTodo size={48} className="text-dark-muted group-hover:text-primary-400 transition-colors relative z-10" />
+          <div className="h-full flex flex-col items-center justify-center bg-dark-card/30 rounded-[3rem] border-4 border-dashed border-dark-border p-16 text-center">
+            <div className="w-20 h-20 bg-dark-card rounded-[2rem] flex items-center justify-center mb-6 border border-dark-border">
+              <ListTodo size={36} className="text-dark-muted opacity-40" />
             </div>
-            <h3 className="text-3xl font-black text-dark-text tracking-tight">El tablero está en espera</h3>
-            <p className="text-dark-muted font-bold max-w-md mt-4 mb-10 leading-relaxed opacity-70">
+            <h3 className="text-2xl font-black text-dark-text tracking-tight">El tablero está en espera</h3>
+            <p className="text-dark-muted max-w-sm mt-3 mb-8 text-sm leading-relaxed opacity-70">
               Para visualizar el flujo de trabajo, ve al backlog y activa un sprint con las tareas prioritarias.
             </p>
-            <Link to={`/projects/${projectId}/backlog`}>
-              <Button className="px-10 py-5 bg-primary-600 hover:bg-primary-700 text-white rounded-[1.5rem] font-black text-sm shadow-2xl shadow-primary-500/20 transition-all active:scale-95">
-                Ir a Planificación
-              </Button>
-            </Link>
+            <button
+              onClick={() => navigate(`/projects/${projectId}/backlog`)}
+              className="px-8 py-4 bg-primary-600 hover:bg-primary-700 text-white rounded-[1.5rem] font-black text-sm transition-all active:scale-95"
+            >
+              Ir al Backlog
+            </button>
           </div>
-        ) : isLoading ? (
-          <div className="flex gap-8 h-full">
+        ) : ticketsLoading ? (
+          <div className="flex gap-6 h-full">
             {[1, 2, 3, 4].map(i => (
               <div key={i} className="w-80 shrink-0 bg-dark-card rounded-[2.5rem] border border-dark-border animate-pulse" />
             ))}
           </div>
         ) : (
-          <KanbanBoard 
-            tickets={filteredTickets} 
-            onStatusChange={handleStatusChange} 
+          <KanbanBoard
+            tickets={filteredTickets}
+            onStatusChange={handleStatusChange}
           />
         )}
       </div>
+
+      {/* ── Modal: Crear Ticket ───────────────────────────────────── */}
+      <Modal isOpen={showTicketModal} onClose={() => setShowTicketModal(false)} title="Nuevo Ticket">
+        <form onSubmit={e => {
+          e.preventDefault();
+          const f = new FormData(e.currentTarget);
+          createTicketMutation.mutate({
+            titulo:       f.get('titulo') as string,
+            descripcion:  f.get('descripcion') as string,
+            prioridad:    f.get('prioridad') as string,
+            asignado_a:   f.get('asignado_a') ? Number(f.get('asignado_a')) : undefined,
+            fecha_limite: f.get('fecha_limite') || undefined,
+            sprint_id:    activeSprint?.id || undefined,
+          });
+        }} className="space-y-5">
+          <FormField label="Título">
+            <input name="titulo" required className="input-dark" placeholder="Descripción breve de la tarea" />
+          </FormField>
+          <FormField label="Descripción">
+            <textarea name="descripcion" className="input-dark resize-none" rows={3} placeholder="Detalles del ticket..." />
+          </FormField>
+          <div className="grid grid-cols-2 gap-4">
+            <FormField label="Prioridad">
+              <select name="prioridad" className="input-dark" defaultValue="media">
+                <option value="alta">Alta</option>
+                <option value="media">Media</option>
+                <option value="baja">Baja</option>
+              </select>
+            </FormField>
+            <FormField label="Asignar a">
+              <select name="asignado_a" className="input-dark">
+                <option value="">Sin asignar</option>
+                {aprendices.map((a: any) => (
+                  <option key={a.id} value={a.id}>{a.nombre}</option>
+                ))}
+              </select>
+            </FormField>
+          </div>
+          <FormField label="Fecha límite">
+            <input name="fecha_limite" type="date" className="input-dark" />
+          </FormField>
+          {activeSprint && (
+            <div className="flex items-center gap-2 p-3 bg-emerald-500/5 border border-emerald-500/15 rounded-xl text-xs text-emerald-400">
+              <CheckCircle2 size={13} />
+              Se añadirá al sprint activo: <strong>{activeSprint.nombre}</strong>
+            </div>
+          )}
+          <Button
+            type="submit"
+            isLoading={createTicketMutation.isPending}
+            className="w-full py-4"
+          >
+            {createTicketMutation.isPending ? 'Creando...' : 'Crear Ticket'}
+          </Button>
+          {createTicketMutation.isError && (
+            <p className="text-xs text-rose-400 text-center flex items-center justify-center gap-1">
+              <AlertCircle size={12} /> Error al crear el ticket. Verifica que el proyecto tiene los datos necesarios.
+            </p>
+          )}
+        </form>
+      </Modal>
     </div>
   );
 };

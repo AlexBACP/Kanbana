@@ -12,6 +12,8 @@ import { RegisterPage } from './pages/RegisterPage';
 import { TicketDetailPage } from './pages/TicketDetailPage';
 import { CalendarPage } from './pages/CalendarPage';
 import { ProfilePage } from './pages/ProfilePage';
+import { KanbanPage } from './pages/KanbanPage';
+import { BacklogPage } from './pages/BacklogPage';
 import { NotFoundPage } from './pages/NotFoundPage';
 
 const queryClient = new QueryClient({
@@ -28,9 +30,9 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       {/*
-        AuthInit está FUERA del BrowserRouter.
-        No usa useNavigate. Solo verifica el token y actualiza el store.
-        Esto rompe el bucle: AuthLayout ya no redirige mientras carga.
+        AuthInit FUERA del BrowserRouter — no usa useNavigate.
+        Verifica token contra el backend y actualiza el store.
+        ProtectedRoute espera hasta que isLoading=false antes de redirigir.
       */}
       <AuthInit />
       <ThemeApplier />
@@ -55,8 +57,10 @@ function App() {
             <Route path="/kanban" element={<AprendizDashboard />} />
           </Route>
 
-          {/* ── Rutas protegidas compartidas ─────────────────── */}
+          {/* ── Tablero Kanban de un proyecto específico ─────── */}
           <Route element={<ProtectedRoute />}>
+            <Route path="/projects/:id/kanban" element={<KanbanPage />} />
+            <Route path="/projects/:id/backlog" element={<BacklogPage />} />
             <Route path="/tickets/:id" element={<TicketDetailPage />} />
             <Route path="/calendar" element={<CalendarPage />} />
             <Route path="/profile" element={<ProfilePage />} />

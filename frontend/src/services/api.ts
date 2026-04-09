@@ -6,7 +6,6 @@ const api = axios.create({
 });
 
 // ─── Interceptor de peticiones ───────────────────────────────────────────
-// Agrega el token JWT automáticamente a cada petición
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('access_token');
   if (token) {
@@ -16,14 +15,23 @@ api.interceptors.request.use((config) => {
 });
 
 // ─── Interceptor de respuestas ───────────────────────────────────────────
-// Si el servidor responde 401 (token vencido), limpia la sesión
+// FIX DEL BUCLE: ya NO hacemos window.location.href='/login' en 401.
+// Ese redirect duro reiniciaba la app completa en loop:
+//   401 → redirect → AuthInit → token inválido → 401 → redirect → ...
+//
+// En su lugar, limpiamos el token y dejamos que Zustand + React Router
+// manejen la navegación de forma declarativa (ProtectedRoute redirige).
 api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      localStorage.removeItem('access_token');
-      localStorage.removeItem('refresh_token');
-      window.location.href = '/login';
+      const { useAuthStore } = require('../store/auth.store');
+      const { clearUser } = useAuthStore.getState();
+      // Solo limpiar si había una sesión activa (evitar loops en /login mismo)
+      const token = localStorage.getItem('access_token');
+      if (token) {
+        clearUser();
+      }
     }
     return Promise.reject(error);
   },

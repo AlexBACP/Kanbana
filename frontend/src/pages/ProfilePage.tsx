@@ -1,327 +1,385 @@
-import { useState, useRef, ChangeEvent } from 'react';
+/**
+ * ProfilePage — Perfil propio con upload real de avatar y secciones
+ * enriquecidas según el rol del usuario autenticado.
+ */
+import { useState } from 'react';
 import { useAuthStore } from '../store/auth.store';
-import { User as UserIcon, Mail, Shield, Key, Save, CheckCircle2, Camera, Phone, FileText } from 'lucide-react';
+import {
+  User as UserIcon, Mail, Shield, Key, Save, CheckCircle2,
+  Phone, FileText, GraduationCap, FolderKanban, Ticket,
+  Hash, ExternalLink, Clock, AlertCircle,
+} from 'lucide-react';
 import { Button } from '../components/Button';
+import { AvatarUploader } from '../components/AvatarUploader';
 import { useForm } from 'react-hook-form';
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { userService } from '../services/user.service';
 import { motion } from 'framer-motion';
 
 const ROL_LABELS: Record<string, string> = {
-  coordinador: 'Coordinador',
-  instructor: 'Instructor',
+  coordinador:   'Coordinador',
+  instructor:    'Instructor',
   lider_tecnico: 'Líder Técnico',
-  aprendiz: 'Aprendiz',
+  aprendiz:      'Aprendiz',
+};
+const ROL_COLORS: Record<string, string> = {
+  coordinador:   'bg-violet-500/10 text-violet-400 border-violet-500/20',
+  instructor:    'bg-blue-500/10 text-blue-400 border-blue-500/20',
+  lider_tecnico: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
+  aprendiz:      'bg-amber-500/10 text-amber-400 border-amber-500/20',
+};
+const STATUS_DOT: Record<string, string> = {
+  to_do: 'bg-slate-500', in_progress: 'bg-blue-500',
+  testing: 'bg-amber-500', done: 'bg-emerald-500',
 };
 
-const ROL_COLORS: Record<string, string> = {
-  coordinador: 'bg-violet-500/10 text-violet-400 border-violet-500/20',
-  instructor: 'bg-blue-500/10 text-blue-400 border-blue-500/20',
-  lider_tecnico: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
-  aprendiz: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
-};
+type Tab = 'general' | 'actividad' | 'seguridad';
 
 export const ProfilePage = () => {
   const { user, updateUser } = useAuthStore();
-  const [activeTab, setActiveTab] = useState<'general' | 'seguridad' | 'actividad'>('general');
-  const [isSaved, setIsSaved] = useState(false);
-  const [avatarPreview, setAvatarPreview] = useState<string | null>(user?.avatar_url || null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [activeTab, setActiveTab] = useState<Tab>('general');
+  const [saved, setSaved] = useState(false);
+  const [pwdMsg, setPwdMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
+
+  // Perfil enriquecido (fichas, proyectos, tickets)
+  const { data: profile } = useQuery({
+    queryKey: ['user-profile', user?.id],
+    queryFn: () => userService.getProfile(user!.id),
+    enabled: !!user?.id,
+    staleTime: 60_000,
+  });
 
   const { register, handleSubmit, formState: { isDirty } } = useForm({
     defaultValues: {
-      nombre: user?.nombre || '',
+      nombre:   user?.nombre   || '',
       telefono: user?.telefono || '',
-      bio: user?.bio || '',
+      bio:      user?.bio      || '',
     },
   });
 
-  const { register: registerPwd, handleSubmit: handleSubmitPwd, reset: resetPwd, formState: { errors: pwdErrors } } = useForm<{
-    actual: string; nueva: string; confirmar: string;
-  }>();
+  const {
+    register: regPwd,
+    handleSubmit: handlePwd,
+    reset: resetPwd,
+    watch: watchPwd,
+    formState: { errors: pwdErrors },
+  } = useForm<{ actual: string; nueva: string; confirmar: string }>();
 
-  const updateProfileMutation = useMutation({
-    mutationFn: (data: any) => {
-      if (!user?.id) throw new Error('No autenticado');
-      return userService.update(user.id, data);
-    },
-    onSuccess: (updatedUser) => {
-      updateUser(updatedUser);
-      setIsSaved(true);
-      setTimeout(() => setIsSaved(false), 3000);
+  const updateMutation = useMutation({
+    mutationFn: (data: any) => userService.update(user!.id, data),
+    onSuccess: (updated) => {
+      updateUser(updated);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 3000);
     },
   });
 
-  const handleAvatarChange = (e: ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      const url = reader.result as string;
-      setAvatarPreview(url);
-      updateUser({ avatar_url: url });
-      // In a real implementation: upload to server and get URL back
-    };
-    reader.readAsDataURL(file);
+  const pwdMutation = useMutation({
+    mutationFn: (data: { actual: string; nueva: string }) =>
+      userService.changeOwnPassword(user!.id, data.actual, data.nueva),
+    onSuccess: () => {
+      setPwdMsg({ type: 'ok', text: 'Contraseña actualizada correctamente' });
+      resetPwd();
+      setTimeout(() => setPwdMsg(null), 3000);
+    },
+    onError: (err: any) => {
+      setPwdMsg({ type: 'err', text: err?.response?.data?.message || 'Error al cambiar contraseña' });
+    },
+  });
+
+  const onSave = (data: any) => updateMutation.mutate(data);
+
+  const onChangePwd = (data: { actual: string; nueva: string; confirmar: string }) => {
+    if (data.nueva !== data.confirmar) {
+      setPwdMsg({ type: 'err', text: 'Las contraseñas no coinciden' });
+      return;
+    }
+    pwdMutation.mutate({ actual: data.actual, nueva: data.nueva });
   };
 
-  const onSubmit = (data: any) => updateProfileMutation.mutate(data);
+  if (!user) return null;
 
-  const onChangePassword = (data: { actual: string; nueva: string; confirmar: string }) => {
-    if (data.nueva !== data.confirmar) return;
-    // Call API to change password
-    console.log('Change password:', data.actual, data.nueva);
-    resetPwd();
-  };
+  const tabs: { id: Tab; label: string; icon: any }[] = [
+    { id: 'general',   label: 'General',   icon: UserIcon },
+    { id: 'actividad', label: 'Actividad', icon: FolderKanban },
+    { id: 'seguridad', label: 'Seguridad', icon: Shield },
+  ];
 
-  const gradientClass = 'from-primary-600 to-indigo-700';
-
-  const tabs = [
-    { id: 'general', label: 'General', icon: UserIcon },
-    { id: 'seguridad', label: 'Seguridad', icon: Key },
-    { id: 'actividad', label: 'Actividad', icon: Shield },
-  ] as const;
+  const nueva = watchPwd('nueva');
 
   return (
-    <div className="max-w-3xl mx-auto space-y-8">
-      {/* Profile Header Card */}
-      <motion.div
-        initial={{ opacity: 0, y: 16 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="bg-dark-card border border-dark-border rounded-[2.5rem] overflow-hidden"
-      >
-        {/* Banner */}
-        <div className={`h-24 bg-gradient-to-r ${gradientClass} opacity-80`} />
+    <div className="max-w-2xl mx-auto space-y-6">
 
-        {/* Avatar + Info */}
-        <div className="px-8 pb-8 -mt-12 flex items-end justify-between gap-4 flex-wrap">
-          <div className="flex items-end gap-5">
-            {/* Avatar with upload */}
-            <div className="relative group">
-              <div className={`w-24 h-24 rounded-[1.5rem] bg-gradient-to-br ${gradientClass} flex items-center justify-center border-4 border-dark-card shadow-xl overflow-hidden`}>
-                {avatarPreview ? (
-                  <img src={avatarPreview} alt="avatar" className="w-full h-full object-cover" />
-                ) : (
-                  <span className="text-3xl font-black text-white">
-                    {user?.nombre?.slice(0, 2).toUpperCase()}
-                  </span>
-                )}
-              </div>
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                className="absolute inset-0 rounded-[1.5rem] bg-dark-bg/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"
-              >
-                <Camera size={22} className="text-white" />
-              </button>
-              <input
-                type="file"
-                accept="image/*"
-                ref={fileInputRef}
-                className="hidden"
-                onChange={handleAvatarChange}
-              />
+      {/* ── Header con avatar ──────────────────────────────────────────── */}
+      <div className="bg-dark-card border border-dark-border rounded-[2rem] p-6">
+        <div className="flex items-center gap-5">
+          <AvatarUploader
+            userId={user.id}
+            currentUrl={user.avatar_url}
+            nombre={user.nombre}
+            size="lg"
+            editable={true}
+            onSuccess={(avatarUrl) => updateUser({ avatar_url: avatarUrl })}
+          />
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-3 flex-wrap">
+              <h2 className="text-2xl font-black text-white tracking-tight">{user.nombre}</h2>
+              <span className={`text-[10px] font-black px-2.5 py-1 rounded-lg border uppercase tracking-widest ${ROL_COLORS[user.rol] || ''}`}>
+                {ROL_LABELS[user.rol] || user.rol}
+              </span>
             </div>
-
-            <div className="mb-2">
-              <h2 className="text-2xl font-black text-dark-text">{user?.nombre}</h2>
-              <p className="text-dark-muted text-sm">{user?.correo}</p>
-            </div>
-          </div>
-
-          <div className="mb-3 flex items-center gap-3">
-            <span className={`text-xs font-black px-3 py-1.5 rounded-xl border uppercase tracking-widest ${ROL_COLORS[user?.rol || 'aprendiz']}`}>
-              {ROL_LABELS[user?.rol || 'aprendiz']}
-            </span>
-            <div className={`flex items-center gap-1.5 text-xs font-bold ${user?.activo ? 'text-emerald-400' : 'text-rose-400'}`}>
-              <div className={`w-2 h-2 rounded-full ${user?.activo ? 'bg-emerald-500' : 'bg-rose-500'} animate-pulse`} />
-              {user?.activo ? 'Activo' : 'Inactivo'}
-            </div>
+            <p className="text-sm text-dark-muted mt-1">{user.correo}</p>
+            {user.bio && <p className="text-xs text-dark-muted mt-1 line-clamp-2 italic">{user.bio}</p>}
           </div>
         </div>
-      </motion.div>
 
-      {/* Tabs */}
-      <div className="flex gap-2 bg-dark-card border border-dark-border rounded-2xl p-1.5">
-        {tabs.map(({ id, label, icon: Icon }) => (
-          <button
-            key={id}
-            onClick={() => setActiveTab(id)}
-            className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-black uppercase tracking-widest transition-all ${
-              activeTab === id
-                ? 'bg-primary-600/15 text-primary-400 border border-primary-500/20'
-                : 'text-dark-muted hover:text-dark-text'
-            }`}
-          >
-            <Icon size={15} />
-            {label}
-          </button>
-        ))}
+        {/* Tabs */}
+        <div className="flex gap-1 mt-5 bg-dark-bg/60 rounded-xl p-1 border border-dark-border">
+          {tabs.map(({ id, label, icon: Icon }) => (
+            <button
+              key={id}
+              onClick={() => setActiveTab(id)}
+              className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-xs font-black uppercase tracking-widest transition-all ${
+                activeTab === id
+                  ? 'bg-dark-card text-primary-400 border border-dark-border shadow'
+                  : 'text-dark-muted hover:text-dark-text'
+              }`}
+            >
+              <Icon size={12} /> {label}
+            </button>
+          ))}
+        </div>
       </div>
 
-      {/* Tab Content */}
-      <AnimatedTabContent>
-        {activeTab === 'general' && (
-          <form onSubmit={handleSubmit(onSubmit)} className="bg-dark-card border border-dark-border rounded-[2rem] p-8 space-y-6">
-            <h3 className="text-lg font-black text-dark-text uppercase tracking-widest">Información Personal</h3>
+      {/* ── Tab: General ──────────────────────────────────────────────── */}
+      {activeTab === 'general' && (
+        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-5">
+          <form onSubmit={handleSubmit(onSave)} className="bg-dark-card border border-dark-border rounded-[2rem] p-6 space-y-5">
+            <h3 className="text-xs font-black text-dark-muted uppercase tracking-widest flex items-center gap-2">
+              <UserIcon size={12} /> Datos personales
+            </h3>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-              <Field label="Nombre Completo" icon={<UserIcon size={16} />}>
-                <input
-                  {...register('nombre', { required: true })}
-                  className="input-dark"
-                  placeholder="Tu nombre completo"
+            {[
+              { label: 'Nombre completo', name: 'nombre', type: 'text', icon: UserIcon, placeholder: 'Tu nombre' },
+              { label: 'Teléfono',        name: 'telefono', type: 'tel', icon: Phone, placeholder: '+57 300 000 0000' },
+            ].map(({ label, name, type, icon: Icon, placeholder }) => (
+              <div key={name} className="space-y-1.5">
+                <label className="text-[10px] font-black text-dark-muted uppercase tracking-widest">{label}</label>
+                <div className="relative">
+                  <Icon size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-dark-muted" />
+                  <input
+                    {...register(name as any)}
+                    type={type}
+                    placeholder={placeholder}
+                    className="input-dark pl-9 w-full"
+                  />
+                </div>
+              </div>
+            ))}
+
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-black text-dark-muted uppercase tracking-widest">Biografía</label>
+              <div className="relative">
+                <FileText size={13} className="absolute left-3 top-3 text-dark-muted" />
+                <textarea
+                  {...register('bio')}
+                  rows={3}
+                  placeholder="Cuéntanos algo sobre ti..."
+                  className="input-dark pl-9 w-full resize-none"
                 />
-              </Field>
-
-              <Field label="Correo Electrónico" icon={<Mail size={16} />}>
-                <input
-                  value={user?.correo}
-                  disabled
-                  className="input-dark opacity-50 cursor-not-allowed"
-                />
-              </Field>
-
-              <Field label="Teléfono (opcional)" icon={<Phone size={16} />}>
-                <input
-                  {...register('telefono')}
-                  className="input-dark"
-                  placeholder="+57 300 000 0000"
-                />
-              </Field>
-
-              <Field label="Rol del Sistema" icon={<Shield size={16} />}>
-                <input
-                  value={ROL_LABELS[user?.rol || 'aprendiz']}
-                  disabled
-                  className="input-dark opacity-50 cursor-not-allowed"
-                />
-              </Field>
-            </div>
-
-            <Field label="Biografía / Descripción" icon={<FileText size={16} />} fullWidth>
-              <textarea
-                {...register('bio')}
-                rows={3}
-                className="input-dark resize-none"
-                placeholder="Cuéntanos algo sobre ti..."
-              />
-            </Field>
-
-            <div className="flex items-center justify-between pt-2">
-              {isSaved && (
-                <span className="flex items-center gap-2 text-sm text-emerald-400 font-bold">
-                  <CheckCircle2 size={16} />
-                  Cambios guardados
-                </span>
-              )}
-              <div className="ml-auto">
-                <Button
-                  type="submit"
-                  isLoading={updateProfileMutation.isPending}
-                  disabled={!isDirty}
-                  className="flex items-center gap-2"
-                >
-                  <Save size={16} />
-                  Guardar Cambios
-                </Button>
               </div>
             </div>
-          </form>
-        )}
 
-        {activeTab === 'seguridad' && (
-          <form onSubmit={handleSubmit(onChangePassword as any)} className="bg-dark-card border border-dark-border rounded-[2rem] p-8 space-y-6">
-            <h3 className="text-lg font-black text-dark-text uppercase tracking-widest">Cambiar Contraseña</h3>
-
-            <Field label="Contraseña Actual" icon={<Key size={16} />}>
-              <input
-                {...registerPwd('actual', { required: true })}
-                type="password"
-                className="input-dark"
-                placeholder="••••••••"
-              />
-            </Field>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-              <Field label="Nueva Contraseña" icon={<Key size={16} />}>
+            {/* Correo (no editable) */}
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-black text-dark-muted uppercase tracking-widest">Correo electrónico</label>
+              <div className="relative">
+                <Mail size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-dark-muted" />
                 <input
-                  {...registerPwd('nueva', { required: true, minLength: 8 })}
-                  type="password"
-                  className="input-dark"
-                  placeholder="Mínimo 8 caracteres"
+                  value={user.correo}
+                  disabled
+                  className="input-dark pl-9 w-full opacity-50 cursor-not-allowed"
                 />
-              </Field>
-              <Field label="Confirmar Nueva Contraseña" icon={<Key size={16} />}>
-                <input
-                  {...registerPwd('confirmar', { required: true })}
-                  type="password"
-                  className="input-dark"
-                  placeholder="Repite la contraseña"
-                />
-              </Field>
+              </div>
+              <p className="text-[10px] text-dark-muted">El correo no puede cambiarse desde aquí</p>
             </div>
 
-            <div className="bg-amber-500/5 border border-amber-500/20 rounded-2xl p-4 text-xs text-amber-400 font-bold">
-              La contraseña debe tener mínimo 8 caracteres, una mayúscula y un número.
+            <div className="flex items-center gap-3">
+              <Button
+                type="submit"
+                disabled={!isDirty}
+                isLoading={updateMutation.isPending}
+                className="flex items-center gap-2"
+              >
+                <Save size={14} /> Guardar cambios
+              </Button>
+              {saved && (
+                <span className="flex items-center gap-1.5 text-emerald-400 text-xs font-black">
+                  <CheckCircle2 size={14} /> Guardado
+                </span>
+              )}
             </div>
-
-            <Button type="submit" className="flex items-center gap-2">
-              <Key size={16} />
-              Actualizar Contraseña
-            </Button>
           </form>
-        )}
+        </motion.div>
+      )}
 
-        {activeTab === 'actividad' && (
-          <div className="bg-dark-card border border-dark-border rounded-[2rem] p-8 space-y-4">
-            <h3 className="text-lg font-black text-dark-text uppercase tracking-widest">Actividad Reciente</h3>
-            <p className="text-dark-muted text-sm">
-              Miembro desde: <span className="text-dark-text font-bold">{user?.creado_en ? new Date(user.creado_en).toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric' }) : '—'}</span>
-            </p>
-            <div className="space-y-3 mt-4">
-              {[
-                { text: 'Iniciaste sesión', time: 'Hace 2 minutos' },
-                { text: 'Actualizaste tu perfil', time: 'Ayer' },
-                { text: 'Creaste un ticket', time: 'Hace 3 días' },
-              ].map((item, i) => (
-                <div key={i} className="flex items-center justify-between p-4 bg-dark-bg/40 rounded-2xl border border-dark-border/50">
-                  <span className="text-sm font-bold text-dark-text">{item.text}</span>
-                  <span className="text-xs text-dark-muted">{item.time}</span>
+      {/* ── Tab: Actividad ─────────────────────────────────────────────── */}
+      {activeTab === 'actividad' && (
+        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-5">
+
+          {/* Fichas (instructor) */}
+          {user.rol === 'instructor' && (
+            <div className="bg-dark-card border border-dark-border rounded-[2rem] p-5 space-y-4">
+              <h3 className="text-xs font-black text-dark-muted uppercase tracking-widest flex items-center gap-2">
+                <GraduationCap size={12} /> Mis Fichas ({profile?.fichas?.length ?? 0})
+              </h3>
+              {!profile?.fichas?.length ? (
+                <p className="text-xs text-dark-muted italic">No tienes fichas asignadas aún</p>
+              ) : profile.fichas.map((f: any) => (
+                <div key={f.id} className="flex items-center gap-3 p-3 bg-dark-bg/60 rounded-xl border border-dark-border/50">
+                  <div className="p-2 bg-primary-500/10 rounded-xl">
+                    <Hash size={13} className="text-primary-400" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold text-dark-text">{f.programa}</p>
+                    <p className="text-[10px] text-dark-muted">Ficha {f.codigo} · {f.fecha_inicio} → {f.fecha_fin}</p>
+                  </div>
                 </div>
               ))}
             </div>
-          </div>
-        )}
-      </AnimatedTabContent>
+          )}
+
+          {/* Proyectos */}
+          {profile?.proyectos?.length > 0 && (
+            <div className="bg-dark-card border border-dark-border rounded-[2rem] p-5 space-y-4">
+              <h3 className="text-xs font-black text-dark-muted uppercase tracking-widest flex items-center gap-2">
+                <FolderKanban size={12} /> Mis Proyectos ({profile.proyectos.length})
+              </h3>
+              {profile.proyectos.map((p: any) => (
+                <div key={p.id} className="flex items-center gap-3 p-3 bg-dark-bg/60 rounded-xl border border-dark-border/50">
+                  <div className={`w-2 h-2 rounded-full shrink-0 ${
+                    p.estado === 'activo' ? 'bg-emerald-500' :
+                    p.estado === 'pausado' ? 'bg-amber-500' : 'bg-slate-500'
+                  }`} />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-bold text-dark-text truncate">{p.nombre}</p>
+                    <p className="text-[10px] text-dark-muted capitalize">{p.estado} · {p.ficha?.codigo || ''}</p>
+                  </div>
+                  <a href={`/projects/${p.id}/kanban`} className="p-1.5 text-dark-muted hover:text-primary-400 transition-colors">
+                    <ExternalLink size={13} />
+                  </a>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Tickets */}
+          {profile?.tickets?.length > 0 && (
+            <div className="bg-dark-card border border-dark-border rounded-[2rem] p-5 space-y-4">
+              <h3 className="text-xs font-black text-dark-muted uppercase tracking-widest flex items-center gap-2">
+                <Ticket size={12} /> Mis Tickets ({profile.tickets.length})
+              </h3>
+              {/* Barra de progreso para aprendiz */}
+              {user.rol === 'aprendiz' && profile.stats?.progreso !== undefined && (
+                <div>
+                  <div className="flex justify-between text-[10px] mb-1">
+                    <span className="text-dark-muted">Progreso</span>
+                    <span className="text-primary-400 font-black">{profile.stats.progreso}%</span>
+                  </div>
+                  <div className="h-2 bg-dark-bg rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-gradient-to-r from-primary-600 to-primary-400 rounded-full transition-all"
+                      style={{ width: `${profile.stats.progreso}%` }}
+                    />
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 mt-3">
+                    {[
+                      { icon: CheckCircle2, label: 'Completados', value: profile.stats.tickets_completados, color: 'text-emerald-400' },
+                      { icon: Clock,        label: 'En progreso', value: profile.stats.tickets_en_progreso,  color: 'text-blue-400'   },
+                      { icon: AlertCircle,  label: 'Total',       value: profile.stats.tickets_total,         color: 'text-dark-text'  },
+                    ].map(({ icon: Icon, label, value, color }) => (
+                      <div key={label} className="bg-dark-bg/60 rounded-xl p-2.5 text-center border border-dark-border">
+                        <Icon size={14} className={`${color} mx-auto mb-1`} />
+                        <p className="text-sm font-black text-dark-text">{value}</p>
+                        <p className="text-[9px] text-dark-muted">{label}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <div className="space-y-2 max-h-64 overflow-y-auto">
+                {profile.tickets.slice(0, 15).map((t: any) => (
+                  <a key={t.id} href={`/tickets/${t.id}`}
+                    className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-dark-bg/60 border border-dark-border/50 hover:border-primary-500/30 transition-all group"
+                  >
+                    <div className={`w-2 h-2 rounded-full shrink-0 ${STATUS_DOT[t.estado] || 'bg-slate-500'}`} />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-bold text-dark-text truncate group-hover:text-primary-400 transition-colors">{t.titulo}</p>
+                      <p className="text-[10px] text-dark-muted capitalize">{t.prioridad} · {t.estado?.replace('_', ' ')}</p>
+                    </div>
+                    <ExternalLink size={11} className="text-dark-muted opacity-0 group-hover:opacity-100 transition-opacity" />
+                  </a>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {!profile?.fichas?.length && !profile?.proyectos?.length && !profile?.tickets?.length && (
+            <div className="text-center py-16 bg-dark-card/20 rounded-[2rem] border border-dashed border-dark-border">
+              <FolderKanban size={28} className="mx-auto text-dark-muted mb-3 opacity-30" />
+              <p className="text-dark-muted font-black uppercase tracking-widest text-sm">Sin actividad registrada aún</p>
+            </div>
+          )}
+        </motion.div>
+      )}
+
+      {/* ── Tab: Seguridad ─────────────────────────────────────────────── */}
+      {activeTab === 'seguridad' && (
+        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
+          <form onSubmit={handlePwd(onChangePwd)} className="bg-dark-card border border-dark-border rounded-[2rem] p-6 space-y-5">
+            <h3 className="text-xs font-black text-dark-muted uppercase tracking-widest flex items-center gap-2">
+              <Key size={12} /> Cambiar contraseña
+            </h3>
+
+            {[
+              { label: 'Contraseña actual',   name: 'actual',    rules: { required: 'Campo obligatorio' } },
+              { label: 'Nueva contraseña',    name: 'nueva',     rules: { required: 'Campo obligatorio', minLength: { value: 6, message: 'Mínimo 6 caracteres' } } },
+              { label: 'Confirmar contraseña', name: 'confirmar', rules: {
+                required: 'Campo obligatorio',
+                validate: (v: string) => v === nueva || 'Las contraseñas no coinciden',
+              }},
+            ].map(({ label, name, rules }) => (
+              <div key={name} className="space-y-1.5">
+                <label className="text-[10px] font-black text-dark-muted uppercase tracking-widest">{label}</label>
+                <div className="relative">
+                  <Key size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-dark-muted" />
+                  <input
+                    {...regPwd(name as any, rules)}
+                    type="password"
+                    className="input-dark pl-9 w-full"
+                    placeholder="••••••••"
+                  />
+                </div>
+                {pwdErrors[name as keyof typeof pwdErrors] && (
+                  <p className="text-xs text-rose-400">{(pwdErrors[name as keyof typeof pwdErrors] as any)?.message}</p>
+                )}
+              </div>
+            ))}
+
+            {pwdMsg && (
+              <p className={`text-xs ${pwdMsg.type === 'ok' ? 'text-emerald-400' : 'text-rose-400'} flex items-center gap-1.5`}>
+                {pwdMsg.type === 'ok' ? <CheckCircle2 size={13} /> : <AlertCircle size={13} />}
+                {pwdMsg.text}
+              </p>
+            )}
+
+            <Button type="submit" isLoading={pwdMutation.isPending} className="w-full py-3">
+              Actualizar contraseña
+            </Button>
+          </form>
+        </motion.div>
+      )}
+
     </div>
   );
 };
-
-// Helper components
-const AnimatedTabContent = ({ children }: { children: React.ReactNode }) => (
-  <motion.div
-    key={children?.toString()}
-    initial={{ opacity: 0, y: 8 }}
-    animate={{ opacity: 1, y: 0 }}
-    transition={{ duration: 0.2 }}
-  >
-    {children}
-  </motion.div>
-);
-
-const Field = ({
-  label, icon, children, fullWidth,
-}: {
-  label: string;
-  icon: React.ReactNode;
-  children: React.ReactNode;
-  fullWidth?: boolean;
-}) => (
-  <div className={`space-y-2 ${fullWidth ? 'col-span-2' : ''}`}>
-    <label className="flex items-center gap-1.5 text-[10px] font-black text-dark-muted uppercase tracking-widest ml-1">
-      {icon}
-      {label}
-    </label>
-    {children}
-  </div>
-);

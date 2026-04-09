@@ -13,6 +13,7 @@ export const ProtectedRoute = ({
   const { isAuthenticated, isLoading, user } = useAuthStore();
 
   // Mientras AuthInit verifica el token: spinner neutral
+  // NUNCA redirigir mientras isLoading=true — eso causaría el bucle
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-dark-bg">

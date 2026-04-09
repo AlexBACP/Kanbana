@@ -5,7 +5,8 @@ import { fichaService } from '../../services/ficha.service';
 import { useAuthStore } from '../../store/auth.store';
 import { Modal } from '../../components/Modal';
 import { useState } from 'react';
-import { Search, Plus, Trash2, FolderKanban, ExternalLink, AlertCircle, Users } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Search, Plus, Trash2, FolderKanban, LayoutGrid, AlertCircle } from 'lucide-react';
 
 const STATUS_CONFIG = {
   activo:     { label: 'Activo',     badge: 'badge-success' },
@@ -26,6 +27,7 @@ export const ProjectsPanel = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const queryClient = useQueryClient();
   const { user } = useAuthStore();
+  const navigate = useNavigate();
 
   const { data: projects = [], isLoading } = useQuery({
     queryKey: ['projects'],
@@ -53,15 +55,15 @@ export const ProjectsPanel = () => {
     e.preventDefault();
     const f = new FormData(e.currentTarget);
     createMutation.mutate({
-      nombre: f.get('nombre') as string,
-      descripcion: f.get('descripcion') as string,
-      liderId: Number(f.get('liderId')),
-      fichaId: Number(f.get('fichaId')),
-      instructorId: user?.id,
-      competencia: f.get('competencia') as string,
+      nombre:                f.get('nombre') as string,
+      descripcion:           f.get('descripcion') as string,
+      liderId:               Number(f.get('liderId')) || undefined,
+      fichaId:               Number(f.get('fichaId')) || undefined,
+      instructorId:          user?.id,
+      competencia:           f.get('competencia') as string,
       resultado_aprendizaje: f.get('resultado_aprendizaje') as string,
-      fecha_inicio: f.get('fecha_inicio') as string,
-      fecha_fin: f.get('fecha_fin') as string,
+      fecha_inicio:          f.get('fecha_inicio') as string,
+      fecha_fin:             f.get('fecha_fin') as string,
     } as any);
   };
 
@@ -150,7 +152,6 @@ export const ProjectsPanel = () => {
                 const sc = STATUS_CONFIG[proj.estado as keyof typeof STATUS_CONFIG] || STATUS_CONFIG.activo;
                 return (
                   <tr key={proj.id}>
-                    {/* Nombre */}
                     <td>
                       <div className="flex items-center gap-2.5">
                         <div className="w-7 h-7 bg-info-light rounded-lg flex items-center justify-center shrink-0">
@@ -163,12 +164,10 @@ export const ProjectsPanel = () => {
                       </div>
                     </td>
 
-                    {/* Ficha */}
                     <td>
                       <span className="text-xs text-ink-muted">{proj.ficha?.codigo ?? '—'}</span>
                     </td>
 
-                    {/* Estado (editable) */}
                     <td>
                       <select
                         value={proj.estado}
@@ -181,7 +180,6 @@ export const ProjectsPanel = () => {
                       </select>
                     </td>
 
-                    {/* Líder */}
                     <td>
                       {proj.lider ? (
                         <div className="flex items-center gap-1.5">
@@ -195,22 +193,21 @@ export const ProjectsPanel = () => {
                       )}
                     </td>
 
-                    {/* Fechas */}
                     <td>
                       <p className="text-xs text-ink-muted">{proj.fecha_inicio} → {proj.fecha_fin}</p>
                     </td>
 
-                    {/* Acciones */}
                     <td className="text-right">
                       <div className="flex items-center justify-end gap-1">
-                        <a
-                          href={`/projects/${proj.id}/kanban`}
-                          className="btn-ghost text-xs flex items-center gap-1"
-                          title="Ver tablero"
+                        {/* Botón Tablero: navega a /projects/:id/kanban */}
+                        <button
+                          onClick={() => navigate(`/projects/${proj.id}/kanban`)}
+                          className="btn-ghost text-xs flex items-center gap-1 hover:text-primary-500"
+                          title="Ver tablero Kanban"
                         >
-                          <ExternalLink size={13} />
+                          <LayoutGrid size={13} />
                           Tablero
-                        </a>
+                        </button>
                         {canCreate && (
                           <button
                             onClick={() => { if (confirm(`¿Eliminar "${proj.nombre}"?`)) deleteMutation.mutate(proj.id); }}
@@ -264,8 +261,8 @@ export const ProjectsPanel = () => {
             </FormField>
           </div>
           <FormField label="Asignar líder técnico">
-            <select name="liderId" required className="input-base">
-              <option value="">Selecciona un responsable...</option>
+            <select name="liderId" className="input-base">
+              <option value="">Sin asignar por ahora</option>
               {leaders.map((l: any) => (
                 <option key={l.id} value={l.id}>{l.nombre}</option>
               ))}

@@ -10,24 +10,20 @@ import { ProjectsService } from './projects.service';
 export class ProjectsController {
   constructor(private readonly projectsService: ProjectsService) {}
 
-  // ── GET /projects — con filtros opcionales ─────────────────────
+  // ── GET /projects — filtra según el rol del usuario autenticado ────────
+  // FIX BUG: Antes devolvía TODOS los proyectos a todos los roles.
+  // Ahora delega en findForUser() que aplica los filtros correctos.
   @Get()
-  findAll(
-    @Query('fichaId')      fichaId?:      string,
-    @Query('instructorId') instructorId?: string,
-    @Query('liderId')      liderId?:      string,
-    @Query('miembroId')    miembroId?:    string,
-  ) {
-    return this.projectsService.findAll({
-      fichaId:      fichaId      ? +fichaId      : undefined,
-      instructorId: instructorId ? +instructorId : undefined,
-      liderId:      liderId      ? +liderId      : undefined,
-      miembroId:    miembroId    ? +miembroId    : undefined,
-    });
+  findAll(@Request() req: any, @Query('fichaId') fichaId?: string) {
+    // Si se pasa fichaId explícito (ej: desde FichasPanel), respetar ese filtro
+    if (fichaId) {
+      return this.projectsService.findAll({ fichaId: +fichaId });
+    }
+    // Sin filtro explícito: filtrar por rol
+    return this.projectsService.findForUser(req.user);
   }
 
-  // ── GET /projects/for-me — proyectos filtrados según rol del usuario ─
-  // El frontend de cada rol usa esto en lugar de filtrar manualmente.
+  // ── GET /projects/for-me — alias explícito para compatibilidad ────────
   @Get('for-me')
   findForMe(@Request() req: any) {
     return this.projectsService.findForUser(req.user);

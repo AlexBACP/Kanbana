@@ -19,7 +19,7 @@ interface LoginCredentials {
   password: string;
 }
 
-const isPopup = () => {
+const isPopup = (): boolean => {
   try {
     return !!(window.opener && !window.opener.closed && window.opener !== window);
   } catch {
@@ -42,27 +42,8 @@ export const LoginPage = () => {
   const onSubmit = async (data: LoginCredentials) => {
     try {
       setError(null);
-
-      if (popup) {
-        // Modo popup: hacer login manual sin navegar
-        const { authService } = await import('../services/auth.service');
-        const response = await authService.login({ email: data.email, password: data.password });
-        const { access_token, refresh_token } = response.tokens;
-        localStorage.setItem('access_token', access_token);
-        localStorage.setItem('refresh_token', refresh_token);
-
-        // Notificar a la ventana padre
-        window.opener.postMessage(
-          { type: 'LOGIN_SUCCESS', rol: response.user.rol },
-          window.location.origin
-        );
-
-        // Cerrar el popup tras un breve delay
-        setTimeout(() => window.close(), 300);
-      } else {
-        // Modo normal: navegar al dashboard según rol
-        await login(data.email, data.password);
-      }
+      // useAuth.login() maneja tanto popup como navegación normal
+      await login(data.email, data.password);
     } catch (err: any) {
       setError(err?.response?.data?.message || 'Credenciales incorrectas. Intenta de nuevo.');
     }

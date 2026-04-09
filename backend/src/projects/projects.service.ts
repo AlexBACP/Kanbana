@@ -1,4 +1,6 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  Injectable, NotFoundException, BadRequestException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Project } from './entities/project.entity';
@@ -18,14 +20,12 @@ export class ProjectsService {
     return this.projectsRepo.save(project as any);
   }
 
-  // ── findAll — con filtros contextuales ────────────────────────────
-  // El parámetro requestingUser permite filtrar automáticamente según rol.
-  // Si no se pasa, devuelve todos (para coordinador).
   async findAll(params?: {
     fichaId?:      number;
     instructorId?: number;
     liderId?:      number;
-    miembroId?:    number; // aprendiz: proyectos donde es miembro
+    miembroId?:    number;
+    fichaIds?:     number[];
   }): Promise<Project[]> {
     const qb = this.projectsRepo.createQueryBuilder('p')
       .leftJoinAndSelect('p.ficha',      'ficha')
@@ -37,8 +37,11 @@ export class ProjectsService {
     if (params?.instructorId) qb.andWhere('p.instructorId = :iid', { iid: params.instructorId });
     if (params?.liderId)      qb.andWhere('p.liderId = :lid',      { lid: params.liderId });
 
+    if (params?.fichaIds && params.fichaIds.length > 0) {
+      qb.andWhere('p.fichaId IN (:...fids)', { fids: params.fichaIds });
+    }
+
     if (params?.miembroId) {
-      // Filtrar proyectos donde el usuario es miembro (tabla proyecto_usuarios)
       qb.innerJoin('proyecto_usuarios', 'pu', 'pu.project_id = p.id')
         .andWhere('pu.user_id = :uid', { uid: params.miembroId });
     }
@@ -46,14 +49,31 @@ export class ProjectsService {
     return qb.getMany();
   }
 
-  // ── Proyectos según el rol del usuario autenticado ─────────────────
   async findForUser(user: User): Promise<Project[]> {
     switch (user.rol) {
       case UserRole.COORDINADOR:
         return this.findAll();
 
-      case UserRole.INSTRUCTOR:
-        return this.findAll({ instructorId: user.id });
+      case UserRole.INSTRUCTOR: {
+        const fichas = await this.projectsRepo.manager
+          .getRepository('fichas')
+          .find({ where: { instructor_id: user.id }, select: ['id'] });
+
+        const fichaIds = fichas.map((f: any) => f.id);
+
+        if (fichaIds.length === 0) {
+          return this.findAll({ instructorId: user.id });
+        }
+
+        const porFicha      = await this.findAll({ fichaIds });
+        const porInstructor = await this.findAll({ instructorId: user.id });
+
+        const allMap = new Map<number, Project>();
+        [...porFicha, ...porInstructor].forEach(p => allMap.set(p.id, p));
+        return [...allMap.values()].sort(
+          (a, b) => new Date(b.creado_en).getTime() - new Date(a.creado_en).getTime()
+        );
+      }
 
       case UserRole.LIDER:
         return this.findAll({ liderId: user.id });
@@ -88,33 +108,49 @@ export class ProjectsService {
     await this.projectsRepo.delete(id);
   }
 
-  // ── updateStatus ──────────────────────────────────────────────────
   async updateStatus(id: number, estado: string): Promise<Project> {
     return this.update(id, { estado });
   }
 
-  // ── Asignar líder técnico ──────────────────────────────────────────
   async assignLider(id: number, liderId: number | null): Promise<Project> {
     return this.update(id, { liderId });
   }
 
-  // ── Miembros ──────────────────────────────────────────────────────
   async getMembers(id: number): Promise<User[]> {
     const p = await this.projectsRepo.findOne({ where: { id }, relations: ['miembros'] });
     if (!p) throw new NotFoundException();
     return p.miembros ?? [];
   }
 
+  /**
+   * Añadir miembro a un proyecto.
+   * REGLA: un aprendiz/líder no puede estar en más de UN proyecto simultáneamente.
+   */
   async addMember(id: number, userId: number): Promise<void> {
     const [p, u] = await Promise.all([
       this.projectsRepo.findOne({ where: { id }, relations: ['miembros'] }),
       this.usersRepo.findOne({ where: { id: userId } }),
     ]);
     if (!p || !u) throw new NotFoundException();
-    if (!p.miembros.find(m => m.id === userId)) {
-      p.miembros.push(u);
-      await this.projectsRepo.save(p as any);
+
+    // Ya es miembro de este proyecto → no hacer nada
+    if (p.miembros.find(m => m.id === userId)) return;
+
+    // Validar que no esté en otro proyecto
+    const otrosProyectos = await this.projectsRepo
+      .createQueryBuilder('p')
+      .innerJoin('proyecto_usuarios', 'pu', 'pu.project_id = p.id AND pu.user_id = :uid', { uid: userId })
+      .where('p.id != :pid', { pid: id })
+      .getCount();
+
+    if (otrosProyectos > 0) {
+      throw new BadRequestException(
+        `El usuario "${u.nombre}" ya pertenece a otro proyecto. Un aprendiz solo puede estar en un proyecto a la vez.`
+      );
     }
+
+    p.miembros.push(u);
+    await this.projectsRepo.save(p as any);
   }
 
   async removeMember(id: number, userId: number): Promise<void> {
@@ -124,7 +160,6 @@ export class ProjectsService {
     await this.projectsRepo.save(p as any);
   }
 
-  // ── Sprints ────────────────────────────────────────────────────────
   async createSprint(proyecto_id: number, dto: any): Promise<Sprint> {
     const s = this.sprintsRepo.create({ ...dto, proyecto_id } as object);
     return this.sprintsRepo.save(s as Sprint);
@@ -156,12 +191,11 @@ export class ProjectsService {
   async closeSprint(sprintId: number): Promise<Sprint> {
     const s = await this.sprintsRepo.findOne({ where: { id: sprintId } });
     if (!s) throw new NotFoundException();
-    s.esta_activo    = false;
+    s.esta_activo     = false;
     s.esta_finalizado = true;
     return this.sprintsRepo.save(s);
   }
 
-  // ── Stats de velocidad y burnup ────────────────────────────────────
   async getVelocityStats(id: number): Promise<object> {
     const sprints = await this.sprintsRepo.find({
       where: { proyecto_id: id, esta_finalizado: true },

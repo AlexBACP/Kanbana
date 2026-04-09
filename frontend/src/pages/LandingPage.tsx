@@ -1,16 +1,17 @@
 /**
  * LandingPage — ruta pública "/"
  *
- * Presenta el sistema Kanbana antes del login.
- * El botón "Iniciar sesión" abre /login en un popup (ventana pequeña).
- * Cuando el usuario se autentica en el popup, este envía postMessage
- * con { type: 'LOGIN_SUCCESS', rol } y esta página redirige al dashboard.
+ * El botón "Iniciar sesión" abre /login en un popup.
+ * Al autenticarse, el popup envía postMessage → la landing recarga el estado
+ * y redirige al dashboard del rol correspondiente.
  *
- * Si el usuario ya está autenticado, redirige directo al dashboard.
+ * FIX: Tras recibir LOGIN_SUCCESS, llamamos authService.me() para hidratar
+ * el store del padre (no solo confiar en localStorage que no dispara Zustand).
  */
 import { useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/auth.store';
+import { authService } from '../services/auth.service';
 import {
   LayoutGrid, Users, FileText, ShieldCheck,
   Kanban, Bell, BarChart2, ArrowRight,
@@ -22,34 +23,46 @@ export const LandingPage = () => {
   const { isAuthenticated, isLoading, user } = useAuthStore();
   const popupRef = useRef<Window | null>(null);
 
-  // Si ya hay sesión activa, redirigir
+  // Si ya hay sesión activa al cargar, redirigir
   useEffect(() => {
     if (!isLoading && isAuthenticated && user) {
       navigate(user.rol === 'aprendiz' ? '/kanban' : '/dashboard', { replace: true });
     }
   }, [isAuthenticated, isLoading, user, navigate]);
 
-  // Escuchar el mensaje del popup cuando el login sea exitoso
+  // Escuchar postMessage del popup
   useEffect(() => {
-    const handler = (event: MessageEvent) => {
+    const handler = async (event: MessageEvent) => {
       if (event.origin !== window.location.origin) return;
-      if (event.data?.type === 'LOGIN_SUCCESS') {
-        // Cerrar popup si aún está abierto
-        if (popupRef.current && !popupRef.current.closed) {
-          popupRef.current.close();
-        }
-        // El store ya fue actualizado por AuthInit en el popup vía localStorage
-        // Solo necesitamos recargar el estado leyendo el token
-        const dest = event.data.rol === 'aprendiz' ? '/kanban' : '/dashboard';
+      if (event.data?.type !== 'LOGIN_SUCCESS') return;
+
+      // Cerrar popup si sigue abierto
+      if (popupRef.current && !popupRef.current.closed) {
+        popupRef.current.close();
+      }
+
+      // FIX CLAVE: el token ya está en localStorage (lo guardó el popup),
+      // pero el store de ESTA ventana todavía tiene user=null.
+      // Llamamos me() para hidratar el store correctamente.
+      try {
+        const { setUser } = useAuthStore.getState();
+        const user = await authService.me();
+        setUser(user);
+        const dest = user.rol === 'aprendiz' ? '/kanban' : '/dashboard';
         navigate(dest, { replace: true });
+      } catch {
+        // Si falla, limpiar y dejar al usuario en landing
+        const { clearUser } = useAuthStore.getState();
+        clearUser();
       }
     };
+
     window.addEventListener('message', handler);
     return () => window.removeEventListener('message', handler);
   }, [navigate]);
 
   const openLoginPopup = () => {
-    const w = 460, h = 560;
+    const w = 460, h = 580;
     const left = window.screenX + (window.outerWidth - w) / 2;
     const top = window.screenY + (window.outerHeight - h) / 2;
     const popup = window.open(
@@ -59,53 +72,32 @@ export const LandingPage = () => {
     );
     popupRef.current = popup;
 
-    // Polling por si el popup se cierra sin postMessage
-    const timer = setInterval(() => {
+    // Polling de respaldo: si el popup se cierra sin postMessage
+    const timer = setInterval(async () => {
       if (popup && popup.closed) {
         clearInterval(timer);
-        // Verificar si mientras tanto se guardó un token
         const token = localStorage.getItem('access_token');
         if (token) {
-          const { user: u } = useAuthStore.getState();
-          if (u) {
-            navigate(u.rol === 'aprendiz' ? '/kanban' : '/dashboard', { replace: true });
-          }
+          try {
+            const { setUser, isAuthenticated } = useAuthStore.getState();
+            if (!isAuthenticated) {
+              const user = await authService.me();
+              setUser(user);
+              navigate(user.rol === 'aprendiz' ? '/kanban' : '/dashboard', { replace: true });
+            }
+          } catch { /* token inválido, quedarse en landing */ }
         }
       }
     }, 500);
   };
 
   const features = [
-    {
-      icon: Kanban,
-      title: 'Tablero Kanban',
-      desc: 'Visualiza el progreso de cada proyecto con columnas por estado. Arrastra y suelta tickets entre etapas.',
-    },
-    {
-      icon: Users,
-      title: 'Gestión de equipos',
-      desc: 'Coordinadores, instructores, líderes y aprendices con roles diferenciados y permisos específicos.',
-    },
-    {
-      icon: FileText,
-      title: 'Fichas de formación',
-      desc: 'Organiza los proyectos ADSO por ficha de formación. Cada grupo tiene sus propios proyectos y sprints.',
-    },
-    {
-      icon: BarChart2,
-      title: 'Métricas y seguimiento',
-      desc: 'Velocidad por sprint, burnup de proyecto y estadísticas de avance en tiempo real.',
-    },
-    {
-      icon: Bell,
-      title: 'Notificaciones',
-      desc: 'Alertas automáticas de cambios de estado, asignaciones y actualizaciones del proyecto.',
-    },
-    {
-      icon: ShieldCheck,
-      title: 'Control de acceso',
-      desc: 'Cada rol ve solo lo que necesita. Seguridad basada en JWT con tokens de acceso y refresco.',
-    },
+    { icon: Kanban, title: 'Tablero Kanban', desc: 'Visualiza el progreso de cada proyecto con columnas por estado. Arrastra y suelta tickets entre etapas.' },
+    { icon: Users, title: 'Gestión de equipos', desc: 'Coordinadores, instructores, líderes y aprendices con roles diferenciados y permisos específicos.' },
+    { icon: FileText, title: 'Fichas de formación', desc: 'Organiza los proyectos ADSO por ficha de formación. Cada grupo tiene sus propios proyectos y sprints.' },
+    { icon: BarChart2, title: 'Métricas y seguimiento', desc: 'Velocidad por sprint, burnup de proyecto y estadísticas de avance en tiempo real.' },
+    { icon: Bell, title: 'Notificaciones', desc: 'Alertas automáticas de cambios de estado, asignaciones y actualizaciones del proyecto.' },
+    { icon: ShieldCheck, title: 'Control de acceso', desc: 'Cada rol ve solo lo que necesita. Seguridad basada en JWT con tokens de acceso y refresco.' },
   ];
 
   const roles = [
@@ -176,32 +168,21 @@ export const LandingPage = () => {
         {/* Preview mockup */}
         <div className="mt-16 relative">
           <div className="bg-[#161b22] border border-[#30363d] rounded-2xl overflow-hidden shadow-2xl max-w-4xl mx-auto">
-            {/* Barra de ventana */}
             <div className="flex items-center gap-1.5 px-4 py-3 border-b border-[#21262d]">
               <span className="w-3 h-3 rounded-full bg-[#f85149]/60" />
               <span className="w-3 h-3 rounded-full bg-[#d29922]/60" />
               <span className="w-3 h-3 rounded-full bg-[#3fb950]/60" />
               <span className="ml-4 text-xs text-[#8b949e]">Kanbana — Panel de control</span>
             </div>
-            {/* Contenido simulado */}
             <div className="flex h-56">
-              {/* Sidebar */}
               <div className="w-40 border-r border-[#21262d] p-3 space-y-1.5 shrink-0">
                 {['Panel de control', 'Proyectos', 'Fichas SENA', 'Usuarios', 'Líderes'].map((item, i) => (
-                  <div
-                    key={item}
-                    className={`flex items-center gap-2 px-2 py-1.5 rounded-md text-xs ${
-                      i === 0
-                        ? 'bg-indigo-500/10 text-indigo-400'
-                        : 'text-[#8b949e]'
-                    }`}
-                  >
+                  <div key={item} className={`flex items-center gap-2 px-2 py-1.5 rounded-md text-xs ${i === 0 ? 'bg-indigo-500/10 text-indigo-400' : 'text-[#8b949e]'}`}>
                     <div className={`w-1.5 h-1.5 rounded-full ${i === 0 ? 'bg-indigo-400' : 'bg-[#30363d]'}`} />
                     {item}
                   </div>
                 ))}
               </div>
-              {/* Main */}
               <div className="flex-1 p-4 space-y-3">
                 <div className="grid grid-cols-4 gap-2">
                   {[
@@ -231,7 +212,6 @@ export const LandingPage = () => {
               </div>
             </div>
           </div>
-          {/* Glow */}
           <div className="absolute inset-0 -z-10 bg-indigo-600/5 blur-3xl rounded-3xl" />
         </div>
       </section>
@@ -246,13 +226,9 @@ export const LandingPage = () => {
             Construido sobre el flujo real del SENA: ficha → proyecto → sprint → ticket → evidencia.
           </p>
         </div>
-
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {features.map(({ icon: Icon, title, desc }) => (
-            <div
-              key={title}
-              className="bg-[#161b22] border border-[#21262d] rounded-xl p-5 hover:border-[#30363d] transition-colors"
-            >
+            <div key={title} className="bg-[#161b22] border border-[#21262d] rounded-xl p-5 hover:border-[#30363d] transition-colors">
               <div className="w-8 h-8 bg-indigo-500/10 border border-indigo-500/20 rounded-lg flex items-center justify-center mb-4">
                 <Icon size={15} className="text-indigo-400" />
               </div>
@@ -266,39 +242,29 @@ export const LandingPage = () => {
       {/* ── Roles ──────────────────────────────────────────────── */}
       <section className="max-w-6xl mx-auto px-6 py-16 border-t border-[#21262d]">
         <div className="text-center mb-12">
-          <h2 className="text-2xl font-semibold text-[#e6edf3] mb-3">
-            Un sistema para cada rol
-          </h2>
+          <h2 className="text-2xl font-semibold text-[#e6edf3] mb-3">Un sistema para cada rol</h2>
           <p className="text-[#8b949e] max-w-xl mx-auto text-sm">
             Cada usuario ve una interfaz adaptada a su función dentro del programa ADSO.
           </p>
         </div>
-
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {roles.map(({ label, desc, color }) => (
-            <div
-              key={label}
-              className="bg-[#161b22] border border-[#21262d] rounded-xl p-5 flex items-start gap-4 hover:border-[#30363d] transition-colors"
-            >
-              <span className={`text-xs font-medium px-2.5 py-1 rounded-md border shrink-0 mt-0.5 ${color}`}>
-                {label}
-              </span>
+            <div key={label} className="bg-[#161b22] border border-[#21262d] rounded-xl p-5 flex items-start gap-4 hover:border-[#30363d] transition-colors">
+              <span className={`text-xs font-medium px-2.5 py-1 rounded-md border shrink-0 mt-0.5 ${color}`}>{label}</span>
               <p className="text-sm text-[#8b949e] leading-relaxed">{desc}</p>
             </div>
           ))}
         </div>
       </section>
 
-      {/* ── CTA final ──────────────────────────────────────────── */}
+      {/* ── CTA ────────────────────────────────────────────────── */}
       <section className="border-t border-[#21262d]">
         <div className="max-w-6xl mx-auto px-6 py-16 text-center">
           <div className="flex items-center justify-center gap-2 text-[#3fb950] text-sm mb-4">
             <Lock size={14} />
             <span>Acceso restringido a aprendices, instructores y coordinadores SENA</span>
           </div>
-          <h2 className="text-2xl font-semibold text-[#e6edf3] mb-3">
-            ¿Tienes una cuenta en Kanbana?
-          </h2>
+          <h2 className="text-2xl font-semibold text-[#e6edf3] mb-3">¿Tienes una cuenta en Kanbana?</h2>
           <p className="text-[#8b949e] mb-8 text-sm">
             Si ya tienes credenciales asignadas por tu coordinador, inicia sesión para acceder a tu espacio.
           </p>
@@ -306,8 +272,7 @@ export const LandingPage = () => {
             onClick={openLoginPopup}
             className="inline-flex items-center gap-2 px-8 py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-medium rounded-xl transition-colors"
           >
-            Iniciar sesión
-            <ArrowRight size={15} />
+            Iniciar sesión <ArrowRight size={15} />
           </button>
         </div>
       </section>
@@ -324,7 +289,6 @@ export const LandingPage = () => {
           <span>v1.0 · 2026</span>
         </div>
       </footer>
-
     </div>
   );
 };

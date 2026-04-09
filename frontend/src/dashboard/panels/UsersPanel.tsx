@@ -1,10 +1,15 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import { Users, UserPlus, Search, Trash2, ChevronDown, Shield, BookOpen, GraduationCap, ShieldCheck, CheckCircle, XCircle } from 'lucide-react';
+import {
+  Users, UserPlus, Search, Trash2, ChevronDown,
+  CheckCircle, XCircle, Eye,
+} from 'lucide-react';
 import { userService } from '../../services/user.service';
 import { Modal } from '../../components/Modal';
+import { UserProfileModal } from '../../components/UserProfileModal';
 import { useForm } from 'react-hook-form';
 import { useAuthStore } from '../../store/auth.store';
+import { AnimatePresence } from 'framer-motion';
 
 const ROL_LABEL: Record<string, string> = {
   coordinador: 'Coordinador', instructor: 'Instructor',
@@ -21,6 +26,7 @@ const ROLES = ['coordinador', 'instructor', 'lider_tecnico', 'aprendiz'];
 export const UsersPanel = () => {
   const { user: me } = useAuthStore();
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [profileUserId, setProfileUserId] = useState<number | null>(null);
   const [search, setSearch] = useState('');
   const [activeGroup, setActiveGroup] = useState('all');
   const qc = useQueryClient();
@@ -60,6 +66,7 @@ export const UsersPanel = () => {
   });
 
   const isAdmin = me?.rol === 'coordinador';
+  const canViewProfiles = me?.rol === 'coordinador' || me?.rol === 'instructor';
 
   const tabs = [
     { key: 'all', label: 'Todos', count: usersArr.length },
@@ -76,15 +83,13 @@ export const UsersPanel = () => {
         </div>
         {isAdmin && (
           <button onClick={() => setIsModalOpen(true)} className="btn-primary flex items-center gap-2">
-            <UserPlus size={14} />
-            Nuevo usuario
+            <UserPlus size={14} /> Nuevo usuario
           </button>
         )}
       </div>
 
       {/* Filtros */}
       <div className="flex items-center gap-3 flex-wrap">
-        {/* Búsqueda */}
         <div className="relative">
           <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-muted" />
           <input
@@ -94,17 +99,13 @@ export const UsersPanel = () => {
             className="input-base pl-8 w-56 text-sm"
           />
         </div>
-
-        {/* Tabs de rol */}
         <div className="flex gap-1 bg-surface-hover border border-surface-border rounded-lg p-1">
           {tabs.map(({ key, label, count }) => (
             <button
               key={key}
               onClick={() => setActiveGroup(key)}
               className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${
-                activeGroup === key
-                  ? 'bg-surface-card text-ink-primary'
-                  : 'text-ink-muted hover:text-ink-secondary'
+                activeGroup === key ? 'bg-surface-card text-ink-primary' : 'text-ink-muted hover:text-ink-secondary'
               }`}
             >
               {label} <span className="text-ink-muted ml-1">{count}</span>
@@ -117,9 +118,7 @@ export const UsersPanel = () => {
       <div className="card overflow-hidden">
         {isLoading ? (
           <div className="p-6 space-y-3">
-            {[1,2,3,4,5].map(n => (
-              <div key={n} className="h-10 bg-surface-hover rounded-lg animate-pulse" />
-            ))}
+            {[1,2,3,4,5].map(n => <div key={n} className="h-10 bg-surface-hover rounded-lg animate-pulse" />)}
           </div>
         ) : (
           <table className="table-base">
@@ -129,7 +128,7 @@ export const UsersPanel = () => {
                 <th>Correo</th>
                 <th>Rol</th>
                 <th>Estado</th>
-                {isAdmin && <th className="text-right">Acciones</th>}
+                <th className="text-right">Acciones</th>
               </tr>
             </thead>
             <tbody>
@@ -146,18 +145,21 @@ export const UsersPanel = () => {
                     <div className="flex items-center gap-2.5">
                       <div className="w-7 h-7 rounded-full bg-primary-600/20 border border-primary-500/30 flex items-center justify-center overflow-hidden shrink-0">
                         {u.avatar_url
-                          ? <img src={u.avatar_url} className="w-full h-full object-cover" alt="" />
+                          ? <img src={userService.getAvatarUrl(u.avatar_url) || ''} className="w-full h-full object-cover" alt="" />
                           : <span className="text-[9px] font-semibold text-primary-400">{u.nombre?.slice(0, 2).toUpperCase()}</span>
                         }
                       </div>
-                      <span className="text-sm font-medium text-ink-primary">{u.nombre}</span>
+                      <button
+                        onClick={() => canViewProfiles && setProfileUserId(u.id)}
+                        className={`text-sm font-medium text-ink-primary ${canViewProfiles ? 'hover:text-primary-400 cursor-pointer transition-colors' : ''}`}
+                      >
+                        {u.nombre}
+                      </button>
                     </div>
                   </td>
 
                   {/* Correo */}
-                  <td>
-                    <span className="text-xs text-ink-muted">{u.correo}</span>
-                  </td>
+                  <td><span className="text-xs text-ink-muted">{u.correo}</span></td>
 
                   {/* Rol */}
                   <td>
@@ -185,27 +187,37 @@ export const UsersPanel = () => {
                   </td>
 
                   {/* Acciones */}
-                  {isAdmin && (
-                    <td className="text-right">
-                      <div className="flex items-center justify-end gap-1">
+                  <td className="text-right">
+                    <div className="flex items-center justify-end gap-1">
+                      {/* Ver perfil */}
+                      {canViewProfiles && (
                         <button
-                          onClick={() => toggleMutation.mutate(u.id)}
-                          className={`btn-ghost text-xs flex items-center gap-1 ${u.activo ? 'hover:text-danger' : 'hover:text-success'}`}
-                          title={u.activo ? 'Desactivar' : 'Activar'}
+                          onClick={() => setProfileUserId(u.id)}
+                          className="btn-ghost text-xs flex items-center gap-1 hover:text-primary-500"
+                          title="Ver perfil completo"
                         >
-                          {u.activo ? <XCircle size={13} /> : <CheckCircle size={13} />}
-                          {u.activo ? 'Desactivar' : 'Activar'}
+                          <Eye size={13} /> Perfil
                         </button>
-                        <button
-                          onClick={() => { if (confirm(`¿Eliminar a ${u.nombre}?`)) deleteMutation.mutate(u.id); }}
-                          className="btn-ghost text-xs hover:text-danger"
-                          title="Eliminar"
-                        >
-                          <Trash2 size={13} />
-                        </button>
-                      </div>
-                    </td>
-                  )}
+                      )}
+                      {isAdmin && (
+                        <>
+                          <button
+                            onClick={() => toggleMutation.mutate(u.id)}
+                            className={`btn-ghost text-xs flex items-center gap-1 ${u.activo ? 'hover:text-danger' : 'hover:text-success'}`}
+                          >
+                            {u.activo ? <XCircle size={13} /> : <CheckCircle size={13} />}
+                            {u.activo ? 'Desactivar' : 'Activar'}
+                          </button>
+                          <button
+                            onClick={() => { if (confirm(`¿Eliminar a ${u.nombre}?`)) deleteMutation.mutate(u.id); }}
+                            className="btn-ghost text-xs hover:text-danger"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -217,9 +229,9 @@ export const UsersPanel = () => {
       <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title="Nuevo usuario">
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           {[
-            { name: 'nombre',    label: 'Nombre completo', type: 'text',     ph: 'Juan García' },
-            { name: 'correo',    label: 'Correo',          type: 'email',    ph: 'juan@sena.edu.co' },
-            { name: 'contrasena',label: 'Contraseña',      type: 'password', ph: 'Mínimo 6 caracteres' },
+            { name: 'nombre',     label: 'Nombre completo', type: 'text',     ph: 'Juan García' },
+            { name: 'correo',     label: 'Correo',          type: 'email',    ph: 'juan@sena.edu.co' },
+            { name: 'contrasena', label: 'Contraseña',      type: 'password', ph: 'Mínimo 6 caracteres' },
           ].map(f => (
             <div key={f.name} className="space-y-1.5">
               <label className="text-xs font-medium text-ink-secondary">{f.label}</label>
@@ -243,6 +255,16 @@ export const UsersPanel = () => {
           </button>
         </form>
       </Modal>
+
+      {/* Panel de perfil lateral */}
+      <AnimatePresence>
+        {profileUserId !== null && (
+          <UserProfileModal
+            userId={profileUserId}
+            onClose={() => setProfileUserId(null)}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 };
