@@ -28,6 +28,10 @@ export const userService = {
 
   toggleStatus: (id: number) => api.patch(`/users/${id}/toggle`).then(r => r.data),
 
+  // Activa/desactiva el sub-rol de Líder Técnico (solo para aprendices, no cambia el rol base)
+  toggleLiderTecnico: (id: number) =>
+    api.patch(`/users/${id}/toggle-lider`).then(r => r.data),
+
   delete: (id: number) => api.delete(`/users/${id}`).then(r => r.data),
 
   getLeaderStats: (id: number) => api.get(`/users/leaders/${id}/stats`).then(r => r.data),
@@ -47,6 +51,16 @@ export const userService = {
     const formData = new FormData();
     formData.append('avatar', file);
     const { data } = await api.post(`/users/${id}/avatar`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return data;
+  },
+
+  // Upload de banner real — multipart/form-data
+  uploadBanner: async (id: number, file: File): Promise<{ banner_url: string }> => {
+    const formData = new FormData();
+    formData.append('banner', file);
+    const { data } = await api.post(`/users/${id}/banner`, formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     });
     return data;

@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(Get-ChildItem C:\\\\Kanbana\\\\backend\\\\src -Recurse -Name \"*.ts\")",
+      "Bash(npx tsc *)"
+    ]
+  }
+}

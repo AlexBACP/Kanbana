@@ -11,7 +11,7 @@ interface AvatarUploaderProps {
   userId: number;
   currentUrl?: string | null;
   nombre?: string;
-  size?: 'sm' | 'md' | 'lg';
+  size?: 'sm' | 'md' | 'lg' | 'xl' | '2xl' | '3xl';
   onSuccess?: (avatarUrl: string) => void;
   editable?: boolean;
 }
@@ -20,6 +20,9 @@ const SIZE = {
   sm:  { outer: 'w-12 h-12', text: 'text-sm',  icon: 14 },
   md:  { outer: 'w-20 h-20', text: 'text-xl',  icon: 16 },
   lg:  { outer: 'w-28 h-28', text: 'text-3xl', icon: 20 },
+  xl:   { outer: 'w-32 h-32', text: 'text-4xl', icon: 20 },   // nuevo tamaño
+  '2xl': { outer: 'w-44 h-44', text: 'text-5xl', icon: 28 }, // aún más grande
+  '3xl': { outer: 'w-56 h-56', text: 'text-6xl', icon: 32 },
 };
 
 export const AvatarUploader = ({
@@ -96,7 +99,7 @@ export const AvatarUploader = ({
             className="absolute bottom-0 right-0 w-7 h-7 bg-primary-600 hover:bg-primary-500 rounded-full flex items-center justify-center border-2 border-dark-bg shadow-lg transition-all opacity-0 group-hover:opacity-100"
             title="Cambiar foto"
           >
-            <Camera size={12} className="text-white" />
+            <Camera size={17} className="text-white" />
           </button>
         )}
 

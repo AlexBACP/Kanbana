@@ -1,10 +1,16 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { ShieldCheck, AlertCircle, Mail, FolderKanban, Users, Eye } from 'lucide-react';
+import { Crown, AlertCircle, Mail, FolderKanban, Eye } from 'lucide-react';
 import { userService } from '../../services/user.service';
 import { UserProfileModal } from '../../components/UserProfileModal';
 import { AnimatePresence } from 'framer-motion';
 
+/**
+ * LeadersPanel — Muestra todos los aprendices con es_lider_tecnico=true.
+ *
+ * CORRECCIÓN: Antes filtraba por rol === 'lider_tecnico', que ya no existe.
+ * Ahora filtra por rol === 'aprendiz' && es_lider_tecnico === true.
+ */
 export const LeadersPanel = () => {
   const [profileUserId, setProfileUserId] = useState<number | null>(null);
 
@@ -13,7 +19,10 @@ export const LeadersPanel = () => {
     queryFn: () => userService.getAll(),
   });
 
-  const leaders = (allUsers as any[]).filter((u: any) => u.rol === 'lider_tecnico');
+  // Líderes técnicos = aprendices con sub-rol activo
+  const leaders = (allUsers as any[]).filter(
+    (u: any) => u.rol === 'aprendiz' && u.es_lider_tecnico === true
+  );
 
   if (isError) return (
     <div className="card p-12 flex flex-col items-center gap-3 text-danger">
@@ -27,7 +36,7 @@ export const LeadersPanel = () => {
       <div>
         <h2 className="section-title">Líderes técnicos</h2>
         <p className="section-subtitle">
-          {isLoading ? '...' : `${leaders.length} líderes en el sistema`}
+          {isLoading ? '...' : `${leaders.length} aprendices con sub-rol de Líder Técnico`}
         </p>
       </div>
 
@@ -37,10 +46,10 @@ export const LeadersPanel = () => {
         </div>
       ) : leaders.length === 0 ? (
         <div className="card p-12 text-center">
-          <ShieldCheck size={28} className="mx-auto text-ink-muted mb-3 opacity-40" />
-          <p className="text-sm text-ink-muted">No hay líderes técnicos registrados</p>
+          <Crown size={28} className="mx-auto text-ink-muted mb-3 opacity-40" />
+          <p className="text-sm text-ink-muted">No hay líderes técnicos asignados</p>
           <p className="text-xs text-ink-muted mt-1">
-            Asigna el rol "Líder técnico" desde la sección Usuarios
+            Activa el sub-rol "Líder Técnico" a un aprendiz desde la sección Fichas o Usuarios
           </p>
         </div>
       ) : (
@@ -51,18 +60,19 @@ export const LeadersPanel = () => {
               className="card p-5 flex flex-col gap-4 hover:border-primary-500/40 transition-colors cursor-pointer group"
               onClick={() => setProfileUserId(l.id)}
             >
-              {/* Avatar + Info */}
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-primary-600/20 border border-primary-500/30 flex items-center justify-center overflow-hidden shrink-0">
+                <div className="w-10 h-10 rounded-full bg-emerald-600/20 border border-emerald-500/30 flex items-center justify-center overflow-hidden shrink-0">
                   {l.avatar_url
                     ? <img src={userService.getAvatarUrl(l.avatar_url) || ''} className="w-full h-full object-cover" alt="" />
-                    : <span className="text-sm font-semibold text-primary-400">{l.nombre?.slice(0,2).toUpperCase()}</span>
+                    : <span className="text-sm font-semibold text-emerald-400">{l.nombre?.slice(0,2).toUpperCase()}</span>
                   }
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-semibold text-ink-primary truncate group-hover:text-primary-400 transition-colors">{l.nombre}</p>
-                  <div className="flex items-center gap-1 mt-0.5">
-                    <span className={`badge ${l.activo ? 'badge-success' : 'badge-danger'}`}>
+                  <div className="flex items-center gap-1.5 mt-0.5">
+                    <Crown size={10} className="text-emerald-400" />
+                    <span className="text-[10px] text-emerald-400 font-semibold">Líder técnico</span>
+                    <span className={`badge ${l.activo ? 'badge-success' : 'badge-danger'} ml-1`}>
                       {l.activo ? 'Activo' : 'Inactivo'}
                     </span>
                   </div>
@@ -70,15 +80,20 @@ export const LeadersPanel = () => {
                 <Eye size={14} className="text-dark-muted opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
               </div>
 
-              {/* Detalles */}
               <div className="space-y-2 pt-3 border-t border-surface-border">
                 <div className="flex items-center gap-2 text-xs text-ink-muted">
                   <Mail size={12} className="shrink-0" />
                   <span className="truncate">{l.correo}</span>
                 </div>
+                {l.ficha && (
+                  <div className="flex items-center gap-2 text-xs text-ink-muted">
+                    <FolderKanban size={12} className="shrink-0" />
+                    <span>Ficha {l.ficha.codigo}</span>
+                  </div>
+                )}
                 <div className="flex items-center gap-2 text-xs text-ink-muted">
                   <FolderKanban size={12} className="shrink-0" />
-                  <span>Click para ver proyectos y equipo</span>
+                  <span>Click para ver proyecto y equipo</span>
                 </div>
               </div>
             </div>
@@ -86,7 +101,6 @@ export const LeadersPanel = () => {
         </div>
       )}
 
-      {/* Panel de perfil lateral */}
       <AnimatePresence>
         {profileUserId !== null && (
           <UserProfileModal

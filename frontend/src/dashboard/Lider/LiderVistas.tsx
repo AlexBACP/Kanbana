@@ -67,7 +67,7 @@ export const LiderOverview = ({ proyecto, onNavigate }: { proyecto: any; onNavig
             style={{ width: `${progress}%` }}
           />
         </div>
-        <p className="text-xs text-dark-muted mt-2">{done} de {t.length} tickets completados</p>
+        <p className="text-xs text-dark-muted mt-2">{done} de {t.length} tareas completadas</p>
       </div>
 
       {/* Stats */}
@@ -103,7 +103,7 @@ export const LiderOverview = ({ proyecto, onNavigate }: { proyecto: any; onNavig
           onClick={() => onNavigate('tickets')}
           className="bg-dark-card border border-dark-border rounded-xl p-4 text-left hover:border-primary-500/30 transition-colors group"
         >
-          <p className="text-sm font-medium text-dark-text group-hover:text-primary-400 transition-colors">Gestionar tickets</p>
+          <p className="text-sm font-medium text-dark-text group-hover:text-primary-400 transition-colors">Gestionar tareas</p>
           <p className="text-xs text-dark-muted mt-1">Crear y asignar tareas</p>
         </button>
       </div>
@@ -134,7 +134,7 @@ export const LiderTablero = ({ proyecto }: { proyecto: any }) => {
     <div className="space-y-4">
       <div>
         <h2 className="text-base font-semibold text-dark-text">Tablero — {proyecto.nombre}</h2>
-        <p className="text-sm text-dark-muted mt-0.5">{(tickets as any[]).length} tickets</p>
+        <p className="text-sm text-dark-muted mt-0.5">{(tickets as any[]).length} tareas</p>
       </div>
       {isLoading ? (
         <div className="h-64 bg-dark-card border border-dark-border rounded-xl animate-pulse" />
@@ -201,14 +201,14 @@ export const LiderTickets = ({ proyecto }: { proyecto: any }) => {
     <div className="space-y-5">
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
-          <h2 className="text-base font-semibold text-dark-text">Tickets — {proyecto.nombre}</h2>
-          <p className="text-sm text-dark-muted mt-0.5">{t.length} tickets en total</p>
+          <h2 className="text-base font-semibold text-dark-text">Tareas — {proyecto.nombre}</h2>
+          <p className="text-sm text-dark-muted mt-0.5">{t.length} tareas en total</p>
         </div>
         <button
           onClick={() => setShowModal(true)}
           className="flex items-center gap-2 px-3 py-2 bg-primary-600 hover:bg-primary-500 text-white text-sm font-medium rounded-xl transition-colors"
         >
-          <Plus size={14} /> Nuevo ticket
+          <Plus size={14} /> Nueva Tarea
         </button>
       </div>
 
@@ -219,7 +219,7 @@ export const LiderTickets = ({ proyecto }: { proyecto: any }) => {
           <input
             value={search}
             onChange={e => setSearch(e.target.value)}
-            placeholder="Buscar ticket..."
+            placeholder="Buscar tarea..."
             className="input-dark pl-9 text-sm py-2 w-48"
           />
         </div>
@@ -249,7 +249,7 @@ export const LiderTickets = ({ proyecto }: { proyecto: any }) => {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-dark-border">
-              <th className="text-left px-4 py-3 text-xs font-medium text-dark-muted">Ticket</th>
+              <th className="text-left px-4 py-3 text-xs font-medium text-dark-muted">Tarea</th>
               <th className="text-left px-4 py-3 text-xs font-medium text-dark-muted">Estado</th>
               <th className="text-left px-4 py-3 text-xs font-medium text-dark-muted">Prioridad</th>
               <th className="text-left px-4 py-3 text-xs font-medium text-dark-muted">Asignado</th>
@@ -306,7 +306,7 @@ export const LiderTickets = ({ proyecto }: { proyecto: any }) => {
             })}
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={6} className="text-center py-10 text-sm text-dark-muted">Sin tickets</td>
+                <td colSpan={6} className="text-center py-10 text-sm text-dark-muted">Sin tareas</td>
               </tr>
             )}
           </tbody>
@@ -314,7 +314,7 @@ export const LiderTickets = ({ proyecto }: { proyecto: any }) => {
       </div>
 
       {/* Modal nuevo ticket */}
-      <Modal isOpen={showModal} onClose={() => setShowModal(false)} title="Nuevo ticket">
+      <Modal isOpen={showModal} onClose={() => setShowModal(false)} title="Nueva tarea">
         <form
           onSubmit={e => {
             e.preventDefault();
@@ -367,7 +367,7 @@ export const LiderTickets = ({ proyecto }: { proyecto: any }) => {
             disabled={createTicket.isPending}
             className="w-full py-2.5 bg-primary-600 hover:bg-primary-500 disabled:opacity-60 text-white text-sm font-medium rounded-xl transition-colors"
           >
-            {createTicket.isPending ? 'Creando...' : 'Crear ticket'}
+            {createTicket.isPending ? 'Creando...' : 'Crear tarea'}
           </button>
         </form>
       </Modal>

@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Bell, CheckCheck, Circle, CheckCircle2 } from 'lucide-react';
+import { Bell, CheckCheck, CheckCircle2, Circle, Check, X } from 'lucide-react';
 import { notificationService } from '../../services/notification.service';
+import { permisosService } from '../../services/permisos.service';
 
 export const NotificationsPanel = () => {
   const qc = useQueryClient();
@@ -9,6 +10,19 @@ export const NotificationsPanel = () => {
     queryKey: ['notifications'],
     queryFn: notificationService.getAll,
     staleTime: 30_000,
+  });
+
+  const aceptarPermisoMut = useMutation({
+    mutationFn: ({ permisoId, dias }: { permisoId: number; dias: number }) =>
+      permisosService.aceptar(permisoId, dias),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['notifications'] }),
+    onError:   (e: any) => alert(e?.response?.data?.message ?? 'Error al aceptar'),
+  });
+
+  const rechazarPermisoMut = useMutation({
+    mutationFn: (permisoId: number) => permisosService.rechazar(permisoId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['notifications'] }),
+    onError:   (e: any) => alert(e?.response?.data?.message ?? 'Error al rechazar'),
   });
 
   const markReadMutation = useMutation({
@@ -84,8 +98,32 @@ export const NotificationsPanel = () => {
                   )}
                 </div>
 
-                {/* Acción */}
-                {!n.leida && (
+                {/* Botones de acción para solicitudes de permiso */}
+                {n.action_type === 'permiso_solicitud' && !n.leida && (() => {
+                  const data = JSON.parse(n.action_data || '{}');
+                  return (
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <button
+                        onClick={() => {
+                          const dias = parseInt(prompt('¿Cuántos días de permiso? (mínimo 5)', '5') ?? '5');
+                          if (dias >= 5) aceptarPermisoMut.mutate({ permisoId: data.permiso_id, dias });
+                        }}
+                        className="flex items-center gap-1 px-2 py-1 rounded-lg bg-emerald-500/15 text-emerald-400 border border-emerald-500/25 text-[10px] font-bold hover:bg-emerald-500/25 transition-all"
+                      >
+                        <Check size={10} /> Aceptar
+                      </button>
+                      <button
+                        onClick={() => rechazarPermisoMut.mutate(data.permiso_id)}
+                        className="flex items-center gap-1 px-2 py-1 rounded-lg bg-rose-500/15 text-rose-400 border border-rose-500/25 text-[10px] font-bold hover:bg-rose-500/25 transition-all"
+                      >
+                        <X size={10} /> Rechazar
+                      </button>
+                    </div>
+                  );
+                })()}
+
+                {/* Acción marcar leída — solo para notificaciones normales */}
+                {!n.leida && n.action_type !== 'permiso_solicitud' && (
                   <button
                     onClick={() => markReadMutation.mutate(n.id)}
                     className="btn-ghost text-xs shrink-0"

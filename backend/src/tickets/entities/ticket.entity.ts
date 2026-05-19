@@ -1,3 +1,18 @@
+// ── MODIFICADO ───────────────────────────────────────────────────────────────
+// Cambios respecto a la versión original:
+//
+//  1. Campo requiere_adjunto (boolean, default false):
+//     Cuando es true, el ticket NO puede pasar a estado 'done' si no tiene
+//     al menos un adjunto subido. El backend lo verifica en updateStatus().
+//     Se setea automáticamente en true cuando el ticket pertenece a un sprint
+//     de un trimestre de tipo 'documental'. El instructor también puede
+//     activarlo manualmente en cualquier ticket.
+//
+//  2. Relación OneToMany hacia TicketAttachment (adjuntos[]):
+//     Permite cargar todos los archivos del ticket con una sola query.
+//     Se incluye en findOne() y en la validación de closeSprint().
+// ─────────────────────────────────────────────────────────────────────────────
+
 import {
   Entity,
   PrimaryGeneratedColumn,
@@ -9,27 +24,29 @@ import {
   JoinColumn,
 } from 'typeorm';
 
-import { Project } from '../../projects/entities/project.entity';
-import { User } from '../../users/entities/user.entity';
-import { Comment } from '../../comments/entities/comment.entity';
-import { Sprint } from '../../projects/entities/sprint.entity';
+import { Project }  from '../../projects/entities/project.entity';
+import { User }     from '../../users/entities/user.entity';
+import { Comment }  from '../../comments/entities/comment.entity';
+import { Sprint }   from '../../projects/entities/sprint.entity';
+// ── NUEVO IMPORT ─────────────────────────────────────────────────────────────
+import { TicketAttachment } from './ticket-attachment.entity';
 
 export enum TicketPriority {
-  ALTA = 'alta',
+  ALTA  = 'alta',
   MEDIA = 'media',
-  BAJA = 'baja',
+  BAJA  = 'baja',
 }
 
 export enum TicketStatus {
-  TODO = 'to_do',
+  TODO        = 'to_do',
   IN_PROGRESS = 'in_progress',
-  TESTING = 'testing',
-  DONE = 'done',
+  TESTING     = 'testing',
+  DONE        = 'done',
 }
 
 export enum TicketType {
-  TASK = 'task',
-  BUG = 'bug',
+  TASK  = 'task',
+  BUG   = 'bug',
   STORY = 'story',
 }
 
@@ -38,7 +55,7 @@ export class Ticket {
   @PrimaryGeneratedColumn()
   id: number;
 
-  // 🔗 PROYECTO
+  // ── Proyecto ──────────────────────────────────────────────────────────────
   @Column()
   proyecto_id: number;
 
@@ -46,61 +63,56 @@ export class Ticket {
   @JoinColumn({ name: 'proyecto_id' })
   proyecto: Project;
 
-  // 🔗 SPRINT
+  // ── Sprint ────────────────────────────────────────────────────────────────
   @Column({ nullable: true })
   sprint_id: number;
 
-  @ManyToOne(() => Sprint, (sprint) => sprint.tickets, { 
-    nullable: true, 
-    onDelete: 'SET NULL' 
+  @ManyToOne(() => Sprint, (sprint) => sprint.tickets, {
+    nullable:  true,
+    onDelete: 'SET NULL',
   })
   @JoinColumn({ name: 'sprint_id' })
   sprint: Sprint;
 
-  // 🧠 INFO PRINCIPAL
+  // ── Info principal ────────────────────────────────────────────────────────
   @Column()
   titulo: string;
 
   @Column({ type: 'text' })
   descripcion: string;
 
-  @Column({
-    type: 'enum',
-    enum: TicketPriority,
-    default: TicketPriority.MEDIA,
-  })
+  @Column({ type: 'enum', enum: TicketPriority, default: TicketPriority.MEDIA })
   prioridad: TicketPriority;
 
-  @Column({
-    type: 'enum',
-    enum: TicketStatus,
-    default: TicketStatus.TODO,
-  })
+  @Column({ type: 'enum', enum: TicketStatus, default: TicketStatus.TODO })
   estado: TicketStatus;
 
-  @Column({
-    type: 'enum',
-    enum: TicketType,
-    default: TicketType.TASK,
-  })
+  @Column({ type: 'enum', enum: TicketType, default: TicketType.TASK })
   tipo: TicketType;
 
-  // 🔥 CLAVE PARA KANBAN (drag & drop)
+  // ── Kanban ────────────────────────────────────────────────────────────────
   @Column({ default: 0 })
   orden: number;
 
-  // 📊 MÉTRICAS
+  // ── Métricas ──────────────────────────────────────────────────────────────
   @Column({ default: 0 })
   story_points: number;
 
-  // 🚫 BLOQUEO
+  // ── Bloqueo ───────────────────────────────────────────────────────────────
   @Column({ default: false })
   esta_bloqueado: boolean;
 
   @Column({ type: 'text', nullable: true })
   motivo_bloqueo: string;
 
-  // 🌳 SUBTAREAS
+  // ── NUEVO: requiere adjunto para completarse ──────────────────────────────
+  // Cuando true: el ticket no puede pasar a 'done' si adjuntos.length === 0.
+  // Se activa automáticamente para tickets de sprints en trimestre documental.
+  // El instructor también puede activarlo manualmente desde el detalle del ticket.
+  @Column({ default: false })
+  requiere_adjunto: boolean;
+
+  // ── Subtareas ─────────────────────────────────────────────────────────────
   @Column({ nullable: true })
   parent_id: number;
 
@@ -111,7 +123,7 @@ export class Ticket {
   @OneToMany(() => Ticket, (ticket) => ticket.ticket_padre)
   subtareas: Ticket[];
 
-  // 👤 USUARIOS
+  // ── Usuarios ──────────────────────────────────────────────────────────────
   @Column({ nullable: true })
   asignado_a_id: number;
 
@@ -124,9 +136,9 @@ export class Ticket {
 
   @ManyToOne(() => User, (user) => user.tickets_creados)
   @JoinColumn({ name: 'creado_por_id' })
-  creado_por: User;
+  creado_por: User | null;
 
-  // 📅 FECHAS
+  // ── Fechas ────────────────────────────────────────────────────────────────
   @Column({ type: 'date', nullable: true })
   fecha_limite: Date;
 
@@ -136,7 +148,12 @@ export class Ticket {
   @UpdateDateColumn()
   actualizado_en: Date;
 
-  // 💬 COMENTARIOS
+  // ── Comentarios ───────────────────────────────────────────────────────────
   @OneToMany(() => Comment, (comment) => comment.ticket)
   comentarios: Comment[];
+
+  // ── NUEVO: adjuntos del ticket ────────────────────────────────────────────
+  // Se cargan en findOne() y se verifican en updateStatus() y closeSprint().
+  @OneToMany(() => TicketAttachment, (att) => att.ticket)
+  adjuntos: TicketAttachment[];
 }

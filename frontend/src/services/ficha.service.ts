@@ -80,6 +80,12 @@ export const fichaService = {
     return data;
   },
 
+  /** Desvincular múltiples aprendices de la ficha en masa */
+  removeMembers: async (fichaId: number, userIds: number[]): Promise<{ removed: number[]; errors: { id: number; reason: string }[] }> => {
+    const { data } = await api.delete(`/fichas/${fichaId}/members`, { data: { userIds } });
+    return data;
+  },
+
   /** Desvincular aprendiz de la ficha */
   removeMember: async (fichaId: number, userId: number): Promise<void> => {
     await api.delete(`/fichas/${fichaId}/members/${userId}`);
@@ -97,6 +103,24 @@ export const fichaService = {
     return data;
   },
 
+  /** Descargar plantilla Excel para importación de aprendices */
+  downloadTemplate: async (): Promise<void> => {
+    const response = await api.get('/fichas/download/template', {
+      responseType: 'blob',
+    });
+    const blob = new Blob([response.data], {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'plantilla_aprendices.xlsx';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  },
+
   /** Importar aprendices desde un archivo Excel */
   importFromExcel: async (
     fichaId: number,
@@ -109,4 +133,23 @@ export const fichaService = {
     });
     return data;
   },
+
+
+  invitarAprendiz: (fichaId: number, dto: { nombre: string; correo: string; documento: string }) =>
+    api.post(`/fichas/${fichaId}/aprendices/invitar`, dto).then(r => r.data),
+
+  reenviarInvitacion: (fichaId: number, userId: number) =>
+    api.post(`/fichas/${fichaId}/aprendices/${userId}/reenviar`).then(r => r.data),
+
+  /** Obtener trimestres de una ficha */
+  getTrimestres: (fichaId: number) =>
+    api.get(`/fichas/${fichaId}/trimestres`).then(r => r.data),
+
+  /** Generar/reconfigurar trimestres de una ficha */
+  generateTrimestres: (fichaId: number, dto: { num: number; trimestres?: any[] }) =>
+    api.post(`/fichas/${fichaId}/trimestres/generate`, dto).then(r => r.data),
+
+  /** Editar nombre/fechas de un trimestre */
+  updateTrimestre: (trimestreId: number, dto: any) =>
+    api.patch(`/fichas/trimestres/${trimestreId}`, dto).then(r => r.data),
 };

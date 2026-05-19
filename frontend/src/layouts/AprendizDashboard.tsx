@@ -1,32 +1,54 @@
 /**
  * AprendizDashboard — Dedicated layout for the "aprendiz" role.
  * Lives at /kanban. Completely independent from AdminDashboard.
- * No Sidebar prop crash because it uses its own simplified nav.
+ * Usa el Sidebar compartido para colapso retráctil y auto-hide.
  */
 import { useState } from 'react';
+// ── MODIFICADO: se importa useNavigate para navegar sin recargar la app ──
+import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '../store/auth.store';
 import { useAuth } from '../hooks/useAuth';
 import { TopBar } from '../components/TopBar';
+import { Sidebar } from '../components/Sidebar';
 import { SettingsPanel } from '../dashboard/panels/SettingsPanel';
 import { ProfilePage } from '../pages/ProfilePage';
 import { NotificationsPanel } from '../dashboard/panels/NotificationsPanel';
 import { KanbanBoard } from '../components/KanbanBoard';
 import { ticketService } from '../services/ticket.service';
 import { projectService } from '../services/project.service';
-import { LayoutGrid, ClipboardList, Bell, CheckCircle2, Clock, AlertCircle, Ticket, ExternalLink } from 'lucide-react';
+import { LayoutGrid, ClipboardList, Bell, CheckCircle2, Clock, AlertCircle, Ticket } from 'lucide-react';
 import { TicketStatus } from '../types/ticket.types';
+import { Section } from './AdminDashboard';
 
 type Sec = 'tablero' | 'tickets' | 'notificaciones' | 'settings' | 'profile';
 
+const SECTION_MAP: Record<Sec, Section> = {
+  tablero:       'overview',
+  tickets:       'projects',
+  notificaciones:'notifications',
+  settings:      'settings',
+  profile:       'profile',
+};
+
+const REVERSE_MAP: Record<string, Sec> = {
+  overview:      'tablero',
+  projects:      'tickets',
+  notifications: 'notificaciones',
+  settings:      'settings',
+  profile:       'profile',
+};
+
 const TITLES: Record<Sec, string> = {
   tablero:       'Mi Tablero Kanban',
-  tickets:       'Mis Tickets',
+  tickets:       'Mis Tareas',
   notificaciones:'Notificaciones',
   settings:      'Configuración',
   profile:       'Mi Perfil',
 };
+
+const ALLOWED: Section[] = ['overview', 'projects', 'notifications', 'settings', 'profile'];
 
 const STATUS_LABEL: Record<string, string> = {
   to_do:       'Por hacer',
@@ -49,7 +71,6 @@ const MiTablero = () => {
   const { user } = useAuthStore();
   const qc = useQueryClient();
 
-  // Get all tickets and filter client-side for this user
   const { data: tickets = [], isLoading } = useQuery({
     queryKey: ['tickets', 'mis'],
     queryFn: () => ticketService.getAll(),
@@ -70,7 +91,6 @@ const MiTablero = () => {
 
   return (
     <div className="space-y-6">
-      {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {[
           { icon: CheckCircle2, label:'Completados',  value:done,       color:'emerald' },
@@ -94,11 +114,12 @@ const MiTablero = () => {
         <div className="text-center py-20 bg-dark-card/20 rounded-[2.5rem] border border-dashed border-dark-border">
           <LayoutGrid size={36} className="mx-auto text-dark-muted mb-3 opacity-30" />
           <p className="text-dark-muted font-black uppercase tracking-widest text-sm">Sin tareas asignadas aún</p>
-          <p className="text-xs text-dark-muted/60 mt-2">Tu líder técnico te asignará tickets cuando comience el sprint</p>
+          <p className="text-xs text-dark-muted/60 mt-2">Tu líder técnico te asignará tareas cuando comience el sprint</p>
         </div>
       ) : (
         <div className="overflow-x-auto pb-4">
           <KanbanBoard
+          readonly
             tickets={t}
             onStatusChange={(ticketId, newStatus) =>
               updateStatusMutation.mutate({ id: ticketId, estado: newStatus })
@@ -113,6 +134,8 @@ const MiTablero = () => {
 // ── Mis Tickets ───────────────────────────────────────────────────────────────
 const MisTickets = () => {
   const { user } = useAuthStore();
+  // ── MODIFICADO: hook de navegación de React Router (SPA, sin recarga) ──
+  const navigate = useNavigate();
   const [filter, setFilter] = useState<string>('all');
 
   const { data: tickets = [], isLoading } = useQuery({
@@ -127,7 +150,6 @@ const MisTickets = () => {
 
   return (
     <div className="space-y-5">
-      {/* Filter tabs */}
       <div className="flex gap-2 flex-wrap">
         {['all','to_do','in_progress','testing','done'].map(s => (
           <button key={s} onClick={() => setFilter(s)}
@@ -161,9 +183,17 @@ const MisTickets = () => {
               {filtered.map((tk: any) => {
                 const daysLeft = tk.fecha_limite
                   ? Math.ceil((new Date(tk.fecha_limite).getTime() - Date.now()) / 86400000) : null;
+                {/* ── MODIFICADO ───────────────────────────────────────────
+                    El onClick de la fila antes usaba:
+                      window.open(`/tickets/${id}`, '_self')
+                    Eso forzaba una RECARGA COMPLETA de la SPA: el navegador
+                    descargaba todo de nuevo, se perdía el estado en memoria
+                    y volvía a ejecutarse AuthInit validando el token.
+                    Ahora usa navigate() de React Router, que cambia de vista
+                    al instante sin recargar nada. */}
                 return (
                   <tr key={tk.id} className="border-b border-dark-border/50 last:border-0 hover:bg-dark-bg/40 cursor-pointer"
-                    onClick={() => window.open(`/tickets/${tk.id}`, '_self')}
+                    onClick={() => navigate(`/tickets/${tk.id}`)}
                   >
                     <td className="px-5 py-3.5 text-xs font-black text-primary-400">#{tk.id}</td>
                     <td className="px-5 py-3.5 text-sm font-bold text-dark-text max-w-xs truncate">{tk.titulo}</td>
@@ -197,68 +227,25 @@ const MisTickets = () => {
 // ── Layout ────────────────────────────────────────────────────────────────────
 export const AprendizDashboard = () => {
   const [sec, setSec] = useState<Sec>('tablero');
-  const { user, settings } = useAuthStore();
+  const { user } = useAuthStore();
   const { logout } = useAuth();
-  const grad = ({
-    violet:'from-violet-600 to-indigo-700', blue:'from-blue-600 to-cyan-700',
-    emerald:'from-emerald-600 to-teal-700', rose:'from-rose-600 to-pink-700',
-    amber:'from-amber-500 to-orange-600', cyan:'from-cyan-600 to-blue-700',
-  })[settings.themeColor] ?? 'from-violet-600 to-indigo-700';
 
-  const avatar = user?.avatar_url
-    ? <img src={user.avatar_url} className="w-full h-full object-cover" alt="" />
-    : <span className="text-sm font-black text-white">{user?.nombre?.slice(0,2).toUpperCase()}</span>;
-
-  const nav = [
-    { label:'Mi Tablero', key:'tablero'       as Sec, icon:LayoutGrid },
-    { label:'Mis Tickets',key:'tickets'       as Sec, icon:ClipboardList },
-    { label:'Notificaciones',key:'notificaciones' as Sec, icon:Bell },
-  ];
+  const sidebarSection = SECTION_MAP[sec];
+  const handleSidebarSection = (s: Section) => {
+    const mapped = REVERSE_MAP[s];
+    if (mapped) setSec(mapped);
+  };
 
   const panel = { initial:{opacity:0,y:10}, animate:{opacity:1,y:0}, exit:{opacity:0,y:-8} };
 
   return (
     <div className="flex h-screen bg-dark-bg overflow-hidden">
-      {/* Sidebar */}
-      <aside className="w-64 bg-dark-card border-r border-dark-border flex flex-col h-full shadow-2xl shrink-0">
-        <div className="px-6 py-7 border-b border-dark-border">
-          <div className="flex items-center gap-3">
-            <div className={`w-10 h-10 bg-gradient-to-br ${grad} rounded-xl flex items-center justify-center text-white font-black text-xl shadow-lg`}>K</div>
-            <div>
-              <h1 className="text-lg font-black text-dark-text leading-none">Kanbana</h1>
-              <p className="text-[10px] text-dark-muted mt-1 uppercase tracking-widest font-black opacity-60 italic">SENA · ADSO</p>
-            </div>
-          </div>
-        </div>
-        <nav className="flex-1 px-3 py-5 space-y-1">
-          <p className="px-4 text-[9px] font-black text-dark-muted/40 uppercase tracking-[0.25em] mb-3">Mi Espacio</p>
-          {nav.map(({label,key,icon:Icon}) => {
-            const active = sec===key;
-            return (
-              <button key={key} onClick={()=>setSec(key)}
-                className={`relative flex items-center gap-3.5 px-4 py-3 rounded-2xl text-sm font-bold w-full text-left transition-all border ${
-                  active ? 'bg-primary-600/15 text-primary-400 border-primary-500/25' : 'text-dark-muted hover:text-dark-text hover:bg-dark-bg/40 border-transparent'
-                }`}
-              >
-                {active && <motion.div layoutId="aprendiz-nav" className="absolute inset-0 bg-primary-600/10 rounded-2xl" transition={{type:'spring',bounce:0.15,duration:0.4}} />}
-                <Icon size={17} className={`relative z-10 ${active?'text-primary-400':'text-dark-muted/70'}`} />
-                <span className="relative z-10">{label}</span>
-              </button>
-            );
-          })}
-        </nav>
-        <div className="p-4 border-t border-dark-border space-y-2">
-          <button onClick={()=>setSec('profile')}
-            className="flex items-center gap-3 w-full px-3 py-3 rounded-2xl bg-dark-bg/40 border border-dark-border hover:bg-dark-bg/70 transition-all group"
-          >
-            <div className={`h-9 w-9 rounded-full bg-gradient-to-br ${grad} flex items-center justify-center overflow-hidden border border-white/10 shrink-0`}>{avatar}</div>
-            <div className="flex-1 min-w-0 text-left">
-              <p className="text-xs font-black text-dark-text truncate group-hover:text-primary-400 transition-colors">{user?.nombre}</p>
-              <p className="text-[10px] text-dark-muted font-bold">Aprendiz</p>
-            </div>
-          </button>
-        </div>
-      </aside>
+      {/* ── Sidebar compartido ──────────────────────────────────── */}
+      <Sidebar
+        setSection={handleSidebarSection}
+        activeSection={sidebarSection}
+        allowedSections={ALLOWED}
+      />
 
       <div className="flex-1 flex flex-col overflow-hidden">
         <TopBar

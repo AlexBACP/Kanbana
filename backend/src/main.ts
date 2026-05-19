@@ -1,42 +1,60 @@
-import { NestFactory } from '@nestjs/core';
-import { ValidationPipe } from '@nestjs/common';
+// ── MODIFICADO ───────────────────────────────────────────────────────────────
+// Cambios respecto a la versión original:
+//  1. Se crea la carpeta /uploads/attachments/ al arrancar si no existe.
+//     Antes solo se creaba /uploads/avatars/.
+//  2. Se agrega log informativo de la nueva ruta de adjuntos.
+//  No se cambia ninguna otra configuración (CORS, Swagger, prefix, etc.).
+// ─────────────────────────────────────────────────────────────────────────────
+
+import { NestFactory }      from '@nestjs/core';
+import { ValidationPipe }   from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { NestExpressApplication } from '@nestjs/platform-express';
-import { AppModule } from './app.module';
-import * as path from 'path';
-import * as fs from 'fs';
+import { AppModule }        from './app.module';
+import * as path            from 'path';
+import * as fs              from 'fs';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
 
-  // ─── Prefijo global de la API ────────────────────────────────────────
+  // ─── Prefijo global de la API (sin cambios) ──────────────────────────
   app.setGlobalPrefix('api');
 
-  // ─── Servir archivos estáticos (avatares subidos) ────────────────────
-  // Los avatares quedan disponibles en http://localhost:3000/uploads/avatars/filename.jpg
-  const uploadsPath = path.join(process.cwd(), 'uploads');
-  if (!fs.existsSync(uploadsPath)) {
-    fs.mkdirSync(uploadsPath, { recursive: true });
-    fs.mkdirSync(path.join(uploadsPath, 'avatars'), { recursive: true });
-  }
+  // ─── Crear carpetas de uploads al arrancar ───────────────────────────
+  // Se crean si no existen. Esto evita errores al subir el primer archivo.
+  const uploadsPath      = path.join(process.cwd(), 'uploads');
+  const avatarsPath      = path.join(uploadsPath, 'avatars');
+  // ── NUEVO: carpeta para adjuntos de tickets ───────────────────────────
+  const attachmentsPath  = path.join(uploadsPath, 'attachments');
+
+  [uploadsPath, avatarsPath, attachmentsPath].forEach(dir => {
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+  });
+
+  // ─── Servir archivos estáticos ────────────────────────────────────────
+  // Avatares:    http://localhost:3000/uploads/avatars/<filename>
+  // Adjuntos:    http://localhost:3000/uploads/attachments/<filename>
+  // Ambos quedan disponibles automáticamente gracias a useStaticAssets.
   app.useStaticAssets(uploadsPath, { prefix: '/uploads' });
 
-  // ─── Validación global ───────────────────────────────────────────────
+  // ─── Validación global (sin cambios) ─────────────────────────────────
   app.useGlobalPipes(
     new ValidationPipe({
-      whitelist: true,
-      forbidNonWhitelisted: false, // false para no romper DTOs dinámicos
-      transform: true,
+      whitelist:            true,
+      forbidNonWhitelisted: false,
+      transform:            true,
     }),
   );
 
-  // ─── CORS ────────────────────────────────────────────────────────────
+  // ─── CORS (sin cambios) ───────────────────────────────────────────────
   app.enableCors({
-    origin: ['http://localhost:5173', 'http://localhost:3001'],
+    origin:      ['http://localhost:5173', 'http://localhost:3001'],
     credentials: true,
   });
 
-  // ─── Swagger ─────────────────────────────────────────────────────────
+  // ─── Swagger (sin cambios) ────────────────────────────────────────────
   const config = new DocumentBuilder()
     .setTitle('Kanbana API')
     .setDescription('API del sistema de gestión de tickets Kanbana')
@@ -51,6 +69,8 @@ async function bootstrap() {
   console.log(`Kanbana backend corriendo en http://localhost:3000`);
   console.log(`Documentación disponible en http://localhost:3000/api/docs`);
   console.log(`Avatares disponibles en http://localhost:3000/uploads/avatars/`);
+  // ── NUEVO log ─────────────────────────────────────────────────────────
+  console.log(`Adjuntos disponibles en http://localhost:3000/uploads/attachments/`);
 }
 
 bootstrap();

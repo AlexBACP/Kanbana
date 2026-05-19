@@ -1,7 +1,3 @@
-/**
- * UsersService — Servicio completo con perfiles enriquecidos,
- * cambio de contraseña por rol y upload de avatar.
- */
 import {
   Injectable, NotFoundException, BadRequestException, ForbiddenException,
 } from '@nestjs/common';
@@ -20,7 +16,7 @@ export class UsersService {
   ) {}
 
   async create(createUserDto: any): Promise<User> {
-    const { contrasena, ...userData } = createUserDto;
+    const { contrasena, fichaId, ...userData } = createUserDto;
     if (!contrasena) throw new BadRequestException('La contraseña es obligatoria');
     const hashedContrasena = await bcrypt.hash(contrasena, 10);
     const user = this.usersRepository.create({
@@ -28,15 +24,23 @@ export class UsersService {
       contrasena: hashedContrasena,
       rol: userData.rol || UserRole.APRENDIZ,
       activo: true,
+      ...(fichaId ? { fichaId: Number(fichaId) } : {}),
     } as Partial<User>);
     return this.usersRepository.save(user);
   }
 
   async findAll(rol?: string): Promise<User[]> {
     if (rol) {
-      return this.usersRepository.find({ where: { rol: rol as UserRole } });
+      return this.usersRepository.find({
+        where: { rol: rol as UserRole },
+        relations: ['ficha'],
+        order: { nombre: 'ASC' },
+      });
     }
-    return this.usersRepository.find({ order: { nombre: 'ASC' } });
+    return this.usersRepository.find({
+      relations: ['ficha'],
+      order: { nombre: 'ASC' },
+    });
   }
 
   async findOne(id: number): Promise<User> {
@@ -48,7 +52,7 @@ export class UsersService {
   async findByEmail(correo: string): Promise<User> {
     return this.usersRepository.findOne({
       where: { correo },
-      select: ['id', 'nombre', 'correo', 'contrasena', 'rol', 'activo', 'creado_en'],
+      select: ['id', 'nombre', 'correo', 'contrasena', 'rol', 'es_lider_tecnico', 'activo', 'creado_en'],
     });
   }
 
@@ -63,7 +67,7 @@ export class UsersService {
     return this.usersRepository.find({
       where: { ficha: { id: fichaId } },
       relations: ['ficha'],
-      order: { rol: 'ASC', nombre: 'ASC' },
+      order: { nombre: 'ASC' },
     });
   }
 
@@ -85,9 +89,14 @@ export class UsersService {
       .getMany();
   }
 
+  /**
+   * Devuelve usuarios contextuales según el rol de quien consulta.
+   * Para el instructor devuelve fichas completas para agrupar en el frontend.
+   * Para el aprendiz-lider devuelve los miembros de su proyecto.
+   */
   async findContextual(requestingUser: User): Promise<{
     users: User[];
-    fichas?: { id: number }[];
+    fichas?: any[];
     proyectos?: { id: number }[];
   }> {
     switch (requestingUser.rol) {
@@ -100,15 +109,26 @@ export class UsersService {
           .find({ where: { instructorId: requestingUser.id }, select: ['fichaId'] });
         const fichaIds = [...new Set(proyectos.map((p: any) => p.fichaId).filter(Boolean))];
         const users = await this.findByFichas(fichaIds as number[]);
-        return { users, fichas: fichaIds.map(id => ({ id })) };
+        const fichas = fichaIds.length > 0
+          ? await this.usersRepository.manager.getRepository('fichas').find({
+              where: { id: In(fichaIds as number[]) },
+            })
+          : [];
+        return { users, fichas: fichas as any[] };
       }
 
-      case UserRole.LIDER: {
+      // Aprendiz normal o con sub-rol de líder técnico:
+      // el lider-aprendiz ve los miembros de su proyecto
+      case UserRole.APRENDIZ: {
+        if (!requestingUser.es_lider_tecnico) {
+          return { users: [requestingUser] };
+        }
+        // Es líder técnico: buscar su proyecto (donde está como miembro Y es el líder asignado)
         const proyectos = await this.usersRepository.manager
           .getRepository('proyectos')
           .find({ where: { liderId: requestingUser.id }, select: ['id'] });
         const proyectoIds = proyectos.map((p: any) => p.id);
-        if (!proyectoIds.length) return { users: [], proyectos: [] };
+        if (!proyectoIds.length) return { users: [requestingUser], proyectos: [] };
         const users: User[] = [];
         for (const pid of proyectoIds) {
           const miembros = await this.findByProyecto(pid);
@@ -119,16 +139,12 @@ export class UsersService {
         return { users, proyectos: proyectos.map((p: any) => ({ id: p.id })) };
       }
 
-      case UserRole.APRENDIZ:
-        return { users: [requestingUser] };
-
       default:
         return { users: [] };
     }
   }
 
-  // ── Perfil completo enriquecido ───────────────────────────────────────
-  // Devuelve datos personales + fichas + proyectos + tickets según el rol del usuario visto
+  // ── Perfil completo enriquecido ────────────────────────────────────────────
   async getFullProfile(userId: number): Promise<any> {
     const user = await this.usersRepository.findOne({
       where: { id: userId },
@@ -142,6 +158,7 @@ export class UsersService {
       nombre: user.nombre,
       correo: user.correo,
       rol: user.rol,
+      es_lider_tecnico: user.es_lider_tecnico,
       avatar_url: user.avatar_url,
       telefono: user.telefono,
       bio: user.bio,
@@ -151,35 +168,32 @@ export class UsersService {
     };
 
     if (user.rol === UserRole.INSTRUCTOR) {
-      // Fichas donde es instructor (relación directa)
       const fichas = await manager.getRepository('fichas').find({
         where: { instructor_id: userId },
         order: { creado_en: 'DESC' },
       });
-      // Proyectos que supervisa
       const proyectos = await manager.getRepository('proyectos').find({
         where: { instructorId: userId },
         relations: ['ficha', 'lider'],
         order: { creado_en: 'DESC' },
       });
-      result.fichas = fichas;
+      result.fichas   = fichas;
       result.proyectos = proyectos;
       result.stats = {
-        fichas_count: fichas.length,
-        proyectos_count: proyectos.length,
+        fichas_count:      fichas.length,
+        proyectos_count:   proyectos.length,
         proyectos_activos: proyectos.filter((p: any) => p.estado === 'activo').length,
       };
     }
 
-    if (user.rol === UserRole.LIDER) {
-      // Proyectos donde es líder técnico
+    // Aprendiz con sub-rol líder técnico: perfil enriquecido de líder
+    if (user.rol === UserRole.APRENDIZ && user.es_lider_tecnico) {
       const proyectos = await manager.getRepository('proyectos').find({
         where: { liderId: userId },
         relations: ['ficha', 'instructor'],
         order: { creado_en: 'DESC' },
       });
       const proyectoIds = proyectos.map((p: any) => p.id);
-      // Tickets asignados como líder o en sus proyectos
       let tickets: any[] = [];
       if (proyectoIds.length) {
         tickets = await manager.getRepository('tickets').find({
@@ -189,7 +203,6 @@ export class UsersService {
           take: 20,
         });
       }
-      // Equipo: miembros de sus proyectos
       const equipo: User[] = [];
       for (const pid of proyectoIds) {
         const miembros = await this.findByProyecto(pid);
@@ -198,25 +211,31 @@ export class UsersService {
         });
       }
       result.proyectos = proyectos;
-      result.tickets = tickets;
-      result.equipo = equipo;
+      result.tickets   = tickets;
+      result.equipo    = equipo;
       result.stats = {
-        proyectos_count: proyectos.length,
-        tickets_asignados: tickets.length,
-        tickets_completados: tickets.filter((t: any) => t.estado === 'done').length,
-        equipo_count: equipo.length,
+        proyectos_count:    proyectos.length,
+        tickets_asignados:  tickets.length,
+        tickets_completados:tickets.filter((t: any) => t.estado === 'done').length,
+        equipo_count:       equipo.length,
       };
     }
 
-    if (user.rol === UserRole.APRENDIZ) {
-      // Proyectos donde es miembro
+    // Aprendiz sin sub-rol
+    if (user.rol === UserRole.APRENDIZ && !user.es_lider_tecnico) {
       const proyectos = await manager
-        .createQueryBuilder()
-        .select('p.*')
-        .from('proyectos', 'p')
+        .createQueryBuilder('proyectos', 'p')
+        .leftJoinAndSelect('p.ficha', 'ficha')
+        .leftJoinAndSelect('p.instructor', 'instructor')
         .innerJoin('proyecto_usuarios', 'pu', 'pu.project_id = p.id AND pu.user_id = :uid', { uid: userId })
-        .getRawMany();
-      // Tickets asignados
+        .select([
+          'p.id', 'p.nombre', 'p.descripcion', 'p.estado',
+          'p.fecha_inicio', 'p.fecha_fin',
+          'ficha.id', 'ficha.codigo', 'ficha.programa',
+          'instructor.id', 'instructor.nombre',
+        ])
+        .orderBy('p.creado_en', 'DESC')
+        .getMany();
       const tickets = await manager.getRepository('tickets').find({
         where: { asignado_a_id: userId },
         relations: ['proyecto'],
@@ -224,10 +243,10 @@ export class UsersService {
         take: 30,
       });
       result.proyectos = proyectos;
-      result.tickets = tickets;
+      result.tickets   = tickets;
       result.stats = {
-        proyectos_count: proyectos.length,
-        tickets_total: tickets.length,
+        proyectos_count:     proyectos.length,
+        tickets_total:       tickets.length,
         tickets_completados: tickets.filter((t: any) => t.estado === 'done').length,
         tickets_en_progreso: tickets.filter((t: any) => t.estado === 'in_progress').length,
         progreso: tickets.length
@@ -237,7 +256,6 @@ export class UsersService {
     }
 
     if (user.rol === UserRole.COORDINADOR) {
-      // Stats globales del sistema
       const totalUsers     = await this.usersRepository.count();
       const totalProyectos = await manager.getRepository('proyectos').count();
       const totalFichas    = await manager.getRepository('fichas').count();
@@ -247,7 +265,7 @@ export class UsersService {
     return result;
   }
 
-  // ── Cambio de contraseña por el propio usuario ───────────────────────
+  // ── Cambio de contraseña propia ──────────────────────────────────────────
   async changeOwnPassword(userId: number, actual: string, nueva: string): Promise<void> {
     const user = await this.usersRepository.findOne({
       where: { id: userId },
@@ -260,10 +278,7 @@ export class UsersService {
     await this.usersRepository.update(userId, { contrasena: hash });
   }
 
-  // ── Cambio de contraseña por un administrador/instructor ─────────────
-  // Quién puede cambiar la contraseña de quién:
-  //   coordinador → cualquiera
-  //   instructor  → solo aprendices y líderes de sus fichas
+  // ── Cambio de contraseña por admin ───────────────────────────────────────
   async changePasswordAsAdmin(
     requestingUser: User,
     targetId: number,
@@ -272,26 +287,21 @@ export class UsersService {
     const target = await this.findOne(targetId);
 
     if (requestingUser.rol === UserRole.COORDINADOR) {
-      // Coordinador puede cambiar contraseña de cualquiera
+      // ok
     } else if (requestingUser.rol === UserRole.INSTRUCTOR) {
-      // Instructor solo puede cambiar contraseña de aprendices/líderes de sus fichas
-      const allowed = [UserRole.APRENDIZ, UserRole.LIDER];
-      if (!allowed.includes(target.rol as UserRole)) {
-        throw new ForbiddenException('Solo puedes cambiar contraseñas de aprendices y líderes técnicos');
+      if (target.rol !== UserRole.APRENDIZ) {
+        throw new ForbiddenException('Solo puedes cambiar contraseñas de aprendices de tus fichas');
       }
-      // Verificar que el target pertenece a las fichas del instructor
       const proyectos = await this.usersRepository.manager
         .getRepository('proyectos')
         .find({ where: { instructorId: requestingUser.id }, select: ['fichaId'] });
       const fichaIds = proyectos.map((p: any) => p.fichaId).filter(Boolean);
       if (fichaIds.length > 0) {
-        // Verificar que el target está en alguna de esas fichas
-        // (a través de proyecto_usuarios o ficha directa)
         const targetUser = await this.usersRepository.findOne({
           where: { id: targetId },
           relations: ['ficha'],
         });
-        const targetFichaId = (targetUser as any)?.ficha?.id || (targetUser as any)?.ficha_id;
+        const targetFichaId = (targetUser as any)?.ficha?.id;
         if (targetFichaId && !fichaIds.includes(targetFichaId)) {
           throw new ForbiddenException('Este usuario no pertenece a tus fichas');
         }
@@ -304,18 +314,13 @@ export class UsersService {
     await this.usersRepository.update(targetId, { contrasena: hash });
   }
 
-  // ── Upload de avatar ──────────────────────────────────────────────────
+  // ── Upload de avatar ─────────────────────────────────────────────────────
   async updateAvatar(userId: number, file: Express.Multer.File): Promise<{ avatar_url: string }> {
     const user = await this.findOne(userId);
-    
-    // Eliminar avatar anterior si existe y es local
     if (user.avatar_url && user.avatar_url.startsWith('/uploads/')) {
       const oldPath = path.join(process.cwd(), user.avatar_url);
-      if (fs.existsSync(oldPath)) {
-        fs.unlinkSync(oldPath);
-      }
+      if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
     }
-
     const avatar_url = `/uploads/avatars/${file.filename}`;
     await this.usersRepository.update(userId, { avatar_url });
     return { avatar_url };
@@ -330,9 +335,36 @@ export class UsersService {
     return this.findOne(id);
   }
 
+  /**
+   * Cambio de rol — solo coordinador puede hacerlo.
+   * Solo permite: coordinador, instructor, aprendiz.
+   * Si se degrada a aprendiz, limpia es_lider_tecnico.
+   */
   async updateRole(id: number, rol: UserRole): Promise<User> {
     const user = await this.findOne(id);
     user.rol = rol;
+    if (rol !== UserRole.APRENDIZ) {
+      user.es_lider_tecnico = false;
+    }
+    return this.usersRepository.save(user);
+  }
+
+  /**
+   * Activa/desactiva el sub-rol de Líder Técnico.
+   * Solo aplicable a aprendices.
+   * Cuando es_lider_tecnico=true el aprendiz:
+   *   - Accede al dashboard de gestión
+   *   - Ve y gestiona su proyecto y equipo
+   *   - Es visible en el panel de Líderes Técnicos
+   */
+  async toggleLiderTecnico(id: number): Promise<User> {
+    const user = await this.findOne(id);
+    if (user.rol !== UserRole.APRENDIZ) {
+      throw new BadRequestException(
+        'El sub-rol de Líder Técnico solo puede asignarse a aprendices.'
+      );
+    }
+    user.es_lider_tecnico = !user.es_lider_tecnico;
     return this.usersRepository.save(user);
   }
 
@@ -345,6 +377,15 @@ export class UsersService {
   async remove(id: number): Promise<void> {
     const user = await this.findOne(id);
     await this.usersRepository.remove(user);
+  }
+
+  async confirmAccount(token: string): Promise<void> {
+    const user = await this.usersRepository.findOne({ where: { token_activacion: token } });
+    if (!user) throw new Error('Token inválido o ya utilizado');
+    await this.usersRepository.update(user.id, {
+      cuenta_confirmada: true,
+      token_activacion:  null,
+    });
   }
 
   async getLeaderStats(leaderId: number) {
@@ -362,9 +403,9 @@ export class UsersService {
       ticketsCerrados  = tickets.filter((t: any) => t.estado === 'done').length;
     }
     return {
-      leaderId: leader.id,
-      nombre: leader.nombre,
-      proyectosAsignados: proyectos.length,
+      leaderId:          leader.id,
+      nombre:            leader.nombre,
+      proyectosAsignados:proyectos.length,
       ticketsAbiertos,
       ticketsCerrados,
       cargaActual: ticketsAbiertos > 10 ? 'Alta' : ticketsAbiertos > 5 ? 'Media' : 'Normal',

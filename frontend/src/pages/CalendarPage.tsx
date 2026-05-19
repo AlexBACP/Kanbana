@@ -70,7 +70,7 @@ export const CalendarPage = () => {
             <CalendarIcon className="text-primary-600" />
             Calendario de Entregas
           </h1>
-          <p className="text-gray-500 text-sm">Visualiza las fechas límite de tus tickets</p>
+          <p className="text-gray-500 text-sm">Visualiza las fechas límite de tus tareas</p>
         </div>
         
         <div className="flex items-center gap-4 text-sm">
@@ -98,7 +98,7 @@ export const CalendarPage = () => {
         ) : events.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center text-gray-400 gap-3">
             <AlertCircle size={40} className="text-gray-300" />
-            <p>No hay tickets con fecha límite asignada.</p>
+            <p>No hay tareas con fecha límite asignada.</p>
           </div>
         ) : (
           <Calendar
@@ -118,7 +118,7 @@ export const CalendarPage = () => {
               agenda: "Agenda",
               date: "Fecha",
               time: "Hora",
-              event: "Ticket",
+              event: "Tarea",
               noEventsInRange: "No hay entregas en este rango de fechas.",
             }}
             eventPropGetter={eventStyleGetter}

@@ -21,7 +21,7 @@ export const Modal = ({ isOpen, onClose, title, children, size = 'md' }: ModalPr
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 animate-in">
       {/* Overlay con blur más suave */}
       <div 
-        className="absolute inset-0 bg-dark-bg/60 backdrop-blur-sm transition-all duration-500" 
+        className="absolute inset-0 bg-[#1f1f21] backdrop-blur-sm transition-all duration-500" 
         onClick={onClose} 
       />
       

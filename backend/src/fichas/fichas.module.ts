@@ -5,11 +5,12 @@ import { memoryStorage } from 'multer';
 import { FichasService } from './fichas.service';
 import { FichasController } from './fichas.controller';
 import { Ficha } from './entities/ficha.entity';
+import { Trimestre } from '../projects/entities/trimestre.entity';
 import { User } from '../users/entities/user.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Ficha, User]),
+    TypeOrmModule.forFeature([Ficha, User, Trimestre]),
     MulterModule.register({ storage: memoryStorage() }),
   ],
   controllers: [FichasController],

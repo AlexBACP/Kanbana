@@ -15,6 +15,7 @@
  *   (el backend rechaza con error claro, el frontend lo muestra)
  */
 import { useState, useCallback, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -22,7 +23,7 @@ import {
   GraduationCap, FolderKanban, Users, User,
   Ticket, LayoutGrid, CheckCircle2, Clock, AlertCircle,
   BookOpen, ExternalLink, UserPlus, ShieldCheck, Search,
-  Crown, UserMinus, X, Check, FileSpreadsheet, Upload, Download, AlertTriangle,
+  Crown, UserMinus, X, Check, FileSpreadsheet, Upload, Download, AlertTriangle, Layers, Settings,
 } from 'lucide-react';
 import { fichaService } from '../../services/ficha.service';
 import { projectService } from '../../services/project.service';
@@ -64,13 +65,118 @@ const FormField = ({ label, children }: { label: string; children: React.ReactNo
   </div>
 );
 
+// ─── Trimestres del proyecto (reemplaza la sección de Tareas) ────────────────
+const TrimestresSection = ({ proyectoId, canManage }: { proyectoId: number; canManage: boolean }) => {
+  const navigate = useNavigate();
+  const { data: trimestres = [], isLoading } = useQuery({
+    queryKey: ['trimestres', proyectoId],
+    queryFn:  () => projectService.getTrimestres(proyectoId),
+    enabled:  !!proyectoId,
+  });
+  const trims = trimestres as any[];
+
+  const fmt = (d: string) => {
+    if (!d) return '—';
+    return new Date(d).toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' });
+  };
+
+  if (isLoading) return (
+    <div className="bg-dark-card border border-dark-border rounded-[2rem] p-5">
+      <div className="h-32 animate-pulse bg-dark-bg rounded-2xl" />
+    </div>
+  );
+
+  return (
+    <div className="bg-dark-card border border-dark-border rounded-[2rem] p-5">
+      <div className="flex items-center justify-between mb-5">
+        <h3 className="text-xs font-black text-dark-muted uppercase tracking-widest flex items-center gap-2">
+          <Layers size={13} /> Trimestres ({trims.length})
+        </h3>
+        {canManage && (
+          <button
+            onClick={() => navigate(`/projects/${proyectoId}`)}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-[#27ae60]/10 border border-[#27ae60]/25 text-[#27ae60] rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-[#27ae60]/20 transition-all"
+          >
+            <Settings size={12} /> Configurar
+          </button>
+        )}
+      </div>
+
+      {trims.length === 0 ? (
+        <div className="text-center py-8 border border-dashed border-dark-border rounded-2xl">
+          <Layers size={24} className="mx-auto text-dark-muted mb-3 opacity-30" />
+          <p className="text-xs text-dark-muted">Sin trimestres configurados</p>
+          {canManage && (
+            <button
+              onClick={() => navigate(`/projects/${proyectoId}`)}
+              className="mt-3 text-[11px] text-[#27ae60] hover:text-[#219653] font-bold transition-colors"
+            >
+              → Configurar trimestres
+            </button>
+          )}
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+          {trims.map((trim: any) => {
+            const sprints  = trim.sprints ?? [];
+            const tickets  = sprints.flatMap((s: any) => s.tickets ?? []);
+            const done     = tickets.filter((t: any) => t.estado === 'done').length;
+            const progreso = tickets.length > 0 ? Math.round((done / tickets.length) * 100) : 0;
+            const isDoc    = trim.tipo === 'documental';
+
+            return (
+              <button
+                key={trim.id}
+                onClick={() => navigate(`/projects/${proyectoId}/trimestre/${trim.id}`)}
+                className={`text-left rounded-2xl border p-4 transition-all hover:scale-[1.02] hover:shadow-lg ${
+                  trim.esta_finalizado
+                    ? 'border-dark-border bg-dark-bg/50 opacity-70'
+                    : isDoc
+                      ? 'border-amber-500/30 bg-amber-500/5'
+                      : 'border-[#27ae60]/30 bg-[#27ae60]/5'
+                }`}
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded border ${
+                    isDoc
+                      ? 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                      : 'bg-[#27ae60]/10 text-[#27ae60] border-[#27ae60]/20'
+                  }`}>
+                    {isDoc ? 'Documental' : 'Desarrollo'}
+                  </span>
+                  {trim.esta_finalizado && <CheckCircle2 size={13} className="text-dark-muted" />}
+                </div>
+                <p className="text-sm font-black text-dark-text mb-1">
+                  {trim.nombre || `Trimestre ${trim.numero}`}
+                </p>
+                <p className="text-[10px] text-dark-muted mb-3">
+                  {fmt(trim.fecha_inicio)} → {fmt(trim.fecha_fin)}
+                </p>
+                <div className="h-1 bg-dark-bg rounded-full overflow-hidden">
+                  <div
+                    className={`h-full rounded-full ${isDoc ? 'bg-amber-400' : 'bg-[#27ae60]'}`}
+                    style={{ width: `${progreso}%` }}
+                  />
+                </div>
+                <p className="text-[9px] text-dark-muted mt-1 text-right">{progreso}%</p>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+};
+
 // ─── Level 3: Project Detail ──────────────────────────────────────────────────
 const ProyectoDetalle = ({ proyectoId, onBack }: { proyectoId: number; onBack: () => void }) => {
   const { user } = useAuthStore();
   const qc = useQueryClient();
   const [showTicketModal, setShowTicketModal] = useState(false);
   const [showMemberModal, setShowMemberModal] = useState(false);
-  const [memberError, setMemberError] = useState<string | null>(null);
+  const [memberSearch, setMemberSearch] = useState('');
+  const [selectedMemberIds, setSelectedMemberIds] = useState<Set<number>>(new Set());
+  const [memberAddResult, setMemberAddResult] = useState<{ ok: string[]; errors: string[] } | null>(null);
 
   const { data: proyecto, isLoading } = useQuery({
     queryKey: ['projects', proyectoId],
@@ -84,11 +190,12 @@ const ProyectoDetalle = ({ proyectoId, onBack }: { proyectoId: number; onBack: (
     staleTime: 1000 * 60,
   });
 
-  const { data: allUsers = [] } = useQuery({
+  const { data: allUsers = [], isLoading: loadingUsers } = useQuery({
     queryKey: ['users'],
     queryFn: () => userService.getAll(),
     staleTime: 1000 * 60,
-    enabled: showMemberModal,
+    // Pre-cargar siempre para que los datos estén disponibles al abrir el modal
+    enabled: true,
   });
 
   const { data: tickets = [] } = useQuery({
@@ -105,31 +212,111 @@ const ProyectoDetalle = ({ proyectoId, onBack }: { proyectoId: number; onBack: (
     },
   });
 
-  const addMemberMutation = useMutation({
-    mutationFn: (userId: number) => projectService.addMember(proyectoId, userId),
-    onSuccess: () => {
+  // ▼ NUEVO: promover / degradar sub-rol líder técnico desde la ventana del proyecto
+  const promoteLiderMutation = useMutation({
+    mutationFn: ({ fichaId, userId }: { fichaId: number; userId: number }) =>
+      fichaService.promoteToLider(fichaId, userId),
+   onSuccess: async (updatedUser: any, { userId }) => {
+      try {
+        await projectService.assignLider(proyectoId, userId);
+      } catch {}
+      // Si el usuario promovido es el mismo que está logueado, actualizar el store
+      if (userId === user?.id) {
+        useAuthStore.getState().setUser({ ...user, es_lider_tecnico: true } as any);
+      }
       qc.invalidateQueries({ queryKey: ['projects', proyectoId, 'members'] });
-      setMemberError(null);
-      setShowMemberModal(false);
+      qc.invalidateQueries({ queryKey: ['projects'] });
     },
     onError: (err: any) => {
-      const msg = err?.response?.data?.message || 'Error al añadir el integrante';
-      setMemberError(msg);
+      const msg = err?.response?.data?.message;
+      alert(`No se pudo promover: ${Array.isArray(msg) ? msg.join(', ') : (msg || 'Error desconocido')}`);
+    },
+  });
+
+  const demoteLiderMutation = useMutation({
+    mutationFn: ({ fichaId, userId }: { fichaId: number; userId: number }) =>
+      fichaService.demoteToAprendiz(fichaId, userId),
+    onSuccess: async () => {
+      // Al degradar, quitar el liderId del proyecto (asignar 0 = sin líder)
+      try {
+        await projectService.assignLider(proyectoId, 0);
+      } catch {}
+      qc.invalidateQueries({ queryKey: ['projects', proyectoId, 'members'] });
+      qc.invalidateQueries({ queryKey: ['projects'] });
+    },
+    onError: (err: any) => {
+      const msg = err?.response?.data?.message;
+      alert(`No se pudo quitar el rol: ${Array.isArray(msg) ? msg.join(', ') : (msg || 'Error desconocido')}`);
+    },
+  });
+
+  const addMembersMutation = useMutation({
+    mutationFn: async (userIds: number[]) => {
+      const oks: string[] = [];
+      const errs: string[] = [];
+      for (const uid of userIds) {
+        try {
+          await projectService.addMember(proyectoId, uid);
+          const u = (allUsers as any[]).find((x: any) => x.id === uid);
+          oks.push(u?.nombre || `#${uid}`);
+        } catch (err: any) {
+          const u = (allUsers as any[]).find((x: any) => x.id === uid);
+          const msg = err?.response?.data?.message;
+          const errMsg = Array.isArray(msg) ? msg.join(', ') : (msg || err?.message || 'Error interno del servidor');
+          errs.push(`${u?.nombre || `#${uid}`}: ${errMsg}`);
+        }
+      }
+      return { ok: oks, errors: errs };
+    },
+    onSuccess: (result) => {
+      qc.invalidateQueries({ queryKey: ['projects', proyectoId, 'members'] });
+      setMemberAddResult(result);
+      setSelectedMemberIds(new Set());
+      if (result.errors.length === 0) {
+        setTimeout(() => { setShowMemberModal(false); setMemberAddResult(null); }, 1200);
+      }
     },
   });
 
   const ticketsArr = tickets as any[];
-  const aprendices  = (miembros as any[]).filter((m: any) => m.rol === 'aprendiz');
-  const lideres     = (miembros as any[]).filter((m: any) => m.rol === 'lider_tecnico');
-  const todoElEquipo = [...aprendices, ...lideres];
+  const miembrosArr = miembros as any[];
+  // Líderes = aprendices con sub-rol activo; aprendices = el resto
+  const lideres     = miembrosArr.filter((m: any) => m.rol === 'aprendiz' && m.es_lider_tecnico);
+  const aprendices  = miembrosArr.filter((m: any) => m.rol === 'aprendiz' && !m.es_lider_tecnico);
+  const todoElEquipo = [...lideres, ...aprendices];
   const done        = ticketsArr.filter(t => t.estado === 'done').length;
   const progress    = ticketsArr.length ? Math.round((done / ticketsArr.length) * 100) : 0;
-  const canManage   = user?.rol === 'coordinador' || user?.rol === 'instructor' || user?.rol === 'lider_tecnico';
+  const canManage   = user?.rol === 'coordinador' || user?.rol === 'instructor' || (user?.rol === 'aprendiz' && (user as any)?.es_lider_tecnico);
 
-  const addableMemberIds = new Set((miembros as any[]).map((m: any) => m.id));
-  const addableUsers = (allUsers as any[]).filter(u =>
-    (u.rol === 'aprendiz' || u.rol === 'lider_tecnico') && !addableMemberIds.has(u.id)
-  );
+  // Usuarios que pueden añadirse al proyecto (aprendices/líderes que no están ya)
+  const miembroIds = new Set(miembrosArr.map((m: any) => m.id));
+  const addableUsers = useMemo(() => {
+    const term = memberSearch.toLowerCase().trim();
+    return (allUsers as any[]).filter(u =>
+      // Solo aprendices (el liderazgo es sub-rol, no rol separado)
+      u.rol === 'aprendiz' &&
+      // No está ya en el proyecto
+      !miembroIds.has(u.id) &&
+      // Debe pertenecer a la misma ficha del proyecto (o no tener ficha aún)
+      (!proyecto?.fichaId || !u.fichaId || u.fichaId === proyecto?.fichaId || u.ficha?.id === proyecto?.fichaId) &&
+      (!term || u.nombre?.toLowerCase().includes(term) || u.correo?.toLowerCase().includes(term))
+    );
+  }, [allUsers, miembroIds, memberSearch, proyecto]);
+
+  const toggleSelectMember = (id: number) => {
+    setSelectedMemberIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const openMemberModal = () => {
+    setShowMemberModal(true);
+    setMemberSearch('');
+    setSelectedMemberIds(new Set());
+    setMemberAddResult(null);
+  };
 
   if (isLoading) return <div className="space-y-4">{[1,2,3].map(n => <SkeletonCard key={n} />)}</div>;
   if (!proyecto) return null;
@@ -159,10 +346,10 @@ const ProyectoDetalle = ({ proyectoId, onBack }: { proyectoId: number; onBack: (
             <p className="text-dark-muted text-sm mt-1 line-clamp-2">{proyecto.descripcion}</p>
           </div>
           <a
-            href={`/projects/${proyecto.id}/kanban`}
-            className="flex items-center gap-2 px-4 py-2.5 bg-primary-600/15 border border-primary-500/25 text-primary-400 rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-primary-600/25 transition-all"
+           href={`/projects/${proyecto.id}`}
+            className="flex items-center gap-2 px-4 py-2.5 bg-[#27ae60]/10 border border-[#27ae60]/25 text-[#27ae60] rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-[#27ae60]/20 transition-all"
           >
-            <LayoutGrid size={14} /> Ver Kanban
+            <LayoutGrid size={14} /> Ver proyecto
           </a>
         </div>
 
@@ -238,26 +425,62 @@ const ProyectoDetalle = ({ proyectoId, onBack }: { proyectoId: number; onBack: (
             </h3>
             {canManage && (
               <button
-                onClick={() => { setMemberError(null); setShowMemberModal(true); }}
-                className="p-1.5 rounded-xl text-primary-400 hover:bg-primary-600/10 transition-all"
+                onClick={openMemberModal}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-primary-600/10 border border-primary-500/20 text-primary-400 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-primary-600/20 transition-all"
               >
-                <UserPlus size={15} />
+                <UserPlus size={12} /> Agregar
               </button>
             )}
           </div>
-          <div className="space-y-2.5 max-h-52 overflow-y-auto pr-1">
+          {/* ▼ NUEVO: filas interactivas con acción de promover/degradar líder técnico */}
+          <div className="space-y-1 max-h-64 overflow-y-auto pr-1">
             {todoElEquipo.length === 0 ? (
               <p className="text-xs text-dark-muted italic">Sin integrantes asignados</p>
-            ) : todoElEquipo.map((a: any) => (
-              <div key={a.id} className="flex items-center gap-3">
-                <AvatarBadge nombre={a.nombre} url={a.avatar_url} size={7} />
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-bold text-dark-text truncate">{a.nombre}</p>
-                  <p className="text-[10px] text-dark-muted truncate capitalize">{a.rol === 'lider_tecnico' ? 'Líder Técnico' : 'Aprendiz'}</p>
+            ) : todoElEquipo.map((a: any) => {
+              const esLider = a.es_lider_tecnico === true;
+              const fichaId = (proyecto as any)?.fichaId ?? (proyecto as any)?.ficha?.id;
+              return (
+                <div key={a.id} className="flex items-center gap-3 p-2 rounded-2xl hover:bg-dark-bg/40 transition-all group">
+                  <AvatarBadge nombre={a.nombre} url={a.avatar_url} size={7} />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-bold text-dark-text truncate">{a.nombre}</p>
+                    {/* ▼ NUEVO: badge de sub-rol basado en es_lider_tecnico */}
+                    {esLider ? (
+                      <span className="text-[9px] text-emerald-400 font-bold flex items-center gap-1">
+                        <Crown size={9} /> Líder técnico
+                      </span>
+                    ) : (
+                      <p className="text-[10px] text-dark-muted">Aprendiz</p>
+                    )}
+                  </div>
+                  <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${a.activo ? 'bg-emerald-500' : 'bg-rose-500'}`} />
+                  {/* ▼ NUEVO: botón de toggle líder técnico, solo si el instructor puede gestionar y hay fichaId */}
+                  {canManage && fichaId && (
+                    <button
+                      onClick={() => {
+                        if (esLider) {
+                          confirm(`¿Quitar el sub-rol de Líder Técnico a ${a.nombre}?`) &&
+                            demoteLiderMutation.mutate({ fichaId, userId: a.id });
+                        } else {
+                          confirm(`¿Asignar a ${a.nombre} como Líder Técnico?`) &&
+                            promoteLiderMutation.mutate({ fichaId, userId: a.id });
+                        }
+                      }}
+                      disabled={promoteLiderMutation.isPending || demoteLiderMutation.isPending}
+                      title={esLider ? 'Quitar Líder Técnico' : 'Asignar como Líder Técnico'}
+                      className={`opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 px-2 py-1 rounded-xl text-[10px] font-bold disabled:opacity-40 ${
+                        esLider
+                          ? 'text-amber-400 hover:bg-amber-500/10'
+                          : 'text-emerald-400 hover:bg-emerald-500/10'
+                      }`}
+                    >
+                      <Crown size={11} />
+                      {esLider ? 'Quitar líder' : 'Hacer líder'}
+                    </button>
+                  )}
                 </div>
-                <div className={`w-1.5 h-1.5 rounded-full ${a.activo ? 'bg-emerald-500' : 'bg-rose-500'}`} />
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       </div>
@@ -282,48 +505,11 @@ const ProyectoDetalle = ({ proyectoId, onBack }: { proyectoId: number; onBack: (
         </div>
       )}
 
-      {/* Tickets */}
-      <div className="bg-dark-card border border-dark-border rounded-[2rem] p-5">
-        <div className="flex items-center justify-between mb-5">
-          <h3 className="text-xs font-black text-dark-muted uppercase tracking-widest flex items-center gap-2">
-            <Ticket size={13} /> Tickets ({ticketsArr.length})
-          </h3>
-          {canManage && (
-            <Button onClick={() => setShowTicketModal(true)} size="sm" className="flex items-center gap-1.5">
-              <Plus size={13} /> Nuevo Ticket
-            </Button>
-          )}
-        </div>
-
-        {ticketsArr.length === 0 ? (
-          <p className="text-xs text-dark-muted italic text-center py-6">Sin tickets en este proyecto</p>
-        ) : (
-          <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
-            {ticketsArr.slice(0, 30).map((t: any) => (
-              <a key={t.id} href={`/tickets/${t.id}`}
-                className="flex items-center gap-3 p-3 rounded-2xl hover:bg-dark-bg/60 border border-dark-border/50 hover:border-primary-500/30 transition-all group"
-              >
-                <div className={`w-2 h-2 rounded-full shrink-0 ${
-                  t.estado === 'done' ? 'bg-emerald-500' :
-                  t.estado === 'in_progress' ? 'bg-blue-500' :
-                  t.estado === 'testing' ? 'bg-amber-500' : 'bg-dark-muted'
-                }`} />
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-bold text-dark-text truncate group-hover:text-primary-400 transition-colors">{t.titulo}</p>
-                  <p className="text-[10px] text-dark-muted capitalize">{t.prioridad} · {t.estado?.replace('_',' ')}</p>
-                </div>
-                {t.asignado_a_rel && (
-                  <span className="text-[10px] text-dark-muted truncate max-w-[80px]">{t.asignado_a_rel.nombre}</span>
-                )}
-                <ExternalLink size={11} className="text-dark-muted opacity-0 group-hover:opacity-100 transition-opacity" />
-              </a>
-            ))}
-          </div>
-        )}
-      </div>
+      {/* Trimestres del proyecto */}
+      <TrimestresSection proyectoId={proyectoId} canManage={canManage} />
 
       {/* Modal: Crear ticket */}
-      <Modal isOpen={showTicketModal} onClose={() => setShowTicketModal(false)} title="Nuevo Ticket">
+      <Modal isOpen={showTicketModal} onClose={() => setShowTicketModal(false)} title="Nueva Tarea">
         <form onSubmit={e => {
           e.preventDefault();
           const f = new FormData(e.currentTarget);
@@ -362,7 +548,7 @@ const ProyectoDetalle = ({ proyectoId, onBack }: { proyectoId: number; onBack: (
             <input name="fecha_limite" type="date" className="input-dark" />
           </FormField>
           <Button type="submit" isLoading={createTicketMutation.isPending} className="w-full py-4">
-            {createTicketMutation.isPending ? 'Creando...' : 'Crear Ticket'}
+            {createTicketMutation.isPending ? 'Creando...' : 'Crear Tarea'}
           </Button>
           {createTicketMutation.isError && (
             <p className="text-xs text-rose-400 text-center">Error al crear el ticket. Verifica los datos.</p>
@@ -370,29 +556,121 @@ const ProyectoDetalle = ({ proyectoId, onBack }: { proyectoId: number; onBack: (
         </form>
       </Modal>
 
-      {/* Modal: Añadir miembro al proyecto */}
-      <Modal isOpen={showMemberModal} onClose={() => { setShowMemberModal(false); setMemberError(null); }} title="Añadir Integrante al Proyecto">
-        {memberError && (
-          <div className="mb-4 px-4 py-3 bg-rose-500/10 border border-rose-500/25 rounded-2xl">
-            <p className="text-xs text-rose-400 font-bold">{memberError}</p>
-            <p className="text-[10px] text-rose-400/70 mt-0.5">Un aprendiz solo puede pertenecer a un proyecto a la vez.</p>
-          </div>
-        )}
-        <div className="space-y-3 max-h-72 overflow-y-auto">
-          {addableUsers.length === 0 ? (
-            <p className="text-sm text-dark-muted text-center py-6">No hay usuarios disponibles para añadir</p>
-          ) : addableUsers.map((u: any) => (
-            <div key={u.id} className="flex items-center gap-3 p-3 bg-dark-bg/50 rounded-2xl border border-dark-border">
-              <AvatarBadge nombre={u.nombre} url={u.avatar_url} size={8} />
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-bold text-dark-text truncate">{u.nombre}</p>
-                <p className="text-xs text-dark-muted truncate capitalize">{u.rol === 'lider_tecnico' ? 'Líder Técnico' : 'Aprendiz'}</p>
-              </div>
-              <Button size="sm" onClick={() => addMemberMutation.mutate(u.id)} isLoading={addMemberMutation.isPending}>
-                Añadir
-              </Button>
+      {/* Modal: Añadir miembros al proyecto — selección múltiple con búsqueda */}
+      <Modal
+        isOpen={showMemberModal}
+        onClose={() => { setShowMemberModal(false); setMemberAddResult(null); setSelectedMemberIds(new Set()); setMemberSearch(''); }}
+        title="Agregar Integrantes al Proyecto"
+      >
+        <div className="space-y-4">
+          {/* Resultado de adición */}
+          {memberAddResult && (
+            <div className="space-y-2">
+              {memberAddResult.ok.length > 0 && (
+                <div className="px-4 py-3 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl flex items-center gap-2">
+                  <Check size={14} className="text-emerald-400 shrink-0" />
+                  <p className="text-xs text-emerald-400 font-bold">{memberAddResult.ok.length} integrante(s) añadido(s) correctamente</p>
+                </div>
+              )}
+              {memberAddResult.errors.length > 0 && (
+                <div className="px-4 py-3 bg-amber-500/10 border border-amber-500/20 rounded-2xl space-y-1">
+                  <p className="text-xs text-amber-400 font-black">No se pudieron añadir {memberAddResult.errors.length} usuario(s):</p>
+                  {memberAddResult.errors.map((e, i) => (
+                    <p key={i} className="text-[10px] text-amber-400/80">· {e}</p>
+                  ))}
+                  <p className="text-[10px] text-amber-400/60 mt-1">Un aprendiz solo puede pertenecer a un proyecto a la vez.</p>
+                </div>
+              )}
             </div>
-          ))}
+          )}
+
+          {/* Búsqueda */}
+          <div className="relative">
+            <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-dark-muted pointer-events-none" />
+            <input
+              type="text"
+              value={memberSearch}
+              onChange={e => setMemberSearch(e.target.value)}
+              placeholder="Buscar por nombre o correo..."
+              className="input-dark pl-9 text-sm"
+            />
+          </div>
+
+          {/* Seleccionar todos / limpiar */}
+          {addableUsers.length > 0 && (
+            <div className="flex items-center justify-between">
+              <p className="text-[10px] text-dark-muted font-bold uppercase tracking-widest">
+                {selectedMemberIds.size > 0 ? `${selectedMemberIds.size} seleccionado(s)` : 'Selecciona integrantes'}
+              </p>
+              <div className="flex gap-2">
+                <button onClick={() => setSelectedMemberIds(new Set(addableUsers.map((u: any) => u.id)))} className="text-[10px] text-primary-400 font-bold hover:underline">
+                  Seleccionar todos
+                </button>
+                {selectedMemberIds.size > 0 && (
+                  <button onClick={() => setSelectedMemberIds(new Set())} className="text-[10px] text-dark-muted font-bold hover:underline">
+                    Limpiar
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Lista de usuarios disponibles */}
+          <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+            {loadingUsers ? (
+              [1,2,3].map(n => <div key={n} className="h-14 bg-dark-bg/50 rounded-2xl animate-pulse" />)
+            ) : addableUsers.length === 0 ? (
+              <div className="text-center py-8">
+                <Users size={24} className="mx-auto text-dark-muted mb-2 opacity-30" />
+                <p className="text-sm text-dark-muted">
+                  {memberSearch ? 'Sin resultados para esa búsqueda' : 'No hay aprendices ni líderes disponibles para añadir'}
+                </p>
+              </div>
+            ) : addableUsers.map((u: any) => {
+              const isSelected = selectedMemberIds.has(u.id);
+              const esLiderTecnico = u.es_lider_tecnico === true;
+              return (
+                <button
+                  key={u.id}
+                  onClick={() => toggleSelectMember(u.id)}
+                  className={`w-full flex items-center gap-3 p-3 rounded-2xl border transition-all text-left ${
+                    isSelected ? 'bg-primary-600/15 border-primary-500/40' : 'bg-dark-bg/50 border-dark-border hover:border-dark-border/80'
+                  }`}
+                >
+                  <div className={`w-5 h-5 rounded-lg border flex items-center justify-center shrink-0 transition-all ${
+                    isSelected ? 'bg-primary-600 border-primary-500' : 'border-dark-border bg-dark-bg'
+                  }`}>
+                    {isSelected && <Check size={11} className="text-white" />}
+                  </div>
+                  <AvatarBadge nombre={u.nombre} url={u.avatar_url} size={8} />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-bold text-dark-text truncate">{u.nombre}</p>
+                    <p className="text-[10px] text-dark-muted truncate">{u.correo}</p>
+                  </div>
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-lg border ${
+                    esLiderTecnico
+                      ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                      : 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20'
+                  }`}>
+                    {esLiderTecnico ? 'Líder técnico' : 'Aprendiz'}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Botón añadir */}
+          <button
+            onClick={() => selectedMemberIds.size > 0 && addMembersMutation.mutate([...selectedMemberIds])}
+            disabled={selectedMemberIds.size === 0 || addMembersMutation.isPending}
+            className="w-full py-3.5 bg-primary-600 hover:bg-primary-500 disabled:opacity-40 disabled:cursor-not-allowed text-white font-black uppercase tracking-widest rounded-2xl text-xs transition-all flex items-center justify-center gap-2"
+          >
+            {addMembersMutation.isPending ? (
+              <><span className="animate-spin inline-block w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full" /> Añadiendo...</>
+            ) : selectedMemberIds.size === 0
+              ? 'Selecciona integrantes para añadir'
+              : `Añadir ${selectedMemberIds.size} integrante${selectedMemberIds.size > 1 ? 's' : ''} al proyecto`}
+          </button>
         </div>
       </Modal>
     </motion.div>
@@ -403,8 +681,6 @@ const ProyectoDetalle = ({ proyectoId, onBack }: { proyectoId: number; onBack: (
 
 /**
  * Panel de gestión de aprendices de la ficha.
- * Permite seleccionar VARIOS aprendices a la vez y vincularlos en un solo clic.
- * También permite promover/degradar y desvincular.
  */
 const AprendicesManager = ({ fichaId, canManage }: { fichaId: number; canManage: boolean }) => {
   const qc = useQueryClient();
@@ -465,11 +741,19 @@ const AprendicesManager = ({ fichaId, canManage }: { fichaId: number; canManage:
   const promoteMutation = useMutation({
     mutationFn: (userId: number) => fichaService.promoteToLider(fichaId, userId),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['fichas', fichaId, 'members'] }); },
+    onError: (err: any) => {
+      const msg = err?.response?.data?.message;
+      alert(`No se pudo promover: ${Array.isArray(msg) ? msg.join(', ') : (msg || 'Error desconocido')}`);
+    },
   });
 
   const demoteMutation = useMutation({
     mutationFn: (userId: number) => fichaService.demoteToAprendiz(fichaId, userId),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['fichas', fichaId, 'members'] }); },
+    onError: (err: any) => {
+      const msg = err?.response?.data?.message;
+      alert(`No se pudo quitar el rol: ${Array.isArray(msg) ? msg.join(', ') : (msg || 'Error desconocido')}`);
+    },
   });
 
   const membersArr = members as any[];
@@ -506,18 +790,13 @@ const AprendicesManager = ({ fichaId, canManage }: { fichaId: number; canManage:
     setImportResult(null);
   };
 
-  const downloadTemplate = () => {
-    // Build a minimal CSV-like template as a downloadable .csv
-    // (no xlsx lib on frontend; CSV works fine with Excel)
-    const header = 'nombre,correo,telefono,bio';
-    const example = 'Juan Pérez,juan.perez@example.com,3001234567,Aprendiz ADSO';
-    const blob = new Blob([header + '\n' + example], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'plantilla_aprendices.csv';
-    a.click();
-    URL.revokeObjectURL(url);
+  const downloadTemplate = async () => {
+    try {
+      await fichaService.downloadTemplate();
+    } catch (err: any) {
+      alert('No se pudo descargar la plantilla. Verifica que el servidor esté activo.');
+      console.error('downloadTemplate error:', err);
+    }
   };
 
   const openModal = () => {
@@ -530,11 +809,11 @@ const AprendicesManager = ({ fichaId, canManage }: { fichaId: number; canManage:
     setActiveTab('manual');
   };
 
-  const aprendices = membersArr.filter(m => m.rol === 'aprendiz');
-  const lideres    = membersArr.filter(m => m.rol === 'lider_tecnico');
+  const lideres    = membersArr.filter(m => m.rol === 'aprendiz' && m.es_lider_tecnico);
+  const aprendices = membersArr.filter(m => m.rol === 'aprendiz' && !m.es_lider_tecnico);
 
   return (
-    <div className="bg-dark-card border border-dark-border rounded-[2rem] p-5 space-y-4">
+    <div className="bg-dark-card border border-dark-border rounded-[2rem] p-5 space-y-4 mx-14">
       {/* Header */}
       <div className="flex items-center justify-between">
         <h3 className="text-xs font-black text-dark-muted uppercase tracking-widest flex items-center gap-2">
@@ -704,11 +983,11 @@ const AprendicesManager = ({ fichaId, canManage }: { fichaId: number; canManage:
                         <p className="text-[10px] text-dark-muted truncate">{u.correo}</p>
                       </div>
                       <span className={`text-[10px] font-bold px-2 py-0.5 rounded-lg border capitalize ${
-                        u.rol === 'lider_tecnico'
+                        u.es_lider_tecnico
                           ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
                           : 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20'
                       }`}>
-                        {u.rol === 'lider_tecnico' ? 'Líder' : 'Aprendiz'}
+                        {u.es_lider_tecnico ? 'Líder técnico' : 'Aprendiz'}
                       </span>
                     </button>
                   );
@@ -729,13 +1008,19 @@ const AprendicesManager = ({ fichaId, canManage }: { fichaId: number; canManage:
           {activeTab === 'excel' && (
             <div className="space-y-4">
               {/* Info box */}
-              <div className="px-4 py-3 bg-emerald-500/8 border border-emerald-500/20 rounded-2xl space-y-1">
-                <p className="text-[11px] font-black text-emerald-400 uppercase tracking-widest">Importación masiva desde Excel</p>
+              <div className="px-4 py-3 bg-emerald-500/8 border border-emerald-500/20 rounded-2xl space-y-1.5">
+                <p className="text-[11px] font-black text-emerald-400 uppercase tracking-widest">Importación masiva desde Excel / CSV</p>
                 <p className="text-[10px] text-dark-muted leading-relaxed">
-                  El archivo debe tener columnas: <span className="text-dark-text font-bold">nombre</span>, <span className="text-dark-text font-bold">correo</span>, telefono (opc.), bio (opc.)
+                  Columnas requeridas: <span className="text-dark-text font-bold">nombre</span>, <span className="text-dark-text font-bold">correo</span>
+                  <span className="text-dark-muted"> · Opcionales: </span>
+                  <span className="text-dark-text font-semibold">telefono</span>, <span className="text-dark-text font-semibold">bio</span>
                 </p>
-                <p className="text-[10px] text-emerald-400/80">
-                  Los aprendices nuevos se crearán con contraseña: <span className="font-black">Sena2025*</span>
+                <div className="flex items-center gap-2 pt-0.5">
+                  <span className="text-[10px] text-dark-muted">Contraseña inicial para cuentas nuevas:</span>
+                  <span className="px-2 py-0.5 bg-emerald-500/15 border border-emerald-500/30 rounded-lg text-[11px] font-black text-emerald-300 tracking-wider font-mono">Sena2025*</span>
+                </div>
+                <p className="text-[10px] text-amber-400/70 leading-relaxed">
+                  ⚠ Si el correo ya existe, el aprendiz se vincula sin cambiar su contraseña.
                 </p>
               </div>
 
@@ -744,7 +1029,7 @@ const AprendicesManager = ({ fichaId, canManage }: { fichaId: number; canManage:
                 onClick={downloadTemplate}
                 className="w-full flex items-center justify-center gap-2 py-2.5 bg-dark-bg/60 border border-dark-border hover:border-primary-500/30 text-dark-muted hover:text-primary-400 rounded-2xl text-xs font-black uppercase tracking-widest transition-all"
               >
-                <Download size={13} /> Descargar plantilla .csv
+                <Download size={13} /> Descargar plantilla .xlsx
               </button>
 
               {/* Dropzone */}
@@ -897,26 +1182,26 @@ const MemberRow = ({
       {isLider ? 'Líder' : 'Aprendiz'}
     </span>
 
-    {/* Acciones — visibles al hacer hover si el usuario puede gestionar */}
+    {/* Acciones — siempre visibles en móvil, al hover en desktop */}
     {canManage && (
-      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+      <div className="flex items-center gap-1 opacity-60 group-hover:opacity-100 transition-opacity">
         {isLider ? (
           <button
             onClick={onDemote}
             disabled={isLoading}
             title="Quitar rol de Líder Técnico"
-            className="p-1.5 rounded-xl text-amber-400 hover:bg-amber-500/10 transition-all disabled:opacity-40"
+            className="flex items-center gap-1 px-2 py-1 rounded-xl text-amber-400 hover:bg-amber-500/10 transition-all disabled:opacity-40 text-[10px] font-bold"
           >
-            <Crown size={12} />
+            <Crown size={11} /> Quitar líder
           </button>
         ) : (
           <button
             onClick={onPromote}
             disabled={isLoading}
             title="Promover a Líder Técnico"
-            className="p-1.5 rounded-xl text-emerald-400 hover:bg-emerald-500/10 transition-all disabled:opacity-40"
+            className="flex items-center gap-1 px-2 py-1 rounded-xl text-emerald-400 hover:bg-emerald-500/10 transition-all disabled:opacity-40 text-[10px] font-bold"
           >
-            <Crown size={12} />
+            <Crown size={11} /> Hacer líder
           </button>
         )}
         <button
@@ -937,7 +1222,8 @@ const FichaDetalle = ({
 }: { fichaId: number; onBack: () => void; onSelectProyecto: (id: number) => void }) => {
   const { user } = useAuthStore();
   const qc = useQueryClient();
-  const [showModal, setShowModal] = useState(false);
+  const [showModal, setShowModal]   = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
   const { data: ficha, isLoading: loadingFicha } = useQuery({
     queryKey: ['fichas', fichaId],
@@ -966,12 +1252,35 @@ const FichaDetalle = ({
   });
 
   const proyectosArr = proyectos as any[];
+
+  const [showTrimModal, setShowTrimModal]       = useState(false);
+  const [numTrimFicha, setNumTrimFicha]         = useState(3);
+  const canManageTrim = user?.rol === 'coordinador' || user?.rol === 'instructor';
+
+  const { data: trimestres = [], isLoading: loadingTrim } = useQuery({
+    queryKey: ['fichas', fichaId, 'trimestres'],
+    queryFn:  () => fichaService.getTrimestres(fichaId),
+    staleTime: 1000 * 30,
+  });
+  const trimestresArr = trimestres as any[];
+
+  const generateTrimMutation = useMutation({
+    mutationFn: (dto: any) => fichaService.generateTrimestres(fichaId, dto),
+    onSuccess:  () => {
+      qc.invalidateQueries({ queryKey: ['fichas', fichaId, 'trimestres'] });
+      setShowTrimModal(false);
+    },
+    onError: (e: any) => alert(e?.response?.data?.message ?? 'Error al generar trimestres'),
+  });
+
+  const fmt = (d: string) => {
+    if (!d) return '—';
+    return new Date(d).toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' });
+  };
   const canCreate = user?.rol === 'coordinador' || user?.rol === 'instructor';
   const canManageMembers = user?.rol === 'coordinador' || user?.rol === 'instructor';
 
-  const aprendicesCount = (fichaMembers as any[]).filter(u =>
-    u.rol === 'aprendiz' || u.rol === 'lider_tecnico'
-  ).length;
+  const aprendicesCount = (fichaMembers as any[]).filter(u => u.rol === 'aprendiz').length;
 
   if (loadingFicha) return <div className="space-y-4">{[1,2].map(n=><SkeletonCard key={n}/>)}</div>;
   if (!ficha) return null;
@@ -1009,11 +1318,26 @@ const FichaDetalle = ({
               <span className="flex items-center gap-1.5"><Calendar size={12}/> Fin: {ficha.fecha_fin}</span>
             </div>
           </div>
-          {canCreate && (
-            <Button onClick={() => setShowModal(true)} className="flex items-center gap-2 shrink-0">
-              <Plus size={14} /> Nuevo Proyecto
-            </Button>
-          )}
+          <div className="flex items-center gap-2 shrink-0">
+            {/* ── NUEVO: botón que abre el aside de aprendices ── */}
+            <button
+              onClick={() => setDrawerOpen(true)}
+              className="flex items-center gap-2 px-4 py-2.5 bg-dark-bg border border-dark-border hover:border-primary-500/40 text-dark-muted hover:text-primary-400 rounded-2xl text-xs font-black uppercase tracking-widest transition-all"
+            >
+              <GraduationCap size={14} />
+              Aprendices
+              {aprendicesCount > 0 && (
+                <span className="bg-primary-500/20 text-primary-400 px-1.5 py-0.5 rounded-lg text-[10px] font-black">
+                  {aprendicesCount}
+                </span>
+              )}
+            </button>
+            {canCreate && (
+              <Button onClick={() => setShowModal(true)} className="flex items-center gap-2">
+                <Plus size={14} /> Nuevo Proyecto
+              </Button>
+            )}
+          </div>
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-5">
@@ -1031,8 +1355,93 @@ const FichaDetalle = ({
         </div>
       </div>
 
-      {/* Aprendices manager — nueva sección */}
-      <AprendicesManager fichaId={fichaId} canManage={canManageMembers} />
+      {/* ── Trimestres de la ficha ──────────────────────────────────────────── */}
+      <div className="bg-dark-card border border-dark-border rounded-[2rem] p-5 space-y-4">
+        <div className="flex items-center justify-between">
+          <h3 className="text-xs font-black text-dark-muted uppercase tracking-widest flex items-center gap-2">
+            <Layers size={13} /> Trimestres de la Ficha ({trimestresArr.length})
+          </h3>
+          {canManageTrim && (
+            <button
+              onClick={() => setShowTrimModal(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-[#27ae60]/10 border border-[#27ae60]/25 text-[#27ae60] rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-[#27ae60]/20 transition-all"
+            >
+              <Settings size={12} /> {trimestresArr.length > 0 ? 'Reconfigurar' : 'Configurar'}
+            </button>
+          )}
+        </div>
+
+        {loadingTrim ? (
+          <div className="h-16 animate-pulse bg-dark-bg rounded-2xl" />
+        ) : trimestresArr.length === 0 ? (
+          <div className="text-center py-6 border border-dashed border-dark-border rounded-2xl">
+            <Layers size={20} className="mx-auto text-dark-muted mb-2 opacity-30" />
+            <p className="text-xs text-dark-muted">Sin trimestres configurados</p>
+            {canManageTrim && (
+              <button onClick={() => setShowTrimModal(true)} className="mt-2 text-[11px] text-[#27ae60] font-bold">
+                → Configurar ahora
+              </button>
+            )}
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            {trimestresArr.map((t: any) => (
+              <div key={t.id} className={`rounded-xl border p-3 ${
+                t.tipo === 'documental'
+                  ? 'border-amber-500/25 bg-amber-500/5'
+                  : 'border-[#27ae60]/25 bg-[#27ae60]/5'
+              }`}>
+                <div className="flex items-center justify-between mb-1">
+                  <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded border ${
+                    t.tipo === 'documental'
+                      ? 'text-amber-400 border-amber-500/20 bg-amber-500/10'
+                      : 'text-[#27ae60] border-[#27ae60]/20 bg-[#27ae60]/10'
+                  }`}>{t.tipo === 'documental' ? 'Documental' : 'Desarrollo'}</span>
+                  {t.esta_finalizado && <CheckCircle2 size={12} className="text-dark-muted" />}
+                </div>
+                <p className="text-xs font-black text-dark-text">{t.nombre || `Trimestre ${t.numero}`}</p>
+                <p className="text-[10px] text-dark-muted mt-0.5">{fmt(t.fecha_inicio)} → {fmt(t.fecha_fin)}</p>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Modal configurar trimestres de la ficha */}
+      <Modal isOpen={showTrimModal} onClose={() => setShowTrimModal(false)} title="Configurar trimestres" size="lg">
+        <div className="space-y-5">
+          {trimestresArr.length > 0 && (
+            <div className="flex items-start gap-2 p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl">
+              <AlertTriangle size={14} className="text-amber-400 shrink-0 mt-0.5" />
+              <p className="text-xs text-amber-400">Los trimestres anteriores serán eliminados.</p>
+            </div>
+          )}
+          <div className="space-y-2 bg-[#27ae60]/5 border border-[#27ae60]/20 rounded-xl p-4">
+            <div className="flex items-center justify-between">
+              <label className="text-[10px] font-bold text-[#27ae60] uppercase tracking-[0.15em]">Número de trimestres</label>
+              <span className="text-2xl font-black text-[#27ae60]">{numTrimFicha}</span>
+            </div>
+            <input
+              type="range" min={3} max={10} step={1}
+              value={numTrimFicha}
+              onChange={e => setNumTrimFicha(Number(e.target.value))}
+              className="w-full accent-[#27ae60] cursor-pointer"
+            />
+            <p className="text-[10px] text-zinc-500">
+              Cada trimestre dura 3 meses desde la fecha de inicio de la ficha · Total: {numTrimFicha * 3} meses
+            </p>
+          </div>
+          <button
+            onClick={() => generateTrimMutation.mutate({ num: numTrimFicha })}
+            disabled={generateTrimMutation.isPending}
+            className="w-full py-3.5 bg-[#27ae60] hover:bg-[#219653] disabled:opacity-50 text-white font-bold rounded-xl transition-all flex items-center justify-center gap-2"
+          >
+            {generateTrimMutation.isPending
+              ? <><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Generando...</>
+              : `Generar ${numTrimFicha} trimestres →`}
+          </button>
+        </div>
+      </Modal>
 
       {/* Projects list */}
       <div>
@@ -1090,36 +1499,113 @@ const FichaDetalle = ({
         )}
       </div>
 
+{/* ── NUEVO: Aside deslizable de aprendices ──────────────────────── */}
+      {drawerOpen && (
+        <>
+          {/* Overlay */}
+          <div
+            className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm"
+            onClick={() => setDrawerOpen(false)}
+          />
+          {/* Panel lateral */}
+          <div className="fixed right-0 top-0 h-full w-full max-w-[480px] z-50 bg-dark-card border-l border-dark-border shadow-2xl overflow-y-auto">
+            {/* Header del aside */}
+            <div className="sticky top-0 bg-dark-card border-b border-dark-border px-6 py-4 flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-black text-dark-text uppercase tracking-widest flex items-center gap-2">
+                  <GraduationCap size={15} className="text-primary-400" />
+                  Aprendices de la Ficha
+                </h3>
+                <p className="text-[10px] text-dark-muted mt-0.5">
+                  {ficha?.codigo} · {ficha?.programa}
+                </p>
+              </div>
+              <button
+                onClick={() => setDrawerOpen(false)}
+                className="p-2 rounded-xl text-dark-muted hover:text-dark-text hover:bg-dark-bg/60 transition-all"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            {/* Contenido: AprendicesManager existente */}
+            <div className="p-4">
+              <AprendicesManager fichaId={fichaId} canManage={canManageMembers} />
+            </div>
+          </div>
+        </>
+      )}
       {/* Create project modal */}
-      <Modal isOpen={showModal} onClose={() => setShowModal(false)} title="Nuevo Proyecto Formativo">
+      <Modal isOpen={showModal} onClose={() => setShowModal(false)} title="Nuevo Proyecto Formativo" size="lg">
         <form onSubmit={e => {
           e.preventDefault();
           const f = new FormData(e.currentTarget);
           createProyectoMutation.mutate({
-            nombre:       f.get('nombre'),
-            descripcion:  f.get('descripcion'),
+            nombre:                f.get('nombre'),
+            descripcion:           f.get('descripcion'),
+            competencia:           f.get('competencia'),
+            resultado_aprendizaje: f.get('resultado_aprendizaje'),
             fichaId,
             fecha_inicio: f.get('fecha_inicio'),
             fecha_fin:    f.get('fecha_fin'),
           } as any);
         }} className="space-y-5">
-          <FormField label="Nombre del Proyecto">
-            <input name="nombre" required className="input-dark" placeholder="Ej: Sistema de Inventarios SENA" />
-          </FormField>
-          <FormField label="Descripción">
-            <textarea name="descripcion" className="input-dark resize-none" rows={3} />
-          </FormField>
-          <div className="grid grid-cols-2 gap-4">
-            <FormField label="Fecha Inicio">
-              <input name="fecha_inicio" type="date" required className="input-dark" />
-            </FormField>
-            <FormField label="Fecha Fin">
-              <input name="fecha_fin" type="date" required className="input-dark" />
-            </FormField>
+
+          {/* Nombre */}
+          <div className="space-y-1.5">
+            <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-[0.15em]">Nombre del proyecto</label>
+            <input name="nombre" required
+              placeholder="Ej: Sistema de Inventarios SENA"
+              className="w-full px-4 py-3 bg-zinc-950 border border-zinc-800 rounded-xl text-[13px] text-white placeholder:text-zinc-600 outline-none focus:border-[#27ae60]/50 transition-colors"
+            />
           </div>
-          <Button type="submit" isLoading={createProyectoMutation.isPending} className="w-full py-4">
-            Crear Proyecto
-          </Button>
+
+          {/* Descripción */}
+          <div className="space-y-1.5">
+            <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-[0.15em]">Descripción</label>
+            <textarea name="descripcion" rows={2}
+              className="w-full px-4 py-3 bg-zinc-950 border border-zinc-800 rounded-xl text-[13px] text-white placeholder:text-zinc-600 outline-none focus:border-[#27ae60]/50 transition-colors resize-none"
+            />
+          </div>
+
+          {/* Competencia y Resultado */}
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-[0.15em]">Competencia</label>
+              <textarea name="competencia" rows={2}
+                className="w-full px-4 py-3 bg-zinc-950 border border-zinc-800 rounded-xl text-[13px] text-white placeholder:text-zinc-600 outline-none focus:border-[#27ae60]/50 transition-colors resize-none"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-[0.15em]">Resultado de aprendizaje</label>
+              <textarea name="resultado_aprendizaje" rows={2}
+                className="w-full px-4 py-3 bg-zinc-950 border border-zinc-800 rounded-xl text-[13px] text-white placeholder:text-zinc-600 outline-none focus:border-[#27ae60]/50 transition-colors resize-none"
+              />
+            </div>
+          </div>
+
+          {/* Fechas */}
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-[0.15em]">Fecha de inicio</label>
+              <input name="fecha_inicio" type="date" required
+                className="w-full px-4 py-3 bg-zinc-950 border border-zinc-800 rounded-xl text-[13px] text-white outline-none focus:border-[#27ae60]/50 transition-colors"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-[0.15em]">Fecha de fin</label>
+              <input name="fecha_fin" type="date" required
+                className="w-full px-4 py-3 bg-zinc-950 border border-zinc-800 rounded-xl text-[13px] text-white outline-none focus:border-[#27ae60]/50 transition-colors"
+              />
+            </div>
+          </div>
+
+          <button type="submit" disabled={createProyectoMutation.isPending}
+            className="w-full py-3.5 bg-[#27ae60] hover:bg-[#219653] disabled:opacity-50 text-white font-bold rounded-xl transition-all flex items-center justify-center gap-2 shadow-lg shadow-[#27ae60]/20"
+          >
+            {createProyectoMutation.isPending
+              ? <><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Creando...</>
+              : 'Crear proyecto →'}
+          </button>
         </form>
       </Modal>
     </motion.div>
@@ -1137,13 +1623,13 @@ export const FichasPanel = () => {
 
   const { data: fichas = [], isLoading } = useQuery({
     queryKey: ['fichas'],
-    queryFn: fichaService.getAll,
+    queryFn: () => fichaService.getAll(),
     staleTime: 1000 * 60,
   });
 
   const { data: users = [] } = useQuery({
     queryKey: ['users'],
-    queryFn: userService.getAll,
+    queryFn: () => userService.getAll(),
   });
 
   const instructors = (users as any[]).filter(u => u.rol === 'instructor');
@@ -1197,7 +1683,7 @@ export const FichasPanel = () => {
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 mx-6 mt-6">
       {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-dark-card/30 p-6 rounded-[2rem] border border-dark-border">
         <div>
@@ -1293,8 +1779,8 @@ export const FichasPanel = () => {
             programa:     f.get('programa') as string,
             fecha_inicio: f.get('fecha_inicio') as string,
             fecha_fin:    f.get('fecha_fin') as string,
-            instructorId: f.get('instructor_id') ? Number(f.get('instructor_id')) : null,
-          });
+            instructor_id: f.get('instructor_id') ? Number(f.get('instructor_id')) : undefined,
+          } as any);
           (e.target as HTMLFormElement).reset();
         }} className="space-y-5">
           <FormField label="Código de la Ficha">

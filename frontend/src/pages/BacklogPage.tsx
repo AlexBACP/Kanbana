@@ -1,10 +1,10 @@
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { 
-  ChevronLeft, 
-  Plus, 
-  Search, 
-  MoreVertical, 
+import {
+  ChevronLeft,
+  Plus,
+  Search,
+  MoreVertical,
   GripVertical,
   Play,
   Calendar,
@@ -20,6 +20,7 @@ import { CreateTicketDto, CreateSprintDto } from '../types/ticket.types';
 import { useAuthStore } from '../store/auth.store';
 
 export const BacklogPage = () => {
+  const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
   const projectId = Number(id);
   const queryClient = useQueryClient();
@@ -29,7 +30,9 @@ export const BacklogPage = () => {
   const [searchTerm, setSearchTerm] = useState('');
 
   const isAdmin = user?.rol === 'coordinador' || user?.rol === 'instructor';
-  const isLead = user?.rol === 'lider_tecnico';
+  const isLead = user?.rol === 'aprendiz' && (user as any).es_lider_tecnico;
+  // El líder NO puede crear módulos directamente — debe solicitarlo al instructor
+  const canCreateSprint = isAdmin;
 
   const { data: project } = useQuery({
     queryKey: ['projects', projectId],
@@ -50,10 +53,10 @@ export const BacklogPage = () => {
   });
 
   const createTicketMutation = useMutation({
-    mutationFn: (data: CreateTicketDto) => ticketService.create({ 
-      ...data, 
+    mutationFn: (data: CreateTicketDto) => ticketService.create({
+      ...data,
       proyecto_id: projectId,
-      story_points: Number(data.story_points) || 0 
+      story_points: Number(data.story_points) || 0
     }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tickets', projectId] });
@@ -72,7 +75,7 @@ export const BacklogPage = () => {
   });
 
   const moveTaskMutation = useMutation({
-    mutationFn: ({ ticketId, sprint_id }: { ticketId: number, sprint_id: number | null }) => 
+    mutationFn: ({ ticketId, sprint_id }: { ticketId: number, sprint_id: number | null }) =>
       ticketService.moveTask(ticketId, sprint_id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tickets', projectId] });
@@ -90,7 +93,7 @@ export const BacklogPage = () => {
   const { register: regTicket, handleSubmit: handleTicketSubmit, reset: resetTicket } = useForm<CreateTicketDto>();
   const { register: regSprint, handleSubmit: handleSprintSubmit, reset: resetSprint } = useForm();
 
-  const filteredBacklog = backlogTickets.filter(t => 
+  const filteredBacklog = backlogTickets.filter(t =>
     t.titulo.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
@@ -126,18 +129,18 @@ export const BacklogPage = () => {
           />
         </div>
         <div className="flex items-center gap-3">
-          {(isAdmin || isLead) && (
-            <Button 
-              onClick={() => setIsSprintModalOpen(true)} 
-              variant="secondary" 
+          {(isAdmin) && (
+            <Button
+              onClick={() => setIsSprintModalOpen(true)}
+              variant="secondary"
               className="flex items-center gap-2 px-6 py-4 bg-dark-bg border border-dark-border text-dark-text hover:bg-dark-border rounded-2xl font-black text-sm transition-all"
             >
               <Plus size={18} />
               Nuevo Sprint
             </Button>
           )}
-          <Button 
-            onClick={() => setIsTicketModalOpen(true)} 
+          <Button
+            onClick={() => setIsTicketModalOpen(true)}
             className="flex items-center gap-2 px-6 py-4 bg-primary-600 hover:bg-primary-700 text-white rounded-2xl font-black text-sm shadow-xl shadow-primary-500/20 transition-all active:scale-95"
           >
             <Plus size={18} />
@@ -153,19 +156,17 @@ export const BacklogPage = () => {
             <div key={sprint.id} className="bg-dark-card rounded-[2.5rem] border border-dark-border shadow-2xl overflow-hidden group hover:border-primary-500/20 transition-all duration-500">
               <div className="bg-dark-bg/40 px-8 py-6 flex items-center justify-between border-b border-dark-border">
                 <div className="flex items-center gap-5">
-                  <div className={`w-12 h-12 rounded-2xl flex items-center justify-center border ${
-                    sprint.esta_activo 
-                      ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20 animate-pulse' 
+                  <div className={`w-12 h-12 rounded-2xl flex items-center justify-center border ${sprint.esta_activo
+                      ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20 animate-pulse'
                       : 'bg-dark-bg text-dark-muted border-dark-border'
-                  }`}>
+                    }`}>
                     <Calendar size={20} />
                   </div>
                   <div>
                     <h3 className="font-black text-dark-text text-lg tracking-tight group-hover:text-primary-400 transition-colors">{sprint.nombre}</h3>
                     <div className="flex items-center gap-3 mt-1">
-                      <span className={`px-2 py-0.5 rounded-lg text-[10px] font-black uppercase tracking-widest ${
-                        sprint.esta_activo ? 'bg-emerald-500 text-white' : 'bg-dark-border text-dark-muted'
-                      }`}>
+                      <span className={`px-2 py-0.5 rounded-lg text-[10px] font-black uppercase tracking-widest ${sprint.esta_activo ? 'bg-emerald-500 text-white' : 'bg-dark-border text-dark-muted'
+                        }`}>
                         {sprint.esta_activo ? 'Activo' : sprint.esta_finalizado ? 'Finalizado' : 'Planificado'}
                       </span>
                       <span className="text-[10px] font-bold text-dark-muted uppercase tracking-tighter opacity-60">
@@ -175,15 +176,24 @@ export const BacklogPage = () => {
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
-                  {!sprint.esta_activo && !sprint.esta_finalizado && (isAdmin || isLead) && (
-                    <Button 
-                      size="sm" 
-                      variant="primary" 
+                  {!sprint.esta_activo && !sprint.esta_finalizado && isAdmin && (
+
+                    <Button
+                      size="sm"
+                      variant="primary"
                       className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-black text-xs shadow-lg shadow-emerald-500/10 transition-all flex items-center gap-2"
                       onClick={() => startSprintMutation.mutate(sprint.id)}
                     >
                       <Play size={14} fill="currentColor" /> Iniciar
                     </Button>
+                  )}
+                  {isLead && (
+                    <button
+                      onClick={() => navigate(`/projects/${projectId}`)}
+                      className="flex items-center gap-2 px-4 py-2.5 border border-[#27ae60]/30 bg-[#27ae60]/10 text-[#27ae60] rounded-xl text-xs font-bold hover:bg-[#27ae60]/20 transition-all"
+                    >
+                      <Plus size={14} /> Solicitar módulo al instructor
+                    </button>
                   )}
                   <button className="w-10 h-10 flex items-center justify-center text-dark-muted hover:text-dark-text hover:bg-dark-bg rounded-xl transition-all">
                     <MoreVertical size={20} />
@@ -214,7 +224,7 @@ export const BacklogPage = () => {
                             <span className="text-[10px] font-black text-dark-muted uppercase tracking-widest opacity-40">Puntos</span>
                             <span className="text-xs font-black text-primary-400">{ticket.story_points || 0}</span>
                           </div>
-                          <select 
+                          <select
                             className="text-[10px] font-black uppercase tracking-widest bg-dark-bg border border-dark-border rounded-xl px-3 py-2 text-dark-muted outline-none focus:border-primary-500 transition-all cursor-pointer"
                             onChange={(e) => moveTaskMutation.mutate({ ticketId: ticket.id, sprint_id: e.target.value === 'backlog' ? null : Number(e.target.value) })}
                             value=""
@@ -243,7 +253,7 @@ export const BacklogPage = () => {
         <div className="space-y-6">
           <div className="flex items-center justify-between px-4">
             <h2 className="text-2xl font-black text-dark-text tracking-tight flex items-center gap-4">
-              Backlog 
+              Backlog
               <span className="text-xs font-black bg-dark-card border border-dark-border text-dark-muted px-3 py-1 rounded-full uppercase tracking-widest">{filteredBacklog.length}</span>
             </h2>
           </div>
@@ -264,26 +274,25 @@ export const BacklogPage = () => {
                       </div>
                     </div>
                     <div className="flex items-center gap-6">
-                      <div className={`px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest ${
-                        ticket.prioridad === 'alta' ? 'bg-rose-500/10 text-rose-500 border border-rose-500/20' :
-                        ticket.prioridad === 'media' ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20' :
-                        'bg-dark-bg text-dark-muted border border-dark-border'
-                      }`}>
+                      <div className={`px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest ${ticket.prioridad === 'alta' ? 'bg-rose-500/10 text-rose-500 border border-rose-500/20' :
+                          ticket.prioridad === 'media' ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20' :
+                            'bg-dark-bg text-dark-muted border border-dark-border'
+                        }`}>
                         {ticket.prioridad}
                       </div>
                       <div className="flex flex-col items-end min-w-[40px]">
                         <span className="text-[10px] font-black text-dark-muted uppercase tracking-widest opacity-40">Pts</span>
                         <span className="text-xs font-black text-dark-text">{ticket.story_points || 0}</span>
                       </div>
-                      <select 
+                      <select
                         className="text-[10px] font-black uppercase tracking-widest bg-dark-bg border border-dark-border rounded-xl px-3 py-2 text-dark-muted outline-none focus:border-primary-500 transition-all cursor-pointer"
                         onChange={(e) => moveTaskMutation.mutate({ ticketId: ticket.id, sprint_id: Number(e.target.value) })}
                         value=""
                       >
                         <option value="" disabled>Mover a</option>
                         {sprints.filter((s: any) => !s.esta_finalizado).map((s: any) => (
-                            <option key={s.id} value={s.id}>{s.nombre}</option>
-                          ))}
+                          <option key={s.id} value={s.id}>{s.nombre}</option>
+                        ))}
                       </select>
                     </div>
                   </div>
@@ -296,40 +305,40 @@ export const BacklogPage = () => {
         </div>
       </div>
 
-      {/* Modal Nuevo Ticket */}
+      {/* Modal Nuevo Tarea */}
       <Modal isOpen={isTicketModalOpen} onClose={() => setIsTicketModalOpen(false)} title="Nueva Historia de Usuario">
         <form onSubmit={handleTicketSubmit((data) => createTicketMutation.mutate(data))} className="space-y-6">
           <div className="space-y-2">
             <label className="block text-xs font-black text-dark-muted uppercase tracking-widest ml-1">Título de la Historia</label>
-            <input 
-              {...regTicket('titulo', { required: 'El título es obligatorio' })} 
-              className="w-full px-5 py-4 bg-dark-bg/50 border border-dark-border rounded-2xl text-sm text-dark-text outline-none focus:ring-4 focus:ring-primary-500/10 focus:border-primary-500 transition-all placeholder:text-dark-muted/30" 
-              placeholder="Ej: Como usuario quiero poder filtrar por fecha..." 
+            <input
+              {...regTicket('titulo', { required: 'El título es obligatorio' })}
+              className="w-full px-5 py-4 bg-dark-bg/50 border border-dark-border rounded-2xl text-sm text-dark-text outline-none focus:ring-4 focus:ring-primary-500/10 focus:border-primary-500 transition-all placeholder:text-dark-muted/30"
+              placeholder="Ej: Como usuario quiero poder filtrar por fecha..."
             />
           </div>
           <div className="space-y-2">
             <label className="block text-xs font-black text-dark-muted uppercase tracking-widest ml-1">Descripción / Criterios de Aceptación</label>
-            <textarea 
-              {...regTicket('descripcion', { required: 'La descripción es obligatoria' })} 
-              rows={4} 
-              className="w-full px-5 py-4 bg-dark-bg/50 border border-dark-border rounded-2xl text-sm text-dark-text outline-none focus:ring-4 focus:ring-primary-500/10 focus:border-primary-500 transition-all placeholder:text-dark-muted/30 resize-none" 
+            <textarea
+              {...regTicket('descripcion', { required: 'La descripción es obligatoria' })}
+              rows={4}
+              className="w-full px-5 py-4 bg-dark-bg/50 border border-dark-border rounded-2xl text-sm text-dark-text outline-none focus:ring-4 focus:ring-primary-500/10 focus:border-primary-500 transition-all placeholder:text-dark-muted/30 resize-none"
               placeholder="Describe los detalles de la tarea..."
             />
           </div>
           <div className="grid grid-cols-2 gap-6">
             <div className="space-y-2">
               <label className="block text-xs font-black text-dark-muted uppercase tracking-widest ml-1">Story Points</label>
-              <input 
-                type="number" 
-                {...regTicket('story_points')} 
-                className="w-full px-5 py-4 bg-dark-bg/50 border border-dark-border rounded-2xl text-sm text-dark-text outline-none focus:ring-4 focus:ring-primary-500/10 focus:border-primary-500 transition-all" 
-                defaultValue={0} 
+              <input
+                type="number"
+                {...regTicket('story_points')}
+                className="w-full px-5 py-4 bg-dark-bg/50 border border-dark-border rounded-2xl text-sm text-dark-text outline-none focus:ring-4 focus:ring-primary-500/10 focus:border-primary-500 transition-all"
+                defaultValue={0}
               />
             </div>
             <div className="space-y-2">
               <label className="block text-xs font-black text-dark-muted uppercase tracking-widest ml-1">Prioridad</label>
-              <select 
-                {...regTicket('prioridad')} 
+              <select
+                {...regTicket('prioridad')}
                 className="w-full px-5 py-4 bg-dark-bg/50 border border-dark-border rounded-2xl text-sm text-dark-text outline-none focus:ring-4 focus:ring-primary-500/10 focus:border-primary-500 transition-all"
               >
                 <option value="baja">Baja</option>
@@ -339,15 +348,15 @@ export const BacklogPage = () => {
             </div>
           </div>
           <div className="flex justify-end gap-4 pt-4">
-            <Button 
-              variant="secondary" 
+            <Button
+              variant="secondary"
               onClick={() => setIsTicketModalOpen(false)}
               className="px-6 py-4 bg-dark-bg border border-dark-border text-dark-text hover:bg-dark-border transition-all rounded-2xl font-black text-sm"
             >
               Cancelar
             </Button>
-            <Button 
-              type="submit" 
+            <Button
+              type="submit"
               isLoading={createTicketMutation.isPending}
               className="px-8 py-4 bg-primary-600 hover:bg-primary-700 text-white rounded-2xl font-black text-sm shadow-xl shadow-primary-500/20 transition-all"
             >
@@ -362,40 +371,40 @@ export const BacklogPage = () => {
         <form onSubmit={handleSprintSubmit((data) => createSprintMutation.mutate(data as CreateSprintDto))} className="space-y-6">
           <div className="space-y-2">
             <label className="block text-xs font-black text-dark-muted uppercase tracking-widest ml-1">Nombre del Sprint</label>
-            <input 
-              {...regSprint('nombre', { required: 'El nombre es obligatorio' })} 
-              className="w-full px-5 py-4 bg-dark-bg/50 border border-dark-border rounded-2xl text-sm text-dark-text outline-none focus:ring-4 focus:ring-primary-500/10 focus:border-primary-500 transition-all placeholder:text-dark-muted/30" 
-              placeholder="Ej: Sprint 1 - Core MVP" 
+            <input
+              {...regSprint('nombre', { required: 'El nombre es obligatorio' })}
+              className="w-full px-5 py-4 bg-dark-bg/50 border border-dark-border rounded-2xl text-sm text-dark-text outline-none focus:ring-4 focus:ring-primary-500/10 focus:border-primary-500 transition-all placeholder:text-dark-muted/30"
+              placeholder="Ej: Sprint 1 - Core MVP"
             />
           </div>
           <div className="grid grid-cols-2 gap-6">
             <div className="space-y-2">
               <label className="block text-xs font-black text-dark-muted uppercase tracking-widest ml-1">Fecha Inicio</label>
-              <input 
-                type="date" 
-                {...regSprint('fecha_inicio', { required: 'La fecha de inicio es obligatoria' })} 
-                className="w-full px-5 py-4 bg-dark-bg/50 border border-dark-border rounded-2xl text-sm text-dark-text outline-none focus:ring-4 focus:ring-primary-500/10 focus:border-primary-500 transition-all" 
+              <input
+                type="date"
+                {...regSprint('fecha_inicio', { required: 'La fecha de inicio es obligatoria' })}
+                className="w-full px-5 py-4 bg-dark-bg/50 border border-dark-border rounded-2xl text-sm text-dark-text outline-none focus:ring-4 focus:ring-primary-500/10 focus:border-primary-500 transition-all"
               />
             </div>
             <div className="space-y-2">
               <label className="block text-xs font-black text-dark-muted uppercase tracking-widest ml-1">Fecha Fin</label>
-              <input 
-                type="date" 
-                {...regSprint('fecha_fin', { required: 'La fecha de fin es obligatoria' })} 
-                className="w-full px-5 py-4 bg-dark-bg/50 border border-dark-border rounded-2xl text-sm text-dark-text outline-none focus:ring-4 focus:ring-primary-500/10 focus:border-primary-500 transition-all" 
+              <input
+                type="date"
+                {...regSprint('fecha_fin', { required: 'La fecha de fin es obligatoria' })}
+                className="w-full px-5 py-4 bg-dark-bg/50 border border-dark-border rounded-2xl text-sm text-dark-text outline-none focus:ring-4 focus:ring-primary-500/10 focus:border-primary-500 transition-all"
               />
             </div>
           </div>
           <div className="flex justify-end gap-4 pt-4">
-            <Button 
-              variant="secondary" 
+            <Button
+              variant="secondary"
               onClick={() => setIsSprintModalOpen(false)}
               className="px-6 py-4 bg-dark-bg border border-dark-border text-dark-text hover:bg-dark-border transition-all rounded-2xl font-black text-sm"
             >
               Cancelar
             </Button>
-            <Button 
-              type="submit" 
+            <Button
+              type="submit"
               isLoading={createSprintMutation.isPending}
               className="px-8 py-4 bg-primary-600 hover:bg-primary-700 text-white rounded-2xl font-black text-sm shadow-xl shadow-primary-500/20 transition-all"
             >

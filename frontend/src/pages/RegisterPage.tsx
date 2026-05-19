@@ -1,3 +1,24 @@
+/**
+ * RegisterPage — formulario de creación de cuenta.
+ *
+ * ── MODIFICADO ────────────────────────────────────────────────────────────
+ * Cambio respecto a la versión anterior:
+ *   Antes: tras crear la cuenta, onSubmit() comprobaba window.opener para
+ *   saber si la página había sido abierta como ventana emergente. Si lo era,
+ *   enviaba un postMessage { type: 'REGISTER_SUCCESS' } a la ventana padre y
+ *   se cerraba con window.close(). Si no, navegaba a /login.
+ *   El mensaje de éxito también cambiaba su texto según ese mismo chequeo.
+ *
+ *   Como la app dejó de usar ventanas emergentes para el flujo de auth,
+ *   esa rama ya no aplica.
+ *
+ *   Ahora: tras un registro exitoso siempre se navega a /login. El mensaje
+ *   de éxito muestra siempre "Redirigiendo al login...".
+ *
+ *   Se ELIMINARON: el chequeo de window.opener, el postMessage, el
+ *   window.close() y el texto condicional del mensaje de éxito.
+ * ──────────────────────────────────────────────────────────────────────────
+ */
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { Link, useNavigate } from 'react-router-dom';
@@ -23,13 +44,9 @@ export const RegisterPage = () => {
       setError(null);
       await userService.create({ ...data, rol: 'aprendiz' as UserRole });
       setSuccess(true);
-      // Si esta página fue abierta como ventana nueva (popup), notificar a la ventana padre
-      if (window.opener && !window.opener.closed) {
-        window.opener.postMessage({ type: 'REGISTER_SUCCESS' }, window.location.origin);
-        setTimeout(() => window.close(), 1500);
-      } else {
-        setTimeout(() => navigate('/login'), 1500);
-      }
+      // ── MODIFICADO: navegación única a /login (sin rama de popup) ──────
+      // Antes: si era popup → postMessage + window.close(); si no → navigate.
+      setTimeout(() => navigate('/login'), 1500);
     } catch (err: any) {
       setError(err?.response?.data?.message || 'Error al crear la cuenta. Intenta con otro correo.');
     }
@@ -62,7 +79,8 @@ export const RegisterPage = () => {
         {success && (
           <div className="flex items-start gap-2 p-3 bg-success-light border border-success-border rounded-lg text-success text-sm">
             <CheckCircle2 size={15} className="shrink-0 mt-0.5" />
-            <span>¡Cuenta creada! {window.opener ? 'Cerrando ventana...' : 'Redirigiendo al login...'}</span>
+            {/* ── MODIFICADO: texto fijo (antes dependía de window.opener) ── */}
+            <span>¡Cuenta creada! Redirigiendo al login...</span>
           </div>
         )}
 

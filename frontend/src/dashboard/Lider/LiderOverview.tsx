@@ -40,7 +40,7 @@ export const LiderOverview = () => {
       {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {[
-          { label: 'Total Tickets',   value: t.length,   icon: Ticket,       color: 'text-primary-400', bg: 'bg-primary-500/10' },
+          { label: 'Total Tareas',   value: t.length,   icon: Ticket,       color: 'text-primary-400', bg: 'bg-primary-500/10' },
           { label: 'Completados',    value: done,       icon: CheckCircle2,  color: 'text-emerald-400', bg: 'bg-emerald-500/10' },
           { label: 'En progreso',    value: inProgress, icon: Clock,         color: 'text-blue-400',    bg: 'bg-blue-500/10' },
           { label: 'Por hacer',      value: todo,       icon: FolderKanban,  color: 'text-amber-400',   bg: 'bg-amber-500/10' },

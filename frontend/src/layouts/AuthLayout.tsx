@@ -33,13 +33,7 @@ export const AuthLayout = () => {
   }
 
   // Mostrar el formulario de login o registro
-  return (
-    <div className="min-h-screen bg-dark-bg flex items-center justify-center p-6">
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-0 left-1/3 w-96 h-96 bg-primary-600/8 rounded-full blur-[100px]" />
-        <div className="absolute bottom-0 right-1/3 w-80 h-80 bg-slate-800/20 rounded-full blur-[80px]" />
-      </div>
-      <Outlet />
-    </div>
-  );
+  // El LoginPage y RegisterPage tienen su propio fondo completo,
+  // así que AuthLayout solo wrappea el Outlet sin estilos extra.
+  return <Outlet />;
 };

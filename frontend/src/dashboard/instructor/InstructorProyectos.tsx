@@ -165,9 +165,9 @@ const ProyectoRow = ({ proyecto: pr, expanded, onToggle, onCreateTicket }: any) 
     staleTime: 30_000,
   });
 
-  const promoteToLider = useMutation({
+  const toggleLiderMutation = useMutation({
     mutationFn: ({ userId }: { userId: number }) =>
-      userService.updateRole(userId, 'lider_tecnico'),
+      userService.toggleLiderTecnico(userId),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['projects', pr.id, 'members'] }),
   });
 
@@ -249,13 +249,18 @@ const ProyectoRow = ({ proyecto: pr, expanded, onToggle, onCreateTicket }: any) 
                     </div>
                     <button
                       onClick={() => {
-                        if (confirm(`¿Promover a ${u.nombre} como Líder Técnico?`)) {
-                          promoteToLider.mutate({ userId: u.id });
+                        const action = u.es_lider_tecnico ? 'Quitar sub-rol de Líder Técnico' : 'Asignar sub-rol de Líder Técnico';
+                        if (confirm(`¿${action} a ${u.nombre}? El rol base de aprendiz no cambia.`)) {
+                          toggleLiderMutation.mutate({ userId: u.id });
                         }
                       }}
-                      className="text-[10px] text-dark-muted hover:text-primary-400 opacity-0 group-hover:opacity-100 transition-all border border-dark-border hover:border-primary-500/30 rounded px-1.5 py-0.5"
+                      className={`text-[10px] opacity-0 group-hover:opacity-100 transition-all border rounded px-1.5 py-0.5 ${
+                        u.es_lider_tecnico
+                          ? 'text-emerald-400 border-emerald-500/30 hover:bg-rose-500/10 hover:text-rose-400 hover:border-rose-500/30'
+                          : 'text-dark-muted hover:text-primary-400 border-dark-border hover:border-primary-500/30'
+                      }`}
                     >
-                      → Líder
+                      {u.es_lider_tecnico ? '★ Líder (quitar)' : '→ Líder'}
                     </button>
                   </div>
                 ))}

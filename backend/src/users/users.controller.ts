@@ -1,7 +1,7 @@
 import {
   Controller, Get, Post, Body, Patch, Param, Delete,
   UseGuards, ParseIntPipe, Query, Request,
-  UseInterceptors, UploadedFile,
+  UseInterceptors, UploadedFile, ForbiddenException,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { FileInterceptor } from '@nestjs/platform-express';
@@ -112,9 +112,33 @@ export class UsersController {
   }
 
   // ── PATCH /users/:id/role ─────────────────────────────────────────────
+  // Solo el coordinador puede cambiar roles.
+  // Cambiar a 'coordinador' requiere que el requestor sea coordinador.
   @Patch(':id/role')
-  updateRole(@Param('id', ParseIntPipe) id: number, @Body('rol') rol: any) {
+  updateRole(
+    @Param('id', ParseIntPipe) id: number,
+    @Body('rol') rol: any,
+    @Request() req: any,
+  ) {
+    // Solo coordinadores pueden cambiar roles
+    if (req.user?.rol !== 'coordinador') {
+      throw new ForbiddenException('Solo el coordinador puede cambiar roles de usuario');
+    }
     return this.usersService.updateRole(id, rol);
+  }
+
+  // ── PATCH /users/:id/toggle-lider — activa/desactiva sub-rol líder técnico ─
+  // Solo aplica a aprendices. El rol base NO cambia.
+  @Patch(':id/toggle-lider')
+  toggleLiderTecnico(
+    @Param('id', ParseIntPipe) id: number,
+    @Request() req: any,
+  ) {
+    // Coordinador e instructor pueden asignar sub-rol
+    if (req.user?.rol !== 'coordinador' && req.user?.rol !== 'instructor') {
+      throw new ForbiddenException('Solo coordinadores e instructores pueden asignar el sub-rol de Líder Técnico');
+    }
+    return this.usersService.toggleLiderTecnico(id);
   }
 
   // ── PATCH /users/:id/toggle ───────────────────────────────────────────

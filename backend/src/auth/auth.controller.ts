@@ -51,4 +51,11 @@ export class AuthController {
   async refreshToken(@Body('refresh_token') refreshToken: string) {
     return this.authService.refreshToken(refreshToken);
   }
+
+  @Post('confirm-account')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Confirmar cuenta de aprendiz mediante token del correo' })
+  async confirmAccount(@Body('token') token: string) {
+    return this.authService.confirmAccount(token);
+  }
 }

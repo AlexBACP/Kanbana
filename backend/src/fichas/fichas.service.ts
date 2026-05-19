@@ -1,13 +1,12 @@
-import {
-  Injectable, NotFoundException, BadRequestException,
-} from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, IsNull } from 'typeorm';
 import { Ficha } from './entities/ficha.entity';
+import { Trimestre, TipoTrimestre } from '../projects/entities/trimestre.entity';
 import { User, UserRole } from '../users/entities/user.entity';
 import * as bcrypt from 'bcrypt';
-
-const DEFAULT_PASSWORD = 'Sena2025*';
+import * as crypto from 'crypto';
+import * as nodemailer from 'nodemailer';
 
 @Injectable()
 export class FichasService {
@@ -16,17 +15,17 @@ export class FichasService {
     private fichasRepository: Repository<Ficha>,
     @InjectRepository(User)
     private usersRepository: Repository<User>,
+    @InjectRepository(Trimestre)
+    private trimestresRepo: Repository<Trimestre>,
   ) {}
 
   async create(createFichaDto: any): Promise<Ficha> {
     const { instructorId, instructor_id, ...rest } = createFichaDto;
     const resolvedInstructorId = instructorId ?? instructor_id ?? null;
-
     const ficha = this.fichasRepository.create({
       ...rest,
       instructor_id: resolvedInstructorId,
     } as any);
-
     const saved = await this.fichasRepository.save(ficha as any);
     return this.findOne((saved as any).id);
   }
@@ -70,40 +69,40 @@ export class FichasService {
     await this.fichasRepository.delete(id);
   }
 
-  // ── Gestión de aprendices vinculados a la ficha ──────────────────────
+  // ── Gestión de aprendices vinculados a la ficha ─────────────────────────
 
   /**
-   * Aprendices y líderes vinculados a esta ficha (donde user.ficha_id = fichaId)
+   * Aprendices vinculados a esta ficha.
    */
   async getMembers(fichaId: number): Promise<User[]> {
-    await this.findOne(fichaId); // valida que existe
+    await this.findOne(fichaId);
     return this.usersRepository.find({
       where: { ficha: { id: fichaId } },
       relations: ['ficha'],
-      order: { rol: 'ASC', nombre: 'ASC' },
-    });
-  }
-
-  /**
-   * Aprendices/líderes SIN ficha asignada (disponibles para vincular)
-   */
-  async getAvailableUsers(): Promise<User[]> {
-    return this.usersRepository.find({
-      where: [
-        { rol: UserRole.APRENDIZ, ficha: IsNull() },
-        { rol: UserRole.LIDER,    ficha: IsNull() },
-      ],
       order: { nombre: 'ASC' },
     });
   }
 
   /**
-   * Añadir uno o varios aprendices a la ficha en una sola operación.
+   * Aprendices SIN ficha asignada — disponibles para vincular a una ficha.
+   * Solo se usan para el modal "Agregar Aprendices a la Ficha".
+   */
+  async getAvailableUsers(): Promise<User[]> {
+    return this.usersRepository.find({
+      where: { rol: UserRole.APRENDIZ, ficha: IsNull() },
+      order: { nombre: 'ASC' },
+    });
+  }
+
+  /**
+   * Añadir uno o varios aprendices a la ficha.
    * Regla: un aprendiz solo puede pertenecer a UNA ficha.
    */
-  async addMembers(fichaId: number, userIds: number[]): Promise<{ added: number[]; errors: { id: number; reason: string }[] }> {
+  async addMembers(
+    fichaId: number,
+    userIds: number[],
+  ): Promise<{ added: number[]; errors: { id: number; reason: string }[] }> {
     await this.findOne(fichaId);
-
     const ficha = await this.fichasRepository.findOne({ where: { id: fichaId } });
 
     const added: number[] = [];
@@ -120,8 +119,8 @@ export class FichasService {
         continue;
       }
 
-      if (user.rol !== UserRole.APRENDIZ && user.rol !== UserRole.LIDER) {
-        errors.push({ id: userId, reason: 'Solo aprendices y líderes técnicos pueden vincularse a fichas' });
+      if (user.rol !== UserRole.APRENDIZ) {
+        errors.push({ id: userId, reason: 'Solo se pueden vincular aprendices a una ficha' });
         continue;
       }
 
@@ -131,11 +130,10 @@ export class FichasService {
       }
 
       if (user.ficha && user.ficha.id === fichaId) {
-        // Ya está en esta ficha — no es error, se ignora silenciosamente
+        // Ya está — sin error
         continue;
       }
 
-      // Asignar la ficha al usuario
       await this.usersRepository.update(userId, { ficha: ficha } as any);
       added.push(userId);
     }
@@ -144,21 +142,49 @@ export class FichasService {
   }
 
   /**
-   * Remover un aprendiz de la ficha (desvincula, no elimina el usuario)
+   * Desvincular múltiples aprendices de la ficha en una sola operación.
+   */
+  async removeMembers(
+    fichaId: number,
+    userIds: number[],
+  ): Promise<{ removed: number[]; errors: { id: number; reason: string }[] }> {
+    await this.findOne(fichaId);
+    const removed: number[] = [];
+    const errors: { id: number; reason: string }[] = [];
+
+    for (const userId of userIds) {
+      const user = await this.usersRepository.findOne({
+        where: { id: userId },
+        relations: ['ficha'],
+      });
+      if (!user) { errors.push({ id: userId, reason: 'Usuario no encontrado' }); continue; }
+      if (!user.ficha || user.ficha.id !== fichaId) {
+        errors.push({ id: userId, reason: 'No pertenece a esta ficha' }); continue;
+      }
+      await this.usersRepository
+        .createQueryBuilder()
+        .update(User)
+        .set({ ficha: null } as any)
+        .where('id = :userId', { userId })
+        .execute();
+      removed.push(userId);
+    }
+    return { removed, errors };
+  }
+
+  /**
+   * Desvincular aprendiz de la ficha (no lo elimina del sistema).
    */
   async removeMember(fichaId: number, userId: number): Promise<void> {
     await this.findOne(fichaId);
-
     const user = await this.usersRepository.findOne({
       where: { id: userId },
       relations: ['ficha'],
     });
-
     if (!user) throw new NotFoundException('Usuario no encontrado');
     if (!user.ficha || user.ficha.id !== fichaId) {
       throw new BadRequestException('Este usuario no pertenece a esta ficha');
     }
-
     await this.usersRepository
       .createQueryBuilder()
       .update(User)
@@ -168,17 +194,16 @@ export class FichasService {
   }
 
   /**
-   * Promover aprendiz a líder técnico dentro de esta ficha.
-   * El aprendiz debe pertenecer a esta ficha.
+   * Promover aprendiz a Líder Técnico dentro de la ficha.
+   * CORRECCIÓN: NO cambia el rol base. Solo activa es_lider_tecnico=true.
+   * El usuario sigue siendo 'aprendiz' pero con permisos de lider.
    */
   async promoteToLider(fichaId: number, userId: number): Promise<User> {
     await this.findOne(fichaId);
-
     const user = await this.usersRepository.findOne({
       where: { id: userId },
       relations: ['ficha'],
     });
-
     if (!user) throw new NotFoundException('Usuario no encontrado');
     if (!user.ficha || user.ficha.id !== fichaId) {
       throw new BadRequestException('Este aprendiz no pertenece a esta ficha');
@@ -186,94 +211,115 @@ export class FichasService {
     if (user.rol !== UserRole.APRENDIZ) {
       throw new BadRequestException('Solo se puede promover a aprendices');
     }
-
-    await this.usersRepository.update(userId, { rol: UserRole.LIDER });
+    if (user.es_lider_tecnico) {
+      throw new BadRequestException('Este aprendiz ya es Líder Técnico');
+    }
+    await this.usersRepository.update(userId, { es_lider_tecnico: true });
     return this.usersRepository.findOne({ where: { id: userId }, relations: ['ficha'] });
   }
 
   /**
-   * Degradar líder técnico a aprendiz (dentro de esta ficha)
+   * Quitar sub-rol de Líder Técnico (vuelve a ser aprendiz regular).
+   * El rol base 'aprendiz' no cambia.
    */
   async demoteToAprendiz(fichaId: number, userId: number): Promise<User> {
     await this.findOne(fichaId);
-
     const user = await this.usersRepository.findOne({
       where: { id: userId },
       relations: ['ficha'],
     });
-
     if (!user) throw new NotFoundException('Usuario no encontrado');
     if (!user.ficha || user.ficha.id !== fichaId) {
       throw new BadRequestException('Este usuario no pertenece a esta ficha');
     }
-    if (user.rol !== UserRole.LIDER) {
-      throw new BadRequestException('Solo se puede degradar a líderes técnicos');
+    if (!user.es_lider_tecnico) {
+      throw new BadRequestException('Este aprendiz no tiene el sub-rol de Líder Técnico');
     }
-
-    await this.usersRepository.update(userId, { rol: UserRole.APRENDIZ });
+    await this.usersRepository.update(userId, { es_lider_tecnico: false });
     return this.usersRepository.findOne({ where: { id: userId }, relations: ['ficha'] });
   }
 
   /**
-   * Importar aprendices desde un buffer de Excel.
-   * Columnas esperadas: nombre, correo, telefono (opcional), bio (opcional)
-   * Contraseña predeterminada: Sena2025*
+   * Importar aprendices desde Excel (.xlsx, .xls) o CSV.
+   * Crea usuarios nuevos o vincula existentes a la ficha.
+   * Contraseña predeterminada para cuentas nuevas: Sena2025*
    */
-  async importFromExcel(fichaId: number, buffer: Buffer): Promise<{
+  async importFromExcel(fichaId: number, buffer: Buffer, originalName?: string): Promise<{
     created: number;
     linked: number;
     errors: { fila: number; correo: string; reason: string }[];
   }> {
-    // Lazy-load xlsx so it doesn't affect startup if not installed yet
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const XLSX = require('xlsx');
 
     await this.findOne(fichaId);
     const ficha = await this.fichasRepository.findOne({ where: { id: fichaId } });
 
-    const workbook = XLSX.read(buffer, { type: 'buffer' });
-    const sheetName = workbook.SheetNames[0];
-    const rows: any[] = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { defval: '' });
+    let rows: any[];
 
-    if (!rows.length) throw new BadRequestException('El archivo Excel está vacío o no tiene filas');
+    const isCsv = originalName?.toLowerCase().endsWith('.csv');
 
-    const hashedDefault = await bcrypt.hash(DEFAULT_PASSWORD, 10);
+    if (isCsv) {
+      // Parsear CSV manualmente para soportar encoding UTF-8
+      const text = buffer.toString('utf-8');
+      const lines = text.split(/\r?\n/).filter(l => l.trim());
+      if (lines.length < 2) throw new BadRequestException('El archivo CSV está vacío o no tiene filas de datos');
+      const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, '').toLowerCase());
+      rows = lines.slice(1).map(line => {
+        const values = line.split(',').map(v => v.trim().replace(/^"|"$/g, ''));
+        const obj: Record<string, string> = {};
+        headers.forEach((h, i) => { obj[h] = values[i] ?? ''; });
+        return obj;
+      });
+    } else {
+      const workbook  = XLSX.read(buffer, { type: 'buffer' });
+      const sheetName = workbook.SheetNames[0];
+      rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { defval: '' });
+    }
+
+    if (!rows.length) throw new BadRequestException('El archivo está vacío o no tiene filas de datos');
 
     let created = 0;
-    let linked = 0;
+    let linked  = 0;
     const errors: { fila: number; correo: string; reason: string }[] = [];
 
     for (let i = 0; i < rows.length; i++) {
-      const row = rows[i];
-      const fila = i + 2; // 1-indexed, skip header
-      const correo = (row.correo || row.Correo || row.email || row.Email || '').toString().trim().toLowerCase();
-      const nombre = (row.nombre || row.Nombre || '').toString().trim();
+      const row      = rows[i];
+      const fila     = i + 2;
+      const correo   = (row.correo || row.Correo || row.email || row.Email || '').toString().trim().toLowerCase();
+      const nombre   = (row.nombre || row.Nombre || '').toString().trim();
+      const cedula   = (row.cedula || row.Cedula || row.documento || row.Documento || '').toString().trim();
 
       if (!correo) { errors.push({ fila, correo: '', reason: 'Correo vacío' }); continue; }
       if (!nombre) { errors.push({ fila, correo, reason: 'Nombre vacío' }); continue; }
+      if (!cedula) { errors.push({ fila, correo, reason: 'Cédula/documento vacío' }); continue; }
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(correo)) {
         errors.push({ fila, correo, reason: 'Correo inválido' }); continue;
       }
 
-      // Check if user already exists
       let user = await this.usersRepository.findOne({ where: { correo }, relations: ['ficha'] });
 
       if (!user) {
-        // Create new aprendiz
+        const token      = crypto.randomBytes(32).toString('hex');
+        const hashedPass = await bcrypt.hash(cedula, 10);
         const newUser = this.usersRepository.create({
           nombre,
           correo,
-          contrasena: hashedDefault,
-          rol: UserRole.APRENDIZ,
-          telefono: (row.telefono || row.Telefono || '').toString().trim() || null,
-          bio: (row.bio || row.Bio || '').toString().trim() || null,
-          activo: true,
+          contrasena:        hashedPass,
+          rol:               UserRole.APRENDIZ,
+          telefono:          (row.telefono || row.Telefono || '').toString().trim() || null,
+          bio:               (row.bio || row.Bio || '').toString().trim() || null,
+          activo:            true,
           ficha,
+          token_activacion:  token,
+          cuenta_confirmada: false,
         } as object);
         user = await this.usersRepository.save(newUser as User);
         created++;
+        try {
+          await this.sendConfirmationEmail(correo, nombre, token);
+        } catch { /* no bloquea el import */ }
       } else {
-        // User exists — link to ficha if not already linked
         if (user.ficha && user.ficha.id !== fichaId) {
           errors.push({ fila, correo, reason: `Ya pertenece a la ficha ${user.ficha.id}` });
           continue;
@@ -282,10 +328,199 @@ export class FichasService {
           await this.usersRepository.update(user.id, { ficha } as any);
           linked++;
         }
-        // If already in this ficha — silently skip
       }
     }
 
     return { created, linked, errors };
   }
+  // ── Email de bienvenida/confirmación ─────────────────────────────────────
+
+  private async sendConfirmationEmail(correo: string, nombre: string, token: string): Promise<void> {
+    const frontendUrl  = process.env.FRONTEND_URL || 'http://localhost:5173';
+    const confirmLink  = `${frontendUrl}/confirmar-cuenta?token=${token}`;
+
+    const transporter = nodemailer.createTransport({
+      host:   process.env.MAIL_HOST || 'smtp.gmail.com',
+      port:   Number(process.env.MAIL_PORT) || 587,
+      secure: process.env.MAIL_SECURE === 'true',
+      auth: { user: process.env.MAIL_USER, pass: process.env.MAIL_PASS },
+    });
+
+    await transporter.sendMail({
+      from:    `"Kanbana SENA" <${process.env.MAIL_USER}>`,
+      to:      correo,
+      subject: 'Bienvenido a Kanbana — Confirma tu cuenta',
+      html: `
+        <!DOCTYPE html>
+        <html lang="es">
+        <head><meta charset="UTF-8"></head>
+        <body style="margin:0;padding:0;background:#0f0f13;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+          <table width="100%" cellpadding="0" cellspacing="0" style="background:#0f0f13;padding:40px 16px;">
+            <tr><td align="center">
+              <table width="100%" style="max-width:480px;background:#1a1a24;border:1px solid #2a2a3a;border-radius:16px;padding:40px;">
+                <tr><td>
+                  <p style="margin:0 0 8px;font-size:11px;font-weight:700;letter-spacing:4px;text-transform:uppercase;color:#7c6af7;">KANBANA</p>
+                  <h1 style="margin:0 0 24px;font-size:22px;font-weight:700;color:#e8e8f0;">¡Fuiste invitado!</h1>
+                  <p style="margin:0 0 12px;font-size:14px;line-height:1.6;color:#9898b0;">
+                    Hola <strong style="color:#e8e8f0;">${nombre}</strong>,
+                  </p>
+                  <p style="margin:0 0 28px;font-size:14px;line-height:1.6;color:#9898b0;">
+                    Tu instructor te ha añadido a Kanbana. Confirma tu cuenta con el botón de abajo.
+                    Tu contraseña inicial es tu número de documento de identidad.
+                  </p>
+                  <table width="100%" cellpadding="0" cellspacing="0">
+                    <tr><td align="center" style="padding-bottom:28px;">
+                      <a href="${confirmLink}" style="display:inline-block;padding:14px 32px;background:#6c5ce7;color:#fff;text-decoration:none;border-radius:10px;font-size:14px;font-weight:700;">
+                        Confirmar cuenta
+                      </a>
+                    </td></tr>
+                  </table>
+                  <p style="margin:0 0 8px;font-size:12px;color:#606078;">Si el botón no funciona, copia este enlace:</p>
+                  <p style="margin:0 0 28px;font-size:11px;color:#7c6af7;word-break:break-all;">${confirmLink}</p>
+                  <hr style="border:none;border-top:1px solid #2a2a3a;margin:0 0 20px;">
+                  <p style="margin:0;font-size:11px;color:#505068;line-height:1.6;">
+                    Si no esperabas este correo, puedes ignorarlo de forma segura.
+                  </p>
+                </td></tr>
+              </table>
+            </td></tr>
+          </table>
+        </body>
+        </html>
+      `,
+      text: `Hola ${nombre},\n\nFuiste invitado a Kanbana. Confirma tu cuenta aquí:\n${confirmLink}\n\nTu contraseña inicial es tu número de documento de identidad.`,
+    });
+  }
+
+  // ── Invitar aprendiz individual ───────────────────────────────────────────
+
+  async inviteAprendiz(
+    fichaId: number,
+    dto: { nombre: string; correo: string; documento: string },
+  ): Promise<User> {
+    await this.findOne(fichaId);
+    const ficha = await this.fichasRepository.findOne({ where: { id: fichaId } });
+
+    const correo = dto.correo.trim().toLowerCase();
+    const existing = await this.usersRepository.findOne({ where: { correo }, relations: ['ficha'] });
+
+    if (existing) {
+      if (existing.ficha && existing.ficha.id !== fichaId) {
+        throw new BadRequestException(`El correo ${correo} ya pertenece a otra ficha`);
+      }
+      if (!existing.ficha) {
+        await this.usersRepository.update(existing.id, { ficha } as any);
+      }
+      return existing;
+    }
+
+    const token      = crypto.randomBytes(32).toString('hex');
+    const hashedPass = await bcrypt.hash(dto.documento, 10);
+
+    const user = this.usersRepository.create({
+      nombre:            dto.nombre.trim(),
+      correo,
+      contrasena:        hashedPass,
+      rol:               UserRole.APRENDIZ,
+      activo:            true,
+      ficha,
+      token_activacion:  token,
+      cuenta_confirmada: false,
+    } as object);
+    const saved = await this.usersRepository.save(user as User);
+
+    try {
+      await this.sendConfirmationEmail(correo, dto.nombre, token);
+    } catch {
+      // El usuario fue creado; el correo puede reenviarse después
+    }
+
+    return saved;
+  }
+
+  // ── Reenviar invitación ───────────────────────────────────────────────────
+
+  async resendInvitation(fichaId: number, userId: number): Promise<void> {
+    await this.findOne(fichaId);
+    const user = await this.usersRepository.findOne({ where: { id: userId }, relations: ['ficha'] });
+    if (!user) throw new NotFoundException('Usuario no encontrado');
+    if (!user.ficha || user.ficha.id !== fichaId) {
+      throw new BadRequestException('Este usuario no pertenece a esta ficha');
+    }
+    if (user.cuenta_confirmada) {
+      throw new BadRequestException('La cuenta ya está confirmada');
+    }
+
+    const token = crypto.randomBytes(32).toString('hex');
+    await this.usersRepository.update(userId, { token_activacion: token });
+    await this.sendConfirmationEmail(user.correo, user.nombre, token);
+  }
+
+  // ── Trimestres de la ficha ─────────────────────────────────────────────────
+
+  async getTrimestres(fichaId: number): Promise<Trimestre[]> {
+    return this.trimestresRepo.find({
+      where: { ficha_id: fichaId },
+      relations: ['sprints', 'sprints.tickets'],
+      order: { numero: 'ASC' },
+    });
+  }
+
+  async generateTrimestres(
+    fichaId: number,
+    dto: { num: number; trimestres?: any[] },
+  ): Promise<Trimestre[]> {
+    await this.trimestresRepo.delete({ ficha_id: fichaId } as any);
+
+    const ficha = await this.fichasRepository.findOne({ where: { id: fichaId } });
+    if (!ficha) throw new NotFoundException('Ficha no encontrada');
+
+    let items = dto.trimestres;
+    if (!items || items.length === 0) {
+      const start = new Date(ficha.fecha_inicio);
+      items = Array.from({ length: dto.num }, (_, i) => {
+        const s = new Date(start);
+        s.setMonth(s.getMonth() + i * 3);
+        const e = new Date(s);
+        e.setMonth(e.getMonth() + 3);
+        e.setDate(e.getDate() - 1);
+        return {
+          nombre:       `Trimestre ${i + 1}`,
+          fecha_inicio: s.toISOString().slice(0, 10),
+          fecha_fin:    e.toISOString().slice(0, 10),
+          tipo:         i === 0 ? 'documental' : 'desarrollo',
+        };
+      });
+    }
+
+    const creados: Trimestre[] = [];
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      const t = this.trimestresRepo.create({
+        ficha_id:        fichaId,
+        numero:          i + 1,
+        nombre:          item.nombre || `Trimestre ${i + 1}`,
+        tipo:            (item.tipo as TipoTrimestre) || (i === 0 ? TipoTrimestre.DOCUMENTAL : TipoTrimestre.DESARROLLO),
+        fecha_inicio:    item.fecha_inicio as any,
+        fecha_fin:       item.fecha_fin as any,
+        esta_finalizado: false,
+      } as any);
+      creados.push(await this.trimestresRepo.save(t as any) as Trimestre);
+    }
+    return creados;
+  }
+
+  async updateTrimestre(
+    trimId: number,
+    dto: { nombre?: string; fecha_inicio?: string; fecha_fin?: string; tipo?: string },
+  ): Promise<Trimestre> {
+    const t = await this.trimestresRepo.findOne({ where: { id: trimId } });
+    if (!t) throw new NotFoundException('Trimestre no encontrado');
+    if (dto.nombre)       t.nombre       = dto.nombre;
+    if (dto.fecha_inicio) t.fecha_inicio = dto.fecha_inicio as any;
+    if (dto.fecha_fin)    t.fecha_fin    = dto.fecha_fin as any;
+    if (dto.tipo)         t.tipo         = dto.tipo as TipoTrimestre;
+    return this.trimestresRepo.save(t as Trimestre);
+  }
+
 }

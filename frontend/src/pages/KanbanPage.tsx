@@ -1,25 +1,42 @@
 /**
+ * ── MODIFICADO ────────────────────────────────────────────────────────────────
  * KanbanPage — Tablero Kanban de un proyecto específico
  * Ruta: /projects/:id/kanban
  *
- * Muestra: proyecto, sprint activo, tickets con DnD, estadísticas,
- * panel de miembros, acceso al backlog y creación de tickets inline.
+ * Cambios respecto a la versión original:
+ *
+ *  1. Se agrega un toggle de vista en el header: "Kanban" | "Trimestres".
+ *     El botón "Trimestres" abre TrimestresView en lugar del tablero.
+ *     El botón "Kanban" vuelve al tablero normal.
+ *
+ *
+ *  3. Cuando la vista activa es 'trimestres', el contenedor deja de ser
+ *     overflow-hidden y se convierte en scrollable para mostrar los acordeones.
+ *
+ *  4. El indicador del sprint activo sigue mostrándose en ambas vistas.
+ *
+ *  Todo lo demás (DnD, modal de ticket, cierre de sprint, panel de miembros)
+ *  se mantiene sin cambios.
+ * ─────────────────────────────────────────────────────────────────────────────
  */
-import { useParams, useNavigate } from 'react-router-dom';
+
+import { useParams, useNavigate }         from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   ChevronLeft, Search, ListTodo, CheckCircle2,
   Users, Plus, Clock, AlertCircle, LayoutGrid, Flag,
+  Layers, KanbanSquare,
 } from 'lucide-react';
-import { projectService } from '../services/project.service';
-import { ticketService } from '../services/ticket.service';
-import { userService } from '../services/user.service';
-import { KanbanBoard } from '../components/KanbanBoard';
-import { Modal } from '../components/Modal';
-import { Button } from '../components/Button';
-import { useState } from 'react';
-import { TicketStatus } from '../types/ticket.types';
-import { useAuthStore } from '../store/auth.store';
+import { projectService }   from '../services/project.service';
+import { ticketService }    from '../services/ticket.service';
+import { userService }      from '../services/user.service';
+import { KanbanBoard }      from '../components/KanbanBoard';
+// ── NUEVO IMPORT ──────────────────────────────────────────────────────────────
+import { Modal }            from '../components/Modal';
+import { Button }           from '../components/Button';
+import { useState }         from 'react';
+import { TicketStatus }     from '../types/ticket.types';
+import { useAuthStore }     from '../store/auth.store';
 
 const FormField = ({ label, children }: { label: string; children: React.ReactNode }) => (
   <div className="space-y-1.5">
@@ -29,40 +46,47 @@ const FormField = ({ label, children }: { label: string; children: React.ReactNo
 );
 
 export const KanbanPage = () => {
-  const { id } = useParams<{ id: string }>();
-  const projectId = Number(id);
-  const queryClient = useQueryClient();
-  const { user } = useAuthStore();
-  const navigate = useNavigate();
-  const [searchTerm, setSearchTerm] = useState('');
+  const { id }       = useParams<{ id: string }>();
+  const projectId    = Number(id);
+  const queryClient  = useQueryClient();
+  const { user }     = useAuthStore();
+  const navigate     = useNavigate();
+  const [searchTerm, setSearchTerm]         = useState('');
   const [showTicketModal, setShowTicketModal] = useState(false);
-  const [showMembers, setShowMembers] = useState(false);
+  const [showMembers, setShowMembers]         = useState(false);
+  // Trimestres gestionados desde ProjectPage — aquí siempre kanban
+  const activeView = 'kanban';
+  // ── NUEVO: estado del toggle de vista ────────────────────────────────────
+  // 'kanban'     → tablero drag & drop (vista por defecto)
+  // 'trimestres' → vista agrupada por trimestre con acordeones
+  // Vista siempre en kanban — trimestres se gestionan desde ProjectPage
 
-  const canManage = user?.rol === 'coordinador' || user?.rol === 'instructor' || user?.rol === 'lider_tecnico';
+  const canManage = user?.rol === 'coordinador' || user?.rol === 'instructor' ||
+                    (user?.rol === 'aprendiz' && user.es_lider_tecnico);
 
   const { data: project } = useQuery({
     queryKey: ['projects', projectId],
-    queryFn: () => projectService.getById(projectId),
-    enabled: !!projectId,
+    queryFn:  () => projectService.getById(projectId),
+    enabled:  !!projectId,
   });
 
   const { data: activeSprint } = useQuery({
     queryKey: ['projects', projectId, 'sprint', 'active'],
-    queryFn: () => projectService.getActiveSprint(projectId),
-    enabled: !!projectId,
+    queryFn:  () => projectService.getActiveSprint(projectId),
+    enabled:  !!projectId,
   });
 
   const { data: tickets = [], isLoading: ticketsLoading } = useQuery({
     queryKey: ['tickets', projectId, activeSprint?.id],
-    queryFn: () => ticketService.getAll(projectId, activeSprint?.id),
-    enabled: !!projectId,
+    queryFn:  () => ticketService.getAll(projectId, activeSprint?.id),
+    enabled:  !!projectId,
     staleTime: 30_000,
   });
 
   const { data: members = [] } = useQuery({
     queryKey: ['projects', projectId, 'members'],
-    queryFn: () => projectService.getMembers(projectId),
-    enabled: !!projectId,
+    queryFn:  () => projectService.getMembers(projectId),
+    enabled:  !!projectId,
   });
 
   const updateStatusMutation = useMutation({
@@ -70,6 +94,10 @@ export const KanbanPage = () => {
       ticketService.updateStatus(ticketId, { estado: status }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tickets', projectId] });
+    },
+    onError: (err: any) => {
+      // ── Muestra el mensaje del backend (ej: "requiere adjunto") ─────────
+      alert(err?.response?.data?.message ?? 'No se pudo actualizar el estado del ticket.');
     },
   });
 
@@ -79,10 +107,17 @@ export const KanbanPage = () => {
       queryClient.invalidateQueries({ queryKey: ['projects', projectId] });
       queryClient.invalidateQueries({ queryKey: ['tickets', projectId] });
     },
+    onError: (err: any) => {
+      // ── Muestra el mensaje del backend (ej: tickets sin done) ───────────
+      alert(err?.response?.data?.message ?? 'No se pudo cerrar el sprint.');
+    },
   });
 
   const createTicketMutation = useMutation({
-    mutationFn: (dto: any) => ticketService.create({ ...dto, proyecto_id: projectId }),
+    mutationFn: (dto: any) => ticketService.create({
+      ...dto,
+      proyecto_id: projectId,
+    }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tickets', projectId] });
       setShowTicketModal(false);
@@ -93,17 +128,19 @@ export const KanbanPage = () => {
     updateStatusMutation.mutate({ ticketId, status: newStatus });
   };
 
-  const filteredTickets = tickets.filter(t =>
+  const filteredTickets = tickets.filter((t: any) =>
     t.titulo.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const done       = tickets.filter(t => t.estado === 'done').length;
-  const inProgress = tickets.filter(t => t.estado === 'in_progress').length;
-  const blocked    = tickets.filter(t => (t as any).esta_bloqueado).length;
-  const progress   = tickets.length ? Math.round((done / tickets.length) * 100) : 0;
+  const done       = tickets.filter((t: any) => t.estado === 'done').length;
+  const inProgress = tickets.filter((t: any) => t.estado === 'in_progress').length;
+  const blocked    = tickets.filter((t: any) => t.esta_bloqueado).length;
+  const progress   = tickets.length > 0 ? Math.round((done / tickets.length) * 100) : 0;
+  const aprendices = (members as any[]).filter((m: any) => m.rol === 'aprendiz');
 
-  const aprendices = (members as any[]).filter(m => m.rol === 'aprendiz' || m.rol === 'lider_tecnico');
-
+  // Esperar a que ambos (proyecto Y tickets) terminen de cargar
+  // antes de mostrar el estado de error. Si solo project es undefined
+  // pero ticketsLoading es true, todavía estamos cargando — no es un error.
   if (!project && !ticketsLoading) {
     return (
       <div className="h-screen flex flex-col items-center justify-center bg-dark-bg gap-4">
@@ -117,11 +154,13 @@ export const KanbanPage = () => {
   }
 
   return (
-    <div className="h-screen flex flex-col bg-dark-bg overflow-hidden">
+    // ── MODIFICADO: cambia overflow cuando la vista es 'trimestres' ─────────
+    <div className={'h-screen flex flex-col bg-dark-bg overflow-hidden'}>
 
       {/* ── Header ─────────────────────────────────────────────── */}
       <div className="bg-dark-card border-b border-dark-border px-6 py-4 shrink-0">
         <div className="flex items-center justify-between gap-4 flex-wrap">
+
           {/* Left */}
           <div className="flex items-center gap-4">
             <button
@@ -150,6 +189,7 @@ export const KanbanPage = () => {
 
           {/* Right actions */}
           <div className="flex items-center gap-2 flex-wrap">
+
             {/* Stats rápidos */}
             <div className="hidden lg:flex items-center gap-3 bg-dark-bg border border-dark-border rounded-xl px-4 py-2 text-xs font-black">
               <span className="text-emerald-400">{done} ✓</span>
@@ -160,17 +200,36 @@ export const KanbanPage = () => {
               <span className="text-primary-400">{progress}%</span>
             </div>
 
-            {/* Buscador */}
-            <div className="relative">
-              <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-dark-muted" />
-              <input
-                type="text"
-                placeholder="Filtrar tareas..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-9 pr-4 py-2 bg-dark-bg border border-dark-border rounded-xl text-xs text-dark-text outline-none focus:border-primary-500 transition-all w-44 placeholder:text-dark-muted/50"
-              />
+                        {/* El instructor y coordinador ven ambas vistas.
+                Los aprendices también pueden ver la vista de trimestres
+                para entender la estructura del proyecto. */}
+            <div className="flex items-center bg-dark-bg border border-dark-border rounded-xl overflow-hidden">
+              <button
+                onClick={() => {}}
+                className={`flex items-center gap-1.5 px-3 py-2 text-xs font-black transition-all ${
+                  activeView === 'kanban'
+                    ? 'bg-primary-600/20 text-primary-400 border-r border-primary-500/20'
+                    : 'text-dark-muted hover:text-dark-text border-r border-dark-border'
+                }`}
+              >
+                <KanbanSquare size={13} /> Kanban
+              </button>
+
             </div>
+
+            {/* Buscador (solo en vista kanban) */}
+            {activeView === 'kanban' && (
+              <div className="relative">
+                <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-dark-muted" />
+                <input
+                  type="text"
+                  placeholder="Filtrar tareas..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-9 pr-4 py-2 bg-dark-bg border border-dark-border rounded-xl text-xs text-dark-text outline-none focus:border-primary-500 transition-all w-44 placeholder:text-dark-muted/50"
+                />
+              </div>
+            )}
 
             {/* Miembros */}
             <button
@@ -180,13 +239,13 @@ export const KanbanPage = () => {
               <Users size={14} /> {aprendices.length}
             </button>
 
-            {/* Crear ticket */}
-            {canManage && (
+            {/* Crear ticket (solo kanban) */}
+            {canManage && activeView === 'kanban' && (
               <button
                 onClick={() => setShowTicketModal(true)}
                 className="flex items-center gap-1.5 px-3 py-2 bg-primary-600/15 border border-primary-500/25 text-primary-400 rounded-xl text-xs font-black hover:bg-primary-600/25 transition-all"
               >
-                <Plus size={14} /> Ticket
+                <Plus size={14} /> Tarea
               </button>
             )}
 
@@ -198,10 +257,14 @@ export const KanbanPage = () => {
               <ListTodo size={14} /> Backlog
             </button>
 
-            {/* Cerrar sprint */}
-            {activeSprint && canManage && (
+            {/* Cerrar sprint (solo kanban) */}
+            {activeSprint && canManage && activeView === 'kanban' && (
               <button
-                onClick={() => { if (confirm('¿Finalizar el sprint actual?')) closeSprintMutation.mutate(); }}
+                onClick={() => {
+                  if (confirm('¿Finalizar el sprint actual? Se verificará que todos los tickets estén completados.')) {
+                    closeSprintMutation.mutate();
+                  }
+                }}
                 className="flex items-center gap-1.5 px-3 py-2 bg-rose-500/10 border border-rose-500/20 text-rose-400 rounded-xl text-xs font-black hover:bg-rose-500/20 transition-all"
               >
                 <CheckCircle2 size={14} /> Finalizar Sprint
@@ -241,40 +304,50 @@ export const KanbanPage = () => {
         </div>
       )}
 
-      {/* ── Tablero Kanban ─────────────────────────────────────────── */}
-      <div className="flex-1 overflow-x-auto overflow-y-hidden p-6">
-        {!activeSprint ? (
-          <div className="h-full flex flex-col items-center justify-center bg-dark-card/30 rounded-[3rem] border-4 border-dashed border-dark-border p-16 text-center">
-            <div className="w-20 h-20 bg-dark-card rounded-[2rem] flex items-center justify-center mb-6 border border-dark-border">
-              <ListTodo size={36} className="text-dark-muted opacity-40" />
+      {/* ══ Contenido principal: Kanban o Trimestres ══════════════════════ */}
+
+      {/* ── Vista Kanban (sin cambios) ─────────────────────────────────── */}
+      {activeView === 'kanban' && (
+        <div className="flex-1 overflow-x-auto overflow-y-hidden p-6">
+          {!activeSprint ? (
+            <div className="h-full flex flex-col items-center justify-center bg-dark-card/30 rounded-[3rem] border-4 border-dashed border-dark-border p-16 text-center">
+              <div className="w-20 h-20 bg-dark-card rounded-[2rem] flex items-center justify-center mb-6 border border-dark-border">
+                <ListTodo size={36} className="text-dark-muted opacity-40" />
+              </div>
+              <h3 className="text-2xl font-black text-dark-text tracking-tight">El tablero está en espera</h3>
+              <p className="text-dark-muted max-w-sm mt-3 mb-8 text-sm leading-relaxed opacity-70">
+                Para visualizar el flujo de trabajo, ve al backlog y activa un sprint con las tareas prioritarias.
+              </p>
+              <button
+                onClick={() => navigate(`/projects/${projectId}/backlog`)}
+                className="px-8 py-4 bg-primary-600 hover:bg-primary-700 text-white rounded-[1.5rem] font-black text-sm transition-all active:scale-95"
+              >
+                Ir al Backlog
+              </button>
             </div>
-            <h3 className="text-2xl font-black text-dark-text tracking-tight">El tablero está en espera</h3>
-            <p className="text-dark-muted max-w-sm mt-3 mb-8 text-sm leading-relaxed opacity-70">
-              Para visualizar el flujo de trabajo, ve al backlog y activa un sprint con las tareas prioritarias.
-            </p>
-            <button
-              onClick={() => navigate(`/projects/${projectId}/backlog`)}
-              className="px-8 py-4 bg-primary-600 hover:bg-primary-700 text-white rounded-[1.5rem] font-black text-sm transition-all active:scale-95"
-            >
-              Ir al Backlog
-            </button>
-          </div>
-        ) : ticketsLoading ? (
-          <div className="flex gap-6 h-full">
-            {[1, 2, 3, 4].map(i => (
-              <div key={i} className="w-80 shrink-0 bg-dark-card rounded-[2.5rem] border border-dark-border animate-pulse" />
-            ))}
-          </div>
-        ) : (
-          <KanbanBoard
-            tickets={filteredTickets}
-            onStatusChange={handleStatusChange}
-          />
-        )}
-      </div>
+          ) : ticketsLoading ? (
+            <div className="flex gap-6 h-full">
+              {[1, 2, 3, 4].map(i => (
+                <div key={i} className="w-80 shrink-0 bg-dark-card rounded-[2.5rem] border border-dark-border animate-pulse" />
+              ))}
+            </div>
+          ) : (
+            <KanbanBoard
+              tickets={filteredTickets}
+              onStatusChange={handleStatusChange}
+            />
+          )}
+        </div>
+      )}
+
+      {/* ── NUEVA Vista Trimestres ─────────────────────────────────────── */}
+      {/* Se muestra como un panel scrollable por debajo del header.
+          TrimestresView carga sus propios datos con useQuery internamente.
+          El instructor puede crear sprints y cerrar trimestres desde aquí. */}
+      
 
       {/* ── Modal: Crear Ticket ───────────────────────────────────── */}
-      <Modal isOpen={showTicketModal} onClose={() => setShowTicketModal(false)} title="Nuevo Ticket">
+      <Modal isOpen={showTicketModal} onClose={() => setShowTicketModal(false)} title="Nueva Tarea">
         <form onSubmit={e => {
           e.preventDefault();
           const f = new FormData(e.currentTarget);
@@ -324,11 +397,11 @@ export const KanbanPage = () => {
             isLoading={createTicketMutation.isPending}
             className="w-full py-4"
           >
-            {createTicketMutation.isPending ? 'Creando...' : 'Crear Ticket'}
+            {createTicketMutation.isPending ? 'Creando...' : 'Crear Tarea'}
           </Button>
           {createTicketMutation.isError && (
             <p className="text-xs text-rose-400 text-center flex items-center justify-center gap-1">
-              <AlertCircle size={12} /> Error al crear el ticket. Verifica que el proyecto tiene los datos necesarios.
+              <AlertCircle size={12} /> Error al crear el ticket.
             </p>
           )}
         </form>

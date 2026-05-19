@@ -49,8 +49,8 @@ export const LiderTablero = () => {
   if (!activeSprint) {
     return (
       <div className="flex flex-col items-center justify-center h-64 text-dark-muted border border-dashed border-dark-border rounded-xl">
-        <p className="font-medium">No hay un sprint activo.</p>
-        <p className="text-xs mt-1">Crea o inicia un sprint desde la sección de Tickets.</p>
+        <p className="font-medium">No hay un modulo activo.</p>
+        <p className="text-xs mt-1">Crea o inicia un modulo desde la sección de Tareas.</p>
       </div>
     );
   }

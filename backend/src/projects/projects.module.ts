@@ -1,13 +1,25 @@
+// ── MODIFICADO ───────────────────────────────────────────────────────────────
+// Cambio: se agrega Trimestre al forFeature para que ProjectsService
+// pueda inyectar Repository<Trimestre> vía @InjectRepository.
+// ─────────────────────────────────────────────────────────────────────────────
+
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { ProjectsService } from './projects.service';
+import { ProjectsService }    from './projects.service';
 import { ProjectsController } from './projects.controller';
-import { Project } from './entities/project.entity';
-import { Sprint } from './entities/sprint.entity';
-import { User } from '../users/entities/user.entity';
+import { Project }    from './entities/project.entity';
+import { Sprint }     from './entities/sprint.entity';
+import { User }       from '../users/entities/user.entity';
+// ── NUEVO IMPORT ─────────────────────────────────────────────────────────────
+import { Trimestre }  from './entities/trimestre.entity';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Project, Sprint, User])],
+  // ── CAMBIO: se agrega Trimestre al array ─────────────────────────────────
+  imports: [
+    TypeOrmModule.forFeature([Project, Sprint, User, Trimestre]),
+    NotificationsModule,
+  ],
   controllers: [ProjectsController],
   providers: [ProjectsService],
   exports: [ProjectsService],
