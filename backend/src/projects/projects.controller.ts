@@ -64,8 +64,12 @@ export class ProjectsController {
   }
 
   @Patch(':id/assign-lider')
-  assignLider(@Param('id', ParseIntPipe) id: number, @Body('liderId') liderId: number) {
-    return this.projectsService.assignLider(id, liderId);
+  assignLider(
+    @Param('id', ParseIntPipe) id: number,
+    @Body('liderId') liderId: number | null,
+    @Request() req: any,
+  ) {
+    return this.projectsService.assignLider(id, liderId ?? null, req.user.id);
   }
 
   @Delete(':id')
@@ -108,6 +112,14 @@ export class ProjectsController {
   @Post(':id/sprints')
   createSprint(@Param('id', ParseIntPipe) id: number, @Body() dto: any) {
     return this.projectsService.createSprint(id, dto);
+  }
+
+  @Patch('sprints/:sprintId')
+  updateSprint(
+    @Param('sprintId', ParseIntPipe) sprintId: number,
+    @Body() dto: any,
+  ) {
+    return this.projectsService.updateSprint(sprintId, dto);
   }
 
   @Patch('sprints/:sprintId/start')
@@ -177,6 +189,50 @@ export class ProjectsController {
   ) {
     return this.projectsService.assignSprintToTrimestre(sprintId, trimestreId ?? null);
   }
+  // ══════════════════════════════════════════════════════════════════════════════
+  // FLUJO DE REVISIÓN DE MÓDULOS
+  // ══════════════════════════════════════════════════════════════════════════════
+
+  /**
+   * GET /projects/sprints/pending-review
+   * Instructor: lista de módulos con pendiente_revision=true en sus proyectos.
+   * IMPORTANTE: debe estar ANTES de `:id` para no capturarse como parámetro.
+   */
+  @Get('sprints/pending-review')
+  getSprintsPendientesRevision(@Request() req: any) {
+    return this.projectsService.getSprintsPendientesRevision(req.user.id);
+  }
+
+  /**
+   * POST /projects/sprints/:id/solicitar-revision
+   * Líder técnico envía el módulo a revisión del instructor.
+   * Valida que todas las tareas estén en testing o done.
+   */
+  @Post('sprints/:sprintId/solicitar-revision')
+  solicitarRevision(
+    @Param('sprintId', ParseIntPipe) sprintId: number,
+    @Request() req: any,
+  ) {
+    return this.projectsService.solicitarRevisionSprint(sprintId, req.user.id);
+  }
+
+  /**
+   * POST /projects/sprints/:id/correcciones
+   * Instructor solicita correcciones al líder sobre un módulo.
+   * Body: { mensaje: string }
+   */
+  @Post('sprints/:sprintId/correcciones')
+  solicitarCorrecciones(
+    @Param('sprintId', ParseIntPipe) sprintId: number,
+    @Body('mensaje') mensaje: string,
+    @Request() req: any,
+  ) {
+    if (!mensaje?.trim()) {
+      throw new Error('Debes indicar el motivo de las correcciones.');
+    }
+    return this.projectsService.solicitarCorreccionesSprint(sprintId, req.user.id, mensaje);
+  }
+
   /**
    * POST /projects/:id/solicitar-sprint
    * El líder técnico solicita al instructor que cree un nuevo sprint.

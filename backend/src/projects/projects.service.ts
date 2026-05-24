@@ -5,6 +5,8 @@ import { Project, ProjectStatus } from './entities/project.entity';
 import { Sprint } from './entities/sprint.entity';
 import { User, UserRole } from '../users/entities/user.entity';
 import { Trimestre, TipoTrimestre } from './entities/trimestre.entity';
+import { NotificationsService } from '../notifications/notifications.service';
+import { EmailService }         from '../email/email.service';
 
 @Injectable()
 export class ProjectsService {
@@ -17,6 +19,8 @@ export class ProjectsService {
     private usersRepo: Repository<User>,
     @InjectRepository(Trimestre)
     private trimestresRepo: Repository<Trimestre>,
+    private readonly notificationsService: NotificationsService,
+    private readonly emailService: EmailService,
   ) {}
 
   async findAll(filters: { fichaId?: number } = {}): Promise<Project[]> {
@@ -63,6 +67,7 @@ export class ProjectsService {
       return this.projectsRepo
         .createQueryBuilder('p')
         .leftJoinAndSelect('p.lider', 'l')
+        .leftJoinAndSelect('p.instructor', 'i')
         .leftJoinAndSelect('p.miembros', 'm')
         .leftJoinAndSelect('p.ficha', 'f')
         .where('p.liderId = :uid', { uid: user.id })
@@ -100,18 +105,65 @@ export class ProjectsService {
     return this.projectsRepo.save(p as Project);
   }
 
-  async assignLider(id: number, liderId: number | null): Promise<Project> {
+  async assignLider(id: number, liderId: number | null, instructorId?: number): Promise<Project> {
     const p = await this.findOne(id);
 
+    // Cargar ficha para incluir el código en el email
+    const ficha = p.fichaId
+      ? await this.projectsRepo.manager.getRepository('Ficha').findOne({ where: { id: p.fichaId } })
+      : null;
+
+    // Cargar instructor para el email (si no viene por parámetro, usar el del proyecto)
+    const resolvedInstructorId = instructorId ?? p.instructorId;
+    const instructor = resolvedInstructorId
+      ? await this.usersRepo.findOne({ where: { id: resolvedInstructorId } })
+      : null;
+
+    // ── Quitar sub-rol al líder anterior si cambia ─────────────────────────
+    if (p.liderId && p.liderId !== liderId) {
+      const oldLider = await this.usersRepo.findOne({ where: { id: p.liderId } });
+      if (oldLider && oldLider.rol === UserRole.APRENDIZ) {
+        oldLider.es_lider_tecnico = false;
+        await this.usersRepo.save(oldLider);
+      }
+    }
+
     if (!liderId) {
-      // Quitar líder
+      // Quitar líder completamente
       p.lider   = null as any;
       p.liderId = null as any;
     } else {
       const u = await this.usersRepo.findOne({ where: { id: liderId } });
       if (!u) throw new NotFoundException('Usuario no encontrado');
-      p.lider = u;
+      p.lider   = u;
+      p.liderId = liderId;
+
+      // ── Dar el sub-rol al nuevo líder ────────────────────────────────────
+      if (u.rol === UserRole.APRENDIZ && !u.es_lider_tecnico) {
+        u.es_lider_tecnico = true;
+        await this.usersRepo.save(u);
+      }
+
+      // ── Notificación in-app al nuevo líder ────────────────────────────────
+      await this.notificationsService.create({
+        usuario_id: u.id,
+        titulo:     `🛡️ Eres el Líder Técnico de "${p.nombre}"`,
+        mensaje:    `${instructor?.nombre ?? 'Tu instructor'} te ha designado Líder Técnico del proyecto "${p.nombre}". Ya puedes acceder al dashboard de gestión.`,
+        tipo:       'success' as any,
+      });
+
+      // ── Email al nuevo líder ───────────────────────────────────────────────
+      if (u.correo) {
+        await this.emailService.notificarAsignacionLider({
+          destinatario:     u.correo,
+          liderNombre:      u.nombre,
+          proyectoNombre:   p.nombre,
+          instructorNombre: instructor?.nombre ?? 'Tu instructor',
+          fichaNumero:      (ficha as any)?.codigo ?? undefined,
+        });
+      }
     }
+
     return this.projectsRepo.save(p as Project);
   }
 
@@ -214,19 +266,74 @@ export class ProjectsService {
   async startSprint(sprintId: number): Promise<Sprint> {
     const s = await this.sprintsRepo.findOne({ where: { id: sprintId } });
     if (!s) throw new NotFoundException();
+
+    // Desactivar cualquier sprint activo anterior del mismo proyecto
     await this.sprintsRepo.update({ proyecto_id: s.proyecto_id, esta_activo: true }, { esta_activo: false });
     s.esta_activo = true;
-    return this.sprintsRepo.save(s as Sprint) as unknown as Sprint;
+    await this.sprintsRepo.save(s as Sprint);
+
+    // ── Notificar a todo el equipo del proyecto ────────────────────────────
+    const proyecto = await this.projectsRepo.findOne({
+      where:     { id: s.proyecto_id },
+      relations: ['lider', 'miembros', 'instructor'],
+    });
+
+    if (proyecto) {
+      // Unir lider + miembros sin duplicados
+      const destinatarios: User[] = [...(proyecto.miembros ?? [])];
+      if (proyecto.lider && !destinatarios.find(u => u.id === proyecto.lider.id)) {
+        destinatarios.push(proyecto.lider);
+      }
+
+      const instrNombre = proyecto.instructor?.nombre ?? 'El instructor';
+
+      // In-app a cada miembro
+      for (const u of destinatarios) {
+        await this.notificationsService.create({
+          usuario_id: u.id,
+          titulo:     `🚀 Módulo activo: "${s.nombre}"`,
+          mensaje:    `${instrNombre} activó el módulo "${s.nombre}" en el proyecto "${proyecto.nombre}". ¡El trabajo comienza!`,
+          tipo:       'info' as any,
+        });
+      }
+
+      // Email solo al líder técnico (él coordina al equipo)
+      if (proyecto.lider?.correo) {
+        await this.emailService.notificarModuloActivado({
+          destinatario:     proyecto.lider.correo,
+          liderNombre:      proyecto.lider.nombre,
+          sprintNombre:     s.nombre,
+          proyectoNombre:   proyecto.nombre,
+          instructorNombre: instrNombre,
+          fechaInicio:      new Date(s.fecha_inicio),
+          fechaFin:         new Date(s.fecha_fin),
+        });
+      }
+    }
+
+    return s;
   }
 
   // ── MODIFICADO: ahora verifica que todos los tickets estén en 'done' ─────
+  /** Actualiza campos editables de un sprint (nombre, fechas, descripción). */
+  async updateSprint(sprintId: number, dto: Partial<{
+    nombre: string;
+    fecha_inicio: string;
+    fecha_fin: string;
+    descripcion: string | null;
+  }>): Promise<Sprint> {
+    const s = await this.sprintsRepo.findOne({ where: { id: sprintId } });
+    if (!s) throw new NotFoundException('Módulo no encontrado');
+    Object.assign(s, dto);
+    return this.sprintsRepo.save(s) as unknown as Sprint;
+  }
+
   // y que los tickets con requiere_adjunto tengan al menos un adjunto subido.
   // Esto implementa la condición de cierre del sprint.
   async closeSprint(sprintId: number): Promise<Sprint> {
     const s = await this.sprintsRepo.findOne({
       where:     { id: sprintId },
-      // ── NUEVO: cargar tickets con sus adjuntos para validar ───────
-      relations: ['tickets', 'tickets.adjuntos'],
+      relations: ['tickets', 'tickets.adjuntos', 'proyecto', 'proyecto.lider', 'proyecto.instructor'],
     });
     if (!s) throw new NotFoundException();
 
@@ -240,8 +347,6 @@ export class ProjectsService {
     }
 
     // ── Validación 2: tickets con requiere_adjunto deben tener adjunto ────
-    // (Esta validación también se hace al mover el ticket a done,
-    //  pero se duplica aquí como red de seguridad al cerrar el sprint.)
     const ticketsSinAdjunto = (s.tickets ?? []).filter(
       t => t.requiere_adjunto && (!t.adjuntos || t.adjuntos.length === 0)
     );
@@ -252,9 +357,39 @@ export class ProjectsService {
       );
     }
 
-    s.esta_activo     = false;
-    s.esta_finalizado = true;
-    return this.sprintsRepo.save(s as Sprint) as unknown as Sprint;
+    const eraPendienteRevision = s.pendiente_revision;
+    s.esta_activo          = false;
+    s.esta_finalizado      = true;
+    s.pendiente_revision   = false;
+    await this.sprintsRepo.save(s as Sprint);
+
+    // Si el sprint estaba pendiente de revisión → el instructor lo aprobó → email al líder
+    const proyecto   = (s as any).proyecto;
+    const lider      = proyecto?.lider;
+    const instructor = proyecto?.instructor;
+
+    if (eraPendienteRevision && lider) {
+      // In-app al líder
+      await this.notificationsService.create({
+        usuario_id: lider.id,
+        titulo:     `🏆 ¡Módulo aprobado! "${s.nombre}"`,
+        mensaje:    `El instructor aprobó y cerró el módulo "${s.nombre}" del proyecto "${proyecto.nombre}". ¡Buen trabajo de equipo!`,
+        tipo:       'success' as any,
+      });
+
+      // Email al líder
+      if (lider.correo) {
+        await this.emailService.notificarModuloAprobado({
+          destinatario:     lider.correo,
+          liderNombre:      lider.nombre,
+          sprintNombre:     s.nombre,
+          proyectoNombre:   proyecto.nombre,
+          instructorNombre: instructor?.nombre ?? 'El instructor',
+        });
+      }
+    }
+
+    return s;
   }
 
   // ── NUEVOS MÉTODOS: gestión de trimestres ─────────────────────────────────
@@ -463,4 +598,157 @@ export class ProjectsService {
     });
   }
 
+  // ══════════════════════════════════════════════════════════════════════════════
+  // FLUJO DE REVISIÓN DE MÓDULOS (SPRINT)
+  // ══════════════════════════════════════════════════════════════════════════════
+
+  /**
+   * El líder técnico envía el módulo a revisión del instructor.
+   * Valida que todas las tareas estén al menos en testing o done.
+   * Pone pendiente_revision = true y notifica (in-app + email) al instructor.
+   */
+  async solicitarRevisionSprint(sprintId: number, liderId: number): Promise<Sprint> {
+    const sprint = await this.sprintsRepo.findOne({
+      where:     { id: sprintId },
+      relations: ['tickets', 'proyecto', 'proyecto.instructor', 'proyecto.lider'],
+    });
+    if (!sprint) throw new NotFoundException('Módulo no encontrado.');
+
+    const proyecto = (sprint as any).proyecto;
+
+    // Solo el líder del proyecto puede solicitar revisión
+    if (proyecto?.liderId !== liderId) {
+      throw new ForbiddenException('Solo el líder técnico del proyecto puede enviar el módulo a revisión.');
+    }
+
+    if (!sprint.tickets?.length) {
+      throw new BadRequestException('El módulo no tiene tareas. Añade tareas antes de enviarlo a revisión.');
+    }
+
+    // Validar que todas las tareas estén en testing o done (el líder las revisó)
+    const sinRevisar = sprint.tickets.filter(
+      t => t.estado !== 'testing' && t.estado !== 'done',
+    );
+    if (sinRevisar.length) {
+      throw new BadRequestException(
+        `${sinRevisar.length} tarea(s) aún no fueron revisadas por el líder (deben estar en Testing o Completada). ` +
+        `Pendientes: ${sinRevisar.map(t => `"${t.titulo}"`).join(', ')}.`,
+      );
+    }
+
+    sprint.pendiente_revision = true;
+    await this.sprintsRepo.save(sprint as Sprint);
+
+    const lider      = await this.usersRepo.findOne({ where: { id: liderId } });
+    const instructor = proyecto?.instructor;
+
+    if (instructor) {
+      const testingCount = sprint.tickets.filter(t => t.estado === 'testing').length;
+      const doneCount    = sprint.tickets.filter(t => t.estado === 'done').length;
+
+      // In-app
+      await this.notificationsService.create({
+        usuario_id: instructor.id,
+        titulo:     `Módulo listo para revisión: "${sprint.nombre}"`,
+        mensaje:    `${lider?.nombre ?? 'El líder'} completó el módulo "${sprint.nombre}" del proyecto "${proyecto.nombre}". Revísalo y apruébalo o solicita correcciones.`,
+        tipo:       'info' as any,
+      });
+
+      // Email
+      if (instructor.correo) {
+        await this.emailService.notificarModuloListo({
+          destinatario:     instructor.correo,
+          instructorNombre: instructor.nombre,
+          liderNombre:      lider?.nombre ?? 'El líder',
+          sprintNombre:     sprint.nombre,
+          proyectoNombre:   proyecto.nombre,
+          totalTickets:     sprint.tickets.length,
+          testingTickets:   testingCount + doneCount,
+        });
+      }
+    }
+
+    return sprint;
+  }
+
+  /**
+   * El instructor solicita correcciones sobre un módulo.
+   * Pone pendiente_revision = false y notifica (in-app + email) al líder.
+   */
+  async solicitarCorreccionesSprint(
+    sprintId:     number,
+    instructorId: number,
+    mensaje:      string,
+  ): Promise<Sprint> {
+    const sprint = await this.sprintsRepo.findOne({
+      where:     { id: sprintId },
+      relations: ['proyecto', 'proyecto.instructor', 'proyecto.lider'],
+    });
+    if (!sprint) throw new NotFoundException('Módulo no encontrado.');
+
+    const proyecto = (sprint as any).proyecto;
+    if (proyecto?.instructorId !== instructorId) {
+      throw new ForbiddenException('Solo el instructor del proyecto puede solicitar correcciones.');
+    }
+
+    sprint.pendiente_revision = false;
+    await this.sprintsRepo.save(sprint as Sprint);
+
+    const instructor = proyecto?.instructor;
+    const lider      = proyecto?.lider;
+
+    if (lider) {
+      // In-app
+      await this.notificationsService.create({
+        usuario_id: lider.id,
+        titulo:     `Correcciones requeridas en "${sprint.nombre}"`,
+        mensaje:    `El instructor requiere correcciones en el módulo "${sprint.nombre}". ${mensaje}`,
+        tipo:       'warning' as any,
+      });
+
+      // Email
+      if (lider.correo) {
+        await this.emailService.notificarCorreccionesModulo({
+          destinatario:     lider.correo,
+          liderNombre:      lider.nombre,
+          sprintNombre:     sprint.nombre,
+          proyectoNombre:   proyecto.nombre,
+          instructorNombre: instructor?.nombre ?? 'El instructor',
+          mensaje,
+        });
+      }
+    }
+
+    return sprint;
+  }
+
+  /**
+   * Devuelve los sprints con pendiente_revision=true para los proyectos
+   * del instructor. Usado en el panel de instructor para ver módulos pendientes.
+   */
+  async getSprintsPendientesRevision(instructorId: number): Promise<Sprint[]> {
+    // Buscar proyectos del instructor
+    const fichas = await this.projectsRepo.manager
+      .getRepository('Ficha')
+      .find({ where: { instructor_id: instructorId } });
+    const fichaIds = fichas.map((f: any) => f.id);
+
+    if (!fichaIds.length) return [];
+
+    const proyectos = await this.projectsRepo.find({
+      where: { fichaId: In(fichaIds) },
+      select: ['id'],
+    });
+    const proyectoIds = proyectos.map(p => p.id);
+    if (!proyectoIds.length) return [];
+
+    return this.sprintsRepo.find({
+      where: {
+        proyecto_id:      In(proyectoIds),
+        pendiente_revision: true,
+      },
+      relations: ['proyecto', 'proyecto.lider', 'tickets'],
+      order:     { creado_en: 'DESC' },
+    });
+  }
 }

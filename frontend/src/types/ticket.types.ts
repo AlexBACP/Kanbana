@@ -30,6 +30,11 @@ export interface Ticket {
   // Se activa automáticamente en sprints de trimestre documental.
   requiere_adjunto: boolean;
 
+  // ── NUEVO: flujo de revisión por aprendiz ────────────────────────────────
+  // true  → el aprendiz marcó el trabajo como listo; el líder debe revisar.
+  // La tarjeta se muestra en verde en el tablero para que el líder la vea.
+  completado_por_aprendiz?: boolean;
+
   asignado_a?: number;
   asignado_a_rel?: {
     id: number;
@@ -80,6 +85,7 @@ export interface CreateSprintDto {
   nombre: string;
   fecha_inicio: string;
   fecha_fin: string;
+  descripcion?: string;
   // ── NUEVO: para asociar el sprint a un trimestre ─────────────────────────
   trimestre_id?: number;
 }

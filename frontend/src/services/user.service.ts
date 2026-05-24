@@ -66,10 +66,10 @@ export const userService = {
     return data;
   },
 
-  // Helper para construir la URL pública del avatar
-  getAvatarUrl: (avatar_url: string | null | undefined): string | null => {
-    if (!avatar_url) return null;
-    if (avatar_url.startsWith('http') || avatar_url.startsWith('data:')) return avatar_url;
-    return `${BASE}${avatar_url}`;
+  // Helper para construir la URL pública (avatars, banners, cualquier /uploads/)
+  getAvatarUrl: (url: string | null | undefined): string | null => {
+    if (!url) return null;
+    if (url.startsWith('http') || url.startsWith('data:')) return url;
+    return `${BASE}${url}`;
   },
 };

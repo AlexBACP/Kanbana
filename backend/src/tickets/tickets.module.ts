@@ -13,18 +13,17 @@ import { MulterModule }    from '@nestjs/platform-express';
 import { TicketsService }   from './tickets.service';
 import { TicketsController } from './tickets.controller';
 import { Ticket }           from './entities/ticket.entity';
-// ── NUEVO IMPORT ─────────────────────────────────────────────────────────────
 import { TicketAttachment } from './entities/ticket-attachment.entity';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
   imports: [
-    // ── CAMBIO: se agrega TicketAttachment al array ───────────────────────
     TypeOrmModule.forFeature([Ticket, TicketAttachment]),
-    // ── NUEVO: MulterModule para habilitar FileInterceptor ────────────────
-    // La config detallada (storage, fileFilter, limits) está en el controller.
     MulterModule.register({}),
+    NotificationsModule,
   ],
   controllers: [TicketsController],
   providers:   [TicketsService],
+  exports:     [TicketsService],
 })
 export class TicketsModule {}

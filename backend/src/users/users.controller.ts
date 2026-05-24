@@ -10,17 +10,25 @@ import * as path from 'path';
 import * as fs from 'fs';
 import { UsersService } from './users.service';
 
-// Asegurar que el directorio de uploads existe
+// Asegurar que los directorios de uploads existen
 const uploadsDir = path.join(process.cwd(), 'uploads', 'avatars');
-if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir, { recursive: true });
-}
+const bannersDir = path.join(process.cwd(), 'uploads', 'banners');
+if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
+if (!fs.existsSync(bannersDir)) fs.mkdirSync(bannersDir, { recursive: true });
 
 const avatarStorage = diskStorage({
   destination: uploadsDir,
   filename: (_req, file, cb) => {
     const ext = path.extname(file.originalname).toLowerCase();
     cb(null, `avatar-${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`);
+  },
+});
+
+const bannerStorage = diskStorage({
+  destination: bannersDir,
+  filename: (_req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    cb(null, `banner-${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`);
   },
 });
 
@@ -103,6 +111,27 @@ export class UsersController {
     @UploadedFile() file: Express.Multer.File,
   ) {
     return this.usersService.updateAvatar(id, file);
+  }
+
+  // ── POST /users/:id/banner — upload de foto de portada ──────────────────
+  @Post(':id/banner')
+  @UseInterceptors(FileInterceptor('banner', {
+    storage: bannerStorage,
+    limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
+    fileFilter: (_req, file, cb) => {
+      const allowed = ['.jpg', '.jpeg', '.png', '.webp'];
+      const ext = path.extname(file.originalname).toLowerCase();
+      if (!allowed.includes(ext)) {
+        return cb(new Error('Solo se permiten imágenes (jpg, png, webp)'), false);
+      }
+      cb(null, true);
+    },
+  }))
+  uploadBanner(
+    @Param('id', ParseIntPipe) id: number,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    return this.usersService.updateBanner(id, file);
   }
 
   // ── PATCH /users/:id ──────────────────────────────────────────────────

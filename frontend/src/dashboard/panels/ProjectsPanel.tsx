@@ -40,13 +40,13 @@ const ProjectRow = ({ proj, canCreate, isCoordinador, onDelete, updateStatusMuta
     <tr className="hover:bg-zinc-800/30 transition-colors group border-b border-zinc-600/40">
       <td className="px-6 py-4">
         <div className="flex items-center gap-3">
-          <div className="w-7 h-7 rounded-lg bg-zinc-950 border border-zinc-600 flex items-center justify-center font-bold text-[#27ae60] text-[11px] shadow-inner group-hover:border-[#27ae60]/40 transition-colors shrink-0">
-            <FolderKanban size={13} className="text-[#27ae60]" />
+          <div className="w-7 h-7 rounded-lg bg-zinc-950 border border-zinc-600 flex items-center justify-center font-bold text-[#3b82f6] text-[11px] shadow-inner group-hover:border-[#3b82f6]/40 transition-colors shrink-0">
+            <FolderKanban size={13} className="text-[#3b82f6]" />
           </div>
           <div>
             <span
               onClick={() => navigate(`/projects/${proj.id}`)}
-              className="text-white font-bold tracking-tight text-sm group-hover:text-[#27ae60] transition-colors cursor-pointer"
+              className="text-white font-bold tracking-tight text-sm group-hover:text-[#3b82f6] transition-colors cursor-pointer"
             >
               {proj.nombre}
             </span>
@@ -74,7 +74,11 @@ const ProjectRow = ({ proj, canCreate, isCoordinador, onDelete, updateStatusMuta
             defaultValue={proj.liderId || proj.lider?.id || ''}
             onChange={e => {
               projectService.assignLider(proj.id, Number(e.target.value) || 0)
-                .then(() => queryClient.invalidateQueries({ queryKey: ['projects'] }));
+                .then(() => {
+                  queryClient.invalidateQueries({ queryKey: ['projects'] });
+                  queryClient.invalidateQueries({ queryKey: ['users'] });
+                  queryClient.invalidateQueries({ queryKey: ['projects', 'for-me'] });
+                });
             }}
             className="text-[10px] bg-zinc-900 border border-zinc-600 rounded-lg px-2.5 py-1.5 text-zinc-300 outline-none cursor-pointer max-w-[140px] font-medium focus:border-blue-600 transition-colors"
           >
@@ -120,8 +124,20 @@ const ProjectRow = ({ proj, canCreate, isCoordinador, onDelete, updateStatusMuta
 };
 
 // ── Bloque de ficha con sus proyectos ─────────────────────────────────────────
-const FichaProjectBlock = ({ ficha, projects, canCreate, isCoordinador, search, onDelete, updateStatusMutation, navigate, leaders = [], queryClient }: any) => {
+const FichaProjectBlock = ({ ficha, projects, canCreate, isCoordinador, search, onDelete, updateStatusMutation, navigate, queryClient }: any) => {
   const [open, setOpen] = useState(true);
+
+  // Solo los líderes técnicos de ESTA ficha — nunca de otras fichas
+  const { data: fichaMembers = [] } = useQuery({
+    queryKey: ['fichas', ficha.id, 'members'],
+    queryFn:  () => fichaService.getMembers(ficha.id),
+    staleTime: 60_000,
+    enabled:  canCreate && !!ficha.id,
+  });
+  const fichaLeaders = (fichaMembers as any[]).filter(
+    (u: any) => u.rol === 'aprendiz' && u.es_lider_tecnico,
+  );
+
   const filtered = useMemo(() => {
     const term = search.toLowerCase().trim();
     if (!term) return projects;
@@ -137,8 +153,8 @@ const FichaProjectBlock = ({ ficha, projects, canCreate, isCoordinador, search, 
         className="w-full flex items-center justify-between px-5 py-4 hover:bg-zinc-800/40 transition-colors text-left bg-zinc-950/20 border-b border-zinc-600/40"
       >
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-[#27ae60]/10 border border-[#27ae60]/20 flex items-center justify-center shrink-0">
-            <Hash size={14} className="text-[#27ae60]" />
+          <div className="w-8 h-8 rounded-lg bg-[#3b82f6]/10 border border-[#3b82f6]/20 flex items-center justify-center shrink-0">
+            <Hash size={14} className="text-[#3b82f6]" />
           </div>
           <div>
             <p className="text-sm font-black text-white tracking-tight">Ficha {ficha.codigo}</p>
@@ -187,7 +203,7 @@ const FichaProjectBlock = ({ ficha, projects, canCreate, isCoordinador, search, 
                       <ProjectRow key={proj.id} proj={proj} canCreate={canCreate}
                         isCoordinador={isCoordinador} onDelete={onDelete}
                         updateStatusMutation={updateStatusMutation} navigate={navigate}
-                        leaders={leaders} queryClient={queryClient}
+                        leaders={fichaLeaders} queryClient={queryClient}
                       />
                     ))}
                   </tbody>
@@ -207,6 +223,8 @@ export const ProjectsPanel = () => {
   const [statusFilter, setStatusFilter] = useState('all');
   const [isModalOpen, setIsModalOpen] = useState(false); // Controla la visibilidad inline del formulario
   const [numTrimestresNew, setNumTrimestresNew] = useState(3);
+  // ficha seleccionada en el formulario "Nuevo proyecto" — para escopar el dropdown de líder
+  const [formFichaId, setFormFichaId] = useState<number | null>(null);
   const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<{ id: number; nombre: string } | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -291,7 +309,19 @@ export const ProjectsPanel = () => {
   const { data: users = [] } = useQuery({ queryKey: ['users'], queryFn: () => userService.getAll() });
   const { data: fichas = [] } = useQuery({ queryKey: ['fichas'], queryFn: () => fichaService.getAll() });
 
+  // Global: solo se usa como fallback / coordinador sin ficha seleccionada
   const leaders = (users as any[]).filter((u: any) => u.rol === 'aprendiz' && u.es_lider_tecnico);
+
+  // Líderes técnicos de la ficha elegida en el formulario "Nuevo proyecto"
+  const { data: formFichaMembers = [] } = useQuery({
+    queryKey: ['fichas', formFichaId, 'members'],
+    queryFn:  () => fichaService.getMembers(formFichaId!),
+    staleTime: 60_000,
+    enabled:  isModalOpen && !!formFichaId,
+  });
+  const formLeaders = formFichaId
+    ? (formFichaMembers as any[]).filter((u: any) => u.rol === 'aprendiz' && u.es_lider_tecnico)
+    : leaders; // fallback: todos los líderes si no se eligió ficha aún
 
   const deleteMutation = useMutation({
     mutationFn: projectService.delete,
@@ -310,6 +340,7 @@ export const ProjectsPanel = () => {
       queryClient.invalidateQueries({ queryKey: ['projects'] });
       setIsModalOpen(true);
       setNumTrimestresNew(3);
+      setFormFichaId(null);
     },
   });
 
@@ -399,7 +430,7 @@ export const ProjectsPanel = () => {
                 }`}
               title="Generar trimestres para todos los proyectos y migrar módulos existentes"
             >
-              <Layers size={0} className={isBulkModalOpen ? 'text-blue-400' : 'text-[#27ae60]'} />
+              <Layers size={0} className={isBulkModalOpen ? 'text-blue-400' : 'text-[#3b82f6]'} />
               Configurar trimestres
             </button>
           )}
@@ -430,7 +461,7 @@ export const ProjectsPanel = () => {
         <div className="px-6 py-6 bg-zinc-900 flex flex-col gap-6 animate-[fadeIn_0.2s_ease-out]">
           <div className="border-b border-zinc-600/80 pb-3">
             <h2 className="text-lg font-black text-white tracking-tight flex items-center gap-2">
-              <Plus className="text-[#27ae60]" size={18} />
+              <Plus className="text-[#3b82f6]" size={18} />
               Crear Proyecto Formativo
             </h2>
             <p className="text-[13px] text-zinc-400 font-medium mt-0.5">
@@ -453,6 +484,7 @@ export const ProjectsPanel = () => {
                 <select
                   name="fichaId"
                   required
+                  onChange={e => setFormFichaId(Number(e.target.value) || null)}
                   className="w-full bg-zinc-900 border border-zinc-600 rounded-md px-3 py-2 text-[13px] text-zinc-300 outline-none hover:bg-zinc-800 focus:bg-zinc-800 focus:border-blue-600 transition-colors cursor-pointer"
                 >
                   <option value="" className="text-zinc-500">Selecciona una ficha</option>
@@ -466,13 +498,15 @@ export const ProjectsPanel = () => {
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-[13px]">
-              <FormField label="Líder técnico (Opcional)">
+              <FormField label={formFichaId ? 'Líder técnico (de esta ficha)' : 'Líder técnico (Opcional)'}>
                 <select
                   name="liderId"
                   className="w-full bg-zinc-900 border border-zinc-600 hover:bg-zinc-800 focus:bg-zinc-800 rounded-md px-3 py-2 text-[13px] text-zinc-300 outline-none focus:border-blue-600 transition-colors cursor-pointer"
                 >
-                  <option value="" className="text-zinc-500">Asignar después</option>
-                  {leaders.map((l: any) => (
+                  <option value="" className="text-zinc-500">
+                    {formFichaId ? (formLeaders.length === 0 ? 'Sin líderes en esta ficha' : 'Asignar después') : 'Selecciona una ficha primero'}
+                  </option>
+                  {formLeaders.map((l: any) => (
                     <option key={l.id} value={l.id} className="bg-zinc-900 text-zinc-300">{l.nombre}</option>
                   ))}
                 </select>
@@ -547,6 +581,7 @@ export const ProjectsPanel = () => {
                 onClick={() => {
                   setIsModalOpen(false);
                   setNumTrimestresNew(3);
+                  setFormFichaId(null);
                 }}
                 className="px-4 py-2 text-[14px] font-bold text-zinc-400 hover:text-white transition-colors bg-transparent hover:bg-zinc-800 rounded-lg"
               >
@@ -617,7 +652,7 @@ export const ProjectsPanel = () => {
                   Cancelar
                 </button>
                 <button type="submit" disabled={bulkMutation.isPending}
-                  className="px-5 py-2 bg-[#27ae60] hover:bg-[#219653] text-white text-[12px] font-black rounded-lg transition-all shadow-md active:scale-95">
+                  className="px-5 py-2 bg-[#3b82f6] hover:bg-[#2563eb] text-white text-[12px] font-black rounded-lg transition-all shadow-md active:scale-95">
                   {bulkMutation.isPending ? 'Propagando estructura...' : `Aplicar a ${projects.length} proyectos activos`}
                 </button>
               </div>
@@ -635,7 +670,7 @@ export const ProjectsPanel = () => {
                 value={search}
                 onChange={e => setSearch(e.target.value)}
                 placeholder="Buscar proyecto..."
-                className="w-full bg-zinc-900 border border-zinc-400 rounded-lg pl-10 py-3.5 text-1xl text-zinc-200 placeholder-zinc-400 focus:outline-none focus:border-blue-600 focus:ring-1 focus:ring-[#27ae60] transition-all"
+                className="w-full bg-zinc-900 border border-zinc-400 rounded-lg pl-10 py-3.5 text-1xl text-zinc-200 placeholder-zinc-400 focus:outline-none focus:border-blue-600 focus:ring-1 focus:ring-[#3b82f6] transition-all"
               />
             </div>
 
@@ -694,7 +729,6 @@ export const ProjectsPanel = () => {
                         onDelete={(p: any) => setDeleteTarget({ id: p.id, nombre: p.nombre })}
                         updateStatusMutation={updateStatusMutation}
                         navigate={navigate}
-                        leaders={leaders}
                         queryClient={queryClient}
                       />
                     ))}
@@ -773,13 +807,13 @@ export const ProjectsPanel = () => {
                               <tr key={proj.id} className="hover:bg-zinc-800/30 transition-colors group border-b border-zinc-600/40">
                                 <td className="px-6 py-4">
                                   <div className="flex items-center gap-3">
-                                    <div className="w-7 h-7 rounded-md bg-zinc-950 border border-zinc-600 flex items-center justify-center font-bold text-[#27ae60] text-[11px] shadow-inner group-hover:border-[#27ae60]/40 transition-colors shrink-0">
-                                      <FolderKanban size={13} className="text-[#27ae60]" />
+                                    <div className="w-7 h-7 rounded-md bg-zinc-950 border border-zinc-600 flex items-center justify-center font-bold text-[#3b82f6] text-[11px] shadow-inner group-hover:border-[#3b82f6]/40 transition-colors shrink-0">
+                                      <FolderKanban size={13} className="text-[#3b82f6]" />
                                     </div>
                                     <div>
                                       <span
                                         onClick={() => navigate(`/projects/${proj.id}`)}
-                                        className="text-white font-bold tracking-tight text-sm group-hover:text-[#27ae60] transition-colors cursor-pointer"
+                                        className="text-white font-bold tracking-tight text-sm group-hover:text-[#3b82f6] transition-colors cursor-pointer"
                                       >
                                         {proj.nombre}
                                       </span>

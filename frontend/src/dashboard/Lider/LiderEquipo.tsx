@@ -14,10 +14,11 @@ import {
   FolderKanban, Crown, BookOpen,
 } from 'lucide-react';
 
-const ROL_BADGE: Record<string, { bg: string; label: string; icon: any }> = {
-  aprendiz:      { bg: 'bg-amber-500/10 text-amber-400 border-amber-500/20',     label: 'Aprendiz',       icon: BookOpen },
-  lider_tecnico: { bg: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20', label: 'Líder técnico', icon: Crown },
-};
+// 'lider_tecnico' NO es un rol de BD — es un sub-rol (es_lider_tecnico).
+// La función getRolCfg(m) usa es_lider_tecnico para elegir el badge correcto.
+const ROL_BADGE_APRENDIZ = { bg: 'bg-amber-500/10 text-amber-400 border-amber-500/20',     label: 'Aprendiz',      icon: BookOpen };
+const ROL_BADGE_LIDER    = { bg: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20', label: 'Líder técnico', icon: Crown };
+const getRolCfg = (m: any) => m.es_lider_tecnico ? ROL_BADGE_LIDER : ROL_BADGE_APRENDIZ;
 
 export const LiderEquipo = () => {
   const [search, setSearch] = useState('');
@@ -49,39 +50,39 @@ export const LiderEquipo = () => {
       {/* Header */}
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
-          <h2 className="section-title">Mi Equipo</h2>
+          <h2 className="text-base font-black text-zinc-100 uppercase tracking-widest">Mi Equipo</h2>
           {miProyecto ? (
-            <p className="section-subtitle">
+            <p className="text-xs text-zinc-500 mt-0.5">
               <span className="inline-flex items-center gap-1">
-                <FolderKanban size={11} className="text-ink-muted" />
+                <FolderKanban size={11} className="text-zinc-500" />
                 {miProyecto.nombre}
               </span>
               {' · '}{miembrosArr.length} miembro{miembrosArr.length !== 1 ? 's' : ''}
             </p>
           ) : (
-            <p className="section-subtitle">Sin proyecto asignado</p>
+            <p className="text-xs text-zinc-500 mt-0.5">Sin proyecto asignado</p>
           )}
         </div>
       </div>
 
       {/* Contexto del proyecto */}
       {miProyecto && (
-        <div className="card p-4 flex items-center gap-4">
-          <div className="w-10 h-10 bg-primary-500/10 border border-primary-500/20 rounded-xl flex items-center justify-center shrink-0">
-            <FolderKanban size={18} className="text-primary-400" />
+        <div className="bg-zinc-900 border border-zinc-800 rounded-md p-4 flex items-center gap-4">
+          <div className="w-10 h-10 bg-blue-500/10 border border-blue-500/20 rounded-md flex items-center justify-center shrink-0">
+            <FolderKanban size={18} className="text-blue-400" />
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold text-ink-primary truncate">{miProyecto.nombre}</p>
-            <p className="text-xs text-ink-muted">{miProyecto.ficha?.codigo ? `Ficha ${miProyecto.ficha.codigo}` : 'Sin ficha'} · {miProyecto.estado}</p>
+            <p className="text-sm font-semibold text-zinc-100 truncate">{miProyecto.nombre}</p>
+            <p className="text-xs text-zinc-500">{miProyecto.ficha?.codigo ? `Ficha ${miProyecto.ficha.codigo}` : 'Sin ficha'} · {miProyecto.estado}</p>
           </div>
           <div className="flex gap-4 text-center">
             <div>
-              <p className="text-lg font-bold text-ink-primary">{miembrosArr.filter(m => m.rol === 'aprendiz').length}</p>
-              <p className="text-[10px] text-ink-muted">Aprendices</p>
+              <p className="text-lg font-bold text-zinc-100">{miembrosArr.filter(m => m.rol === 'aprendiz').length}</p>
+              <p className="text-[10px] text-zinc-500">Aprendices</p>
             </div>
             <div>
-              <p className="text-lg font-bold text-emerald-400">{miembrosArr.filter(m => m.rol === 'lider_tecnico').length}</p>
-              <p className="text-[10px] text-ink-muted">Líderes</p>
+              <p className="text-lg font-bold text-emerald-400">{miembrosArr.filter(m => m.es_lider_tecnico).length}</p>
+              <p className="text-[10px] text-zinc-500">Líderes</p>
             </div>
           </div>
         </div>
@@ -90,53 +91,53 @@ export const LiderEquipo = () => {
       {/* Búsqueda */}
       {miembrosArr.length > 0 && (
         <div className="relative w-64">
-          <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-muted" />
+          <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
           <input
             type="text"
             placeholder="Buscar por nombre o correo..."
             value={search}
             onChange={e => setSearch(e.target.value)}
-            className="input-base pl-9 w-full text-sm"
+            className="w-full bg-zinc-800 border border-zinc-700 rounded-md pl-9 pr-3 py-2 text-sm text-zinc-200 outline-none focus:border-blue-500/50 placeholder:text-zinc-600 transition-colors"
           />
         </div>
       )}
 
       {/* Lista de miembros */}
       {!miProyecto ? (
-        <div className="card p-10 text-center">
-          <FolderKanban size={28} className="mx-auto text-ink-muted mb-3 opacity-30" />
-          <p className="text-sm text-ink-muted">No tienes un proyecto asignado todavía</p>
-          <p className="text-xs text-ink-muted mt-1">Un coordinador o instructor debe asignarte como líder de un proyecto</p>
+        <div className="bg-zinc-900 border border-zinc-800 rounded-md p-10 text-center">
+          <FolderKanban size={28} className="mx-auto text-zinc-600 mb-3 opacity-30" />
+          <p className="text-sm text-zinc-500">No tienes un proyecto asignado todavía</p>
+          <p className="text-xs text-zinc-600 mt-1">Un coordinador o instructor debe asignarte como líder de un proyecto</p>
         </div>
       ) : isLoading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {[1, 2, 3].map(n => <div key={n} className="h-36 bg-surface-hover rounded-xl animate-pulse" />)}
+          {[1, 2, 3].map(n => <div key={n} className="h-36 bg-zinc-800/60 rounded-md animate-pulse" />)}
         </div>
       ) : filtered.length === 0 ? (
-        <div className="card p-10 text-center">
-          <Users size={28} className="mx-auto text-ink-muted mb-3 opacity-30" />
-          <p className="text-sm text-ink-muted">
+        <div className="bg-zinc-900 border border-zinc-800 rounded-md p-10 text-center">
+          <Users size={28} className="mx-auto text-zinc-600 mb-3 opacity-30" />
+          <p className="text-sm text-zinc-500">
             {search ? 'Sin coincidencias' : 'Aún no hay miembros en este proyecto'}
           </p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filtered.map((m: any) => {
-            const rolCfg = ROL_BADGE[m.rol] ?? ROL_BADGE.aprendiz;
+            const rolCfg = getRolCfg(m);
             const RolIcon = rolCfg.icon;
             return (
-              <div key={m.id} className="card p-4 flex flex-col hover:border-primary-500/30 transition-all group">
+              <div key={m.id} className="bg-zinc-900 border border-zinc-800 rounded-md p-4 flex flex-col hover:border-blue-500/30 transition-all group">
                 <div className="flex items-start justify-between mb-3">
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-primary-600/10 rounded-full flex items-center justify-center border border-primary-600/20 overflow-hidden shrink-0">
+                    <div className="w-10 h-10 bg-blue-600/10 rounded-full flex items-center justify-center border border-blue-600/20 overflow-hidden shrink-0">
                       {m.avatar_url ? (
                         <img src={userService.getAvatarUrl(m.avatar_url) || ''} alt={m.nombre} className="w-full h-full rounded-full object-cover" />
                       ) : (
-                        <span className="text-sm font-bold text-primary-400">{m.nombre?.substring(0, 2).toUpperCase()}</span>
+                        <span className="text-sm font-bold text-blue-400">{m.nombre?.substring(0, 2).toUpperCase()}</span>
                       )}
                     </div>
                     <div>
-                      <p className="text-sm font-semibold text-ink-primary leading-tight">{m.nombre}</p>
+                      <p className="text-sm font-semibold text-zinc-100 leading-tight">{m.nombre}</p>
                       <div className="flex items-center gap-1 mt-0.5">
                         <RolIcon size={10} className={rolCfg.bg.includes('amber') ? 'text-amber-400' : 'text-emerald-400'} />
                         <span className={`text-[10px] font-medium ${rolCfg.bg.includes('amber') ? 'text-amber-400' : 'text-emerald-400'}`}>
@@ -149,25 +150,25 @@ export const LiderEquipo = () => {
                 </div>
 
                 <div className="space-y-1.5 mb-3">
-                  <div className="flex items-center gap-2 text-ink-muted">
+                  <div className="flex items-center gap-2 text-zinc-500">
                     <Mail size={11} className="shrink-0" />
                     <span className="text-xs truncate">{m.correo}</span>
                   </div>
                   {m.telefono && (
-                    <div className="flex items-center gap-2 text-ink-muted">
+                    <div className="flex items-center gap-2 text-zinc-500">
                       <Phone size={11} className="shrink-0" />
                       <span className="text-xs">{m.telefono}</span>
                     </div>
                   )}
                 </div>
 
-                <div className="mt-auto pt-3 border-t border-surface-border flex items-center justify-between">
-                  <span className={`text-[10px] font-bold uppercase tracking-widest ${m.activo ? 'text-emerald-400' : 'text-ink-muted'}`}>
+                <div className="mt-auto pt-3 border-t border-zinc-800 flex items-center justify-between">
+                  <span className={`text-[10px] font-bold uppercase tracking-widest ${m.activo ? 'text-emerald-400' : 'text-zinc-500'}`}>
                     {m.activo ? 'Activo' : 'Inactivo'}
                   </span>
                   <button
                     onClick={() => setProfileUserId(m.id)}
-                    className="text-[10px] text-primary-400 hover:text-primary-300 font-bold uppercase tracking-widest flex items-center gap-1 transition-colors"
+                    className="text-[10px] text-blue-400 hover:text-blue-300 font-bold uppercase tracking-widest flex items-center gap-1 transition-colors"
                   >
                     <Eye size={10} /> Ver perfil
                   </button>

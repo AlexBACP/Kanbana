@@ -2,30 +2,50 @@ import {
   Injectable, UnauthorizedException, NotFoundException, BadRequestException
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
 import { UsersService } from '../users/users.service';
+import { NotificationsService } from '../notifications/notifications.service';
+import { Ficha } from '../fichas/entities/ficha.entity';
+import { NotificationType } from '../notifications/entities/notification.entity';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
-// ── CAMBIO: importamos nodemailer para enviar el email real ───────────────
 import * as nodemailer from 'nodemailer';
+import * as otplib from 'otplib';
+import * as QRCode from 'qrcode';
 
 @Injectable()
 export class AuthService {
   constructor(
     private usersService: UsersService,
     private jwtService: JwtService,
+    private notificationsService: NotificationsService,
+    @InjectRepository(Ficha)
+    private fichaRepo: Repository<Ficha>,
   ) {}
 
   async validateUser(correo: string, pass: string): Promise<any> {
     const user = await this.usersService.findByEmail(correo);
-    if (user && (await bcrypt.compare(pass, user.contrasena))) {
-      const { contrasena, ...result } = user as any;
-      return result;
+    if (!user) return null;
+
+    const passwordOk = await bcrypt.compare(pass, user.contrasena);
+    if (!passwordOk) return null;
+
+    // Bloquear aprendices invitados que aún no confirmaron su correo
+    if (!user.cuenta_confirmada && (user as any).token_activacion) {
+      throw new UnauthorizedException(
+        'Debes confirmar tu cuenta desde el correo de invitación antes de ingresar.'
+      );
     }
-    return null;
+
+    const { contrasena, token_activacion, ...result } = user as any;
+    return result;
   }
 
   async login(user: any) {
-    const payload = { sub: user.id, email: user.correo, rol: user.rol };
+    // Nunca devolver el secreto TOTP al cliente
+    const { totp_secret, contrasena, ...safeUser } = user;
+    const payload = { sub: safeUser.id, email: safeUser.correo, rol: safeUser.rol };
     const access_token = this.jwtService.sign(payload, {
       expiresIn: Number(process.env.JWT_ACCESS_EXPIRES) || 60 * 15,
     });
@@ -33,7 +53,72 @@ export class AuthService {
       secret: process.env.JWT_REFRESH_SECRET || 'kanbana_refresh_secreto_diferente_al_anterior',
       expiresIn: Number(process.env.JWT_REFRESH_EXPIRES) || 60 * 60 * 24 * 7,
     });
-    return { user, tokens: { access_token, refresh_token } };
+    return { user: safeUser, tokens: { access_token, refresh_token } };
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════════
+  // 2FA — TOTP (Google Authenticator / Authy)
+  // ══════════════════════════════════════════════════════════════════════════════
+
+  /**
+   * Genera un secreto TOTP y lo guarda en el usuario (sin activar aún).
+   * Devuelve el data URL del QR code para que el usuario lo escanee.
+   */
+  async setup2fa(userId: number): Promise<{ secret: string; qrCodeDataUrl: string }> {
+    const user = await this.usersService.findOne(userId);
+    const secret = otplib.generateSecret({ length: 20 });
+    const otpAuthUrl = otplib.generateURI({ label: user.correo, issuer: 'Kanbana SENA', secret });
+    const qrCodeDataUrl = await QRCode.toDataURL(otpAuthUrl, {
+      width: 200,
+      margin: 2,
+      color: { dark: '#f4f4f5', light: '#09090b' },
+    });
+
+    // Guardar el secreto (sin activar todavía — el usuario debe confirmar con un código)
+    await this.usersService.update(userId, { totp_secret: secret } as any);
+    return { secret, qrCodeDataUrl };
+  }
+
+  /**
+   * Verifica el código que el usuario escaneó y activa el 2FA.
+   * Lanza UnauthorizedException si el código es inválido.
+   */
+  async enable2fa(userId: number, code: string): Promise<{ success: true }> {
+    const user = await this.usersService.findWithTotpSecret(userId);
+    if (!user?.totp_secret) {
+      throw new BadRequestException('Primero genera el QR desde "Configurar 2FA".');
+    }
+    if (!this.checkTotp(user.totp_secret, code)) {
+      throw new UnauthorizedException('Código inválido. Verifica que la hora de tu dispositivo sea correcta.');
+    }
+    await this.usersService.update(userId, { totp_enabled: true } as any);
+    return { success: true };
+  }
+
+  /**
+   * Desactiva el 2FA verificando un código válido primero.
+   */
+  async disable2fa(userId: number, code: string): Promise<{ success: true }> {
+    const user = await this.usersService.findWithTotpSecret(userId);
+    if (!user?.totp_enabled) {
+      throw new BadRequestException('El 2FA no está activado en tu cuenta.');
+    }
+    if (!this.checkTotp(user.totp_secret, code)) {
+      throw new UnauthorizedException('Código inválido.');
+    }
+    await this.usersService.update(userId, { totp_enabled: false, totp_secret: null } as any);
+    return { success: true };
+  }
+
+  /**
+   * Verifica un código TOTP durante el login (uso interno del controlador).
+   * Lanza UnauthorizedException si es inválido.
+   */
+  async verifyLoginTotp(userId: number, code: string): Promise<void> {
+    const user = await this.usersService.findWithTotpSecret(userId);
+    if (!user?.totp_secret || !this.checkTotp(user.totp_secret, code)) {
+      throw new UnauthorizedException('Código 2FA inválido o expirado.');
+    }
   }
 
   async refreshToken(refreshToken: string) {
@@ -45,6 +130,18 @@ export class AuthService {
       return this.login(user);
     } catch {
       throw new UnauthorizedException('Refresh token inválido o expirado');
+    }
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════════
+  // Helper privado — compatible con otplib v13+ (API funcional)
+  // ══════════════════════════════════════════════════════════════════════════════
+  private checkTotp(secret: string, code: string): boolean {
+    try {
+      const result = (otplib as any).verifySync({ token: code, secret, type: 'totp' });
+      return typeof result === 'object' ? result.valid : !!result;
+    } catch {
+      return false;
     }
   }
 
@@ -92,9 +189,24 @@ export class AuthService {
 
   async confirmAccount(token: string) {
     try {
-      await this.usersService.confirmAccount(token);
+      const aprendiz = await this.usersService.confirmAccount(token);
+
+      // Notificar al instructor si el aprendiz pertenece a una ficha
+      if (aprendiz?.fichaId) {
+        const ficha = await this.fichaRepo.findOne({ where: { id: aprendiz.fichaId } });
+        if (ficha?.instructor_id) {
+          await this.notificationsService.create({
+            usuario_id: ficha.instructor_id,
+            titulo:     '✅ Aprendiz confirmó su cuenta',
+            mensaje:    `${aprendiz.nombre} confirmó su correo y ya puede ingresar a Kanbana.`,
+            tipo:       NotificationType.SUCCESS,
+          });
+        }
+      }
+
       return { message: 'Cuenta confirmada exitosamente' };
-    } catch {
+    } catch (e: any) {
+      if (e instanceof BadRequestException) throw e;
       throw new BadRequestException('Token inválido o ya utilizado');
     }
   }

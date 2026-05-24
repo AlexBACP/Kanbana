@@ -13,7 +13,7 @@ export interface AuthResponse {
     id: number;
     nombre: string;
     correo: string;
-    rol: 'coordinador' | 'instructor' | 'lider_tecnico' | 'aprendiz';
+    rol: 'coordinador' | 'instructor' | 'aprendiz'; // 'lider_tecnico' no existe como rol — es sub-rol via es_lider_tecnico
     activo: boolean;
     creado_en: string;
   };

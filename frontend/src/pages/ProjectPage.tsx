@@ -125,13 +125,13 @@ export const ProjectPage = () => {
 
   // ── Colores por tipo ──────────────────────────────────────────────────────
   const colorTrim = (t: Trimestre) => {
-    if (t.esta_finalizado)   return 'border-dark-border bg-dark-card/50 opacity-70';
-    if (t.tipo === 'documental') return 'border-amber-500/30 bg-amber-500/5';
-    return 'border-primary-500/30 bg-primary-500/5';
+    if (t.esta_finalizado)       return 'border-zinc-700/50 bg-zinc-800/30 opacity-70';
+    if (t.tipo === 'documental') return 'border-amber-500/30 bg-amber-500/5 hover:border-amber-500/50';
+    return 'border-primary-500/30 bg-primary-500/5 hover:border-primary-500/50';
   };
 
   const badgeTrim = (t: Trimestre) => {
-    if (t.esta_finalizado)       return 'bg-dark-bg text-dark-muted border-dark-border';
+    if (t.esta_finalizado)       return 'bg-zinc-800 text-zinc-500 border-zinc-700';
     if (t.tipo === 'documental') return 'bg-amber-500/10 text-amber-400 border-amber-500/20';
     return 'bg-primary-500/10 text-primary-400 border-primary-500/20';
   };
@@ -141,33 +141,40 @@ export const ProjectPage = () => {
     <div className="flex flex-col h-full overflow-y-auto">
 
       {/* Header */}
-      <div className="flex items-center gap-4 px-6 py-4 border-b border-dark-border bg-dark-card shrink-0">
+      <div className="flex items-center gap-4 px-6 py-4 border-b border-zinc-800 bg-zinc-900 shrink-0">
         <button
           onClick={() => navigate(-1)}
-          className="p-2 rounded-xl hover:bg-dark-bg/60 text-dark-muted hover:text-dark-text transition-all"
+          className="p-2 rounded-xl hover:bg-zinc-800 text-zinc-500 hover:text-zinc-200 transition-all"
         >
           <ChevronLeft size={18} />
         </button>
         <div className="flex-1 min-w-0">
-          <h1 className="text-lg font-black text-dark-text truncate">
+          <h1 className="text-lg font-black text-zinc-100 truncate">
             {project?.nombre ?? 'Cargando...'}
           </h1>
-          <p className="text-xs text-dark-muted">
+          <p className="text-xs text-zinc-500">
             {project?.ficha?.codigo} · {fmt(project?.fecha_inicio ?? '')} → {fmt(project?.fecha_fin ?? '')}
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {/* Acceso rápido al kanban completo */}
+          {/* Cola de trabajo */}
+          <button
+            onClick={() => navigate(`/projects/${proyectoId}/backlog`)}
+            className="flex items-center gap-2 px-3 py-2 rounded-xl border border-zinc-700 text-xs font-bold text-zinc-400 hover:text-zinc-200 hover:border-zinc-600 transition-all"
+          >
+            <Layers size={14} /> Cola de trabajo
+          </button>
+          {/* Kanban completo */}
           <button
             onClick={() => navigate(`/projects/${proyectoId}/kanban`)}
-            className="flex items-center gap-2 px-3 py-2 rounded-xl border border-dark-border text-xs font-bold text-dark-muted hover:text-dark-text hover:border-primary-500/40 transition-all"
+            className="flex items-center gap-2 px-3 py-2 rounded-xl border border-zinc-700 text-xs font-bold text-zinc-400 hover:text-zinc-200 hover:border-primary-500/40 transition-all"
           >
-            <KanbanSquare size={14} /> Kanban completo
+            <KanbanSquare size={14} /> Kanban
           </button>
           {isAdmin && (
             <button
               onClick={() => setShowGenerate(true)}
-              className="flex items-center gap-2 px-3 py-2 rounded-xl bg-dark-bg border border-dark-border text-xs font-bold text-dark-muted hover:text-primary-400 hover:border-primary-500/40 transition-all"
+              className="flex items-center gap-2 px-3 py-2 rounded-xl bg-zinc-800 border border-zinc-700 text-xs font-bold text-zinc-400 hover:text-primary-400 hover:border-primary-500/40 transition-all"
             >
               <Settings size={14} />
               {trimestres.length > 0 ? 'Reconfigurar' : 'Configurar trimestres'}
@@ -177,22 +184,22 @@ export const ProjectPage = () => {
       </div>
 
       {/* Contenido */}
-      <div className="flex-1 p-6">
+      <div className="flex-1 p-6 bg-zinc-950">
 
         {isLoading ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {[1, 2, 3].map(n => (
-              <div key={n} className="h-48 bg-dark-card rounded-[2rem] animate-pulse border border-dark-border" />
+              <div key={n} className="h-48 bg-zinc-800/40 rounded-2xl animate-pulse border border-zinc-700/50" />
             ))}
           </div>
         ) : trimestres.length === 0 ? (
           /* Sin trimestres */
           <div className="flex flex-col items-center justify-center py-20 text-center">
-            <div className="w-20 h-20 rounded-[2rem] bg-primary-500/10 border border-primary-500/20 flex items-center justify-center mb-6">
+            <div className="w-20 h-20 rounded-2xl bg-primary-500/10 border border-primary-500/20 flex items-center justify-center mb-6">
               <Layers size={36} className="text-primary-400" />
             </div>
-            <h3 className="text-xl font-black text-dark-text mb-2">Sin trimestres configurados</h3>
-            <p className="text-sm text-dark-muted max-w-sm mb-8 leading-relaxed">
+            <h3 className="text-xl font-black text-zinc-100 mb-2">Sin trimestres configurados</h3>
+            <p className="text-sm text-zinc-500 max-w-sm mb-8 leading-relaxed">
               {isAdmin
                 ? 'Configura los trimestres del proyecto para organizar los módulos y tareas.'
                 : 'El instructor debe configurar los trimestres de este proyecto.'}
@@ -218,7 +225,7 @@ export const ProjectPage = () => {
                   <button
                     key={trim.id}
                     onClick={() => navigate(`/projects/${proyectoId}/trimestre/${trim.id}`)}
-                    className={`text-left rounded-[2rem] border p-5 transition-all hover:scale-[1.02] hover:shadow-xl ${colorTrim(trim)}`}
+                    className={`text-left rounded-2xl border p-5 transition-all hover:scale-[1.01] hover:shadow-xl ${colorTrim(trim)}`}
                   >
                     {/* Badge tipo */}
                     <div className="flex items-center justify-between mb-4">
@@ -228,17 +235,17 @@ export const ProjectPage = () => {
                           : <><Code2 size={10} /> Desarrollo</>}
                       </span>
                       {trim.esta_finalizado && (
-                        <CheckCircle2 size={16} className="text-dark-muted" />
+                        <CheckCircle2 size={16} className="text-zinc-500" />
                       )}
                     </div>
 
                     {/* Nombre */}
-                    <h3 className="text-base font-black text-dark-text mb-1">
+                    <h3 className="text-base font-black text-zinc-100 mb-1">
                       {trim.nombre || `Trimestre ${trim.numero}`}
                     </h3>
 
                     {/* Fechas */}
-                    <div className="flex items-center gap-1.5 text-[11px] text-dark-muted mb-4">
+                    <div className="flex items-center gap-1.5 text-[11px] text-zinc-500 mb-4">
                       <Calendar size={11} />
                       {fmt(trim.fecha_inicio)} → {fmt(trim.fecha_fin)}
                     </div>
@@ -246,12 +253,12 @@ export const ProjectPage = () => {
                     {/* Barra de progreso */}
                     <div className="space-y-1.5">
                       <div className="flex items-center justify-between text-[10px]">
-                        <span className="text-dark-muted">{sprints.length} módulo(s)</span>
+                        <span className="text-zinc-500">{sprints.length} módulo(s)</span>
                         <span className={trim.tipo === 'documental' ? 'text-amber-400' : 'text-primary-400'}>
                           {done}/{total} tareas
                         </span>
                       </div>
-                      <div className="h-1.5 bg-dark-bg rounded-full overflow-hidden">
+                      <div className="h-1.5 bg-zinc-800 rounded-full overflow-hidden">
                         <div
                           className={`h-full rounded-full transition-all ${
                             trim.tipo === 'documental' ? 'bg-amber-400' : 'bg-primary-500'
@@ -259,13 +266,13 @@ export const ProjectPage = () => {
                           style={{ width: `${progreso}%` }}
                         />
                       </div>
-                      <p className="text-[10px] text-dark-muted text-right">{progreso}%</p>
+                      <p className="text-[10px] text-zinc-500 text-right">{progreso}%</p>
                     </div>
 
                     {/* Footer */}
-                    <div className="mt-4 pt-3 border-t border-dark-border/50 flex items-center justify-between">
-                      <span className="text-[10px] text-dark-muted font-bold uppercase tracking-widest">
-                        {trim.esta_finalizado ? 'Finalizado' : 'Ver kanban →'}
+                    <div className="mt-4 pt-3 border-t border-zinc-700/40 flex items-center justify-between">
+                      <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">
+                        {trim.esta_finalizado ? 'Finalizado' : 'Ver módulos →'}
                       </span>
                       {!trim.esta_finalizado && (
                         <KanbanSquare size={14} className={trim.tipo === 'documental' ? 'text-amber-400' : 'text-primary-400'} />
@@ -278,14 +285,14 @@ export const ProjectPage = () => {
 
             {/* Módulos sin trimestre */}
             {sinTrimestre.length > 0 && isAdmin && (
-              <div className="bg-amber-500/5 border border-amber-500/20 rounded-[2rem] p-5">
+              <div className="bg-amber-500/5 border border-amber-500/20 rounded-2xl p-5">
                 <div className="flex items-center gap-2 mb-2">
                   <AlertTriangle size={14} className="text-amber-400" />
                   <span className="text-xs font-black text-amber-400 uppercase tracking-widest">
                     {sinTrimestre.length} módulo(s) sin trimestre asignado
                   </span>
                 </div>
-                <p className="text-xs text-dark-muted">
+                <p className="text-xs text-zinc-500">
                   Estos módulos no están vinculados a ningún trimestre. Puedes reorganizarlos desde el kanban completo.
                 </p>
               </div>
@@ -329,7 +336,7 @@ export const ProjectPage = () => {
 
           <div className="space-y-3 max-h-[360px] overflow-y-auto pr-1">
             {fields.map((field, i) => (
-              <div key={field.id} className="bg-dark-bg border border-dark-border rounded-2xl p-4 space-y-3">
+              <div key={field.id} className="bg-zinc-800/40 border border-zinc-700/50 rounded-2xl p-4 space-y-3">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-black text-primary-400 uppercase tracking-widest">
                     Trimestre {i + 1}
@@ -347,14 +354,14 @@ export const ProjectPage = () => {
                     <input
                       type="date"
                       {...regGen(`trimestres.${i}.fecha_inicio` as const)}
-                      className="w-full bg-dark-card border border-dark-border rounded-xl px-3 py-2 text-xs text-dark-text outline-none focus:border-primary-500"
+                      className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-3 py-2 text-xs text-zinc-200 outline-none focus:border-primary-500"
                     />
                   </FormField>
                   <FormField label="Fecha fin">
                     <input
                       type="date"
                       {...regGen(`trimestres.${i}.fecha_fin` as const)}
-                      className="w-full bg-dark-card border border-dark-border rounded-xl px-3 py-2 text-xs text-dark-text outline-none focus:border-primary-500"
+                      className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-3 py-2 text-xs text-zinc-200 outline-none focus:border-primary-500"
                     />
                   </FormField>
                 </div>

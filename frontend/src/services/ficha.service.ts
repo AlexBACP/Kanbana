@@ -152,4 +152,12 @@ export const fichaService = {
   /** Editar nombre/fechas de un trimestre */
   updateTrimestre: (trimestreId: number, dto: any) =>
     api.patch(`/fichas/trimestres/${trimestreId}`, dto).then(r => r.data),
+
+  /** Instructor solicita al coordinador permiso para crear una ficha */
+  solicitarCrear: () =>
+    api.post('/fichas/solicitar-crear').then(r => r.data),
+
+  /** Coordinador aprueba o rechaza la solicitud de creación de ficha de un instructor */
+  responderSolicitud: (instructorId: number, aprobada: boolean, motivo?: string) =>
+    api.post('/fichas/responder-solicitud', { instructorId, aprobada, motivo }).then(r => r.data),
 };

@@ -5,9 +5,22 @@ export const ThemeApplier = () => {
   const { settings } = useAuthStore();
 
   useEffect(() => {
-    // Apply theme color as data-theme attribute on body
-    document.documentElement.setAttribute('data-theme', settings.themeColor);
-  }, [settings.themeColor]);
+    const html = document.documentElement;
+    html.setAttribute('data-theme', settings.themeColor);
+    html.setAttribute('data-mode',  settings.themeMode ?? 'dark');
+
+    // Tailwind dark mode class
+    if (settings.themeMode === 'light') {
+      html.classList.remove('dark', 'dim');
+      html.classList.add('light');
+    } else if (settings.themeMode === 'dim') {
+      html.classList.remove('light');
+      html.classList.add('dark', 'dim');
+    } else {
+      html.classList.remove('light', 'dim');
+      html.classList.add('dark');
+    }
+  }, [settings.themeColor, settings.themeMode]);
 
   return null;
 };

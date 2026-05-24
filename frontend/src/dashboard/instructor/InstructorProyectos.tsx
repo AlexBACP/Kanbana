@@ -6,14 +6,22 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { projectService } from '../../services/project.service';
-import { userService } from '../../services/user.service';
 import { ticketService } from '../../services/ticket.service';
 import { useAuthStore } from '../../store/auth.store';
 import { Modal } from '../../components/Modal';
 import {
   FolderKanban, Users, Ticket, Plus, ExternalLink,
-  ChevronDown, ChevronUp, Search, AlertCircle, ShieldCheck,
+  ChevronDown, ChevronUp, Search, AlertCircle, ShieldCheck, Loader2, Crown,
 } from 'lucide-react';
+import { SprintContextBanner } from '../../components/SprintContextBanner';
+
+// ── Helpers de formulario (mismo estilo que LiderTickets) ─────────────────────
+const FormField = ({ label, children }: { label: string; children: React.ReactNode }) => (
+  <div className="space-y-1.5">
+    <label className="text-[10px] font-black text-dark-muted uppercase tracking-widest ml-1">{label}</label>
+    {children}
+  </div>
+);
 
 const StatusBadge = ({ estado }: { estado: string }) => {
   const map: Record<string, string> = {
@@ -35,6 +43,7 @@ export const InstructorProyectos = () => {
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [search, setSearch] = useState('');
   const [ticketModal, setTicketModal] = useState<number | null>(null); // proyectoId
+  const [formError, setFormError]     = useState<string | null>(null);
 
   const { data: proyectos = [], isLoading } = useQuery({
     queryKey: ['projects', 'for-me'],
@@ -46,11 +55,31 @@ export const InstructorProyectos = () => {
     pr.nombre?.toLowerCase().includes(search.toLowerCase())
   );
 
+  // Miembros y módulos del proyecto seleccionado para el modal de tickets
+  const { data: modalMembers = [] } = useQuery({
+    queryKey: ['projects', ticketModal, 'members'],
+    queryFn:  () => projectService.getMembers(ticketModal!),
+    enabled:  ticketModal !== null,
+    staleTime: 60_000,
+  });
+  const { data: modalSprints = [] } = useQuery({
+    queryKey: ['projects', ticketModal, 'sprints'],
+    queryFn:  () => projectService.getSprints(ticketModal!),
+    enabled:  ticketModal !== null,
+    staleTime: 60_000,
+  });
+  const modalMembersArr = (modalMembers as any[]).filter((m: any) => m.rol === 'aprendiz');
+  const modalSprintsArr = modalSprints as any[];
+
   const createTicketMutation = useMutation({
     mutationFn: (dto: any) => ticketService.create(dto),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['tickets'] });
       setTicketModal(null);
+      setFormError(null);
+    },
+    onError: (err: any) => {
+      setFormError(err?.response?.data?.message || 'Error al crear la tarea.');
     },
   });
 
@@ -98,48 +127,120 @@ export const InstructorProyectos = () => {
         </div>
       )}
 
-      {/* Modal crear ticket */}
+      {/* Modal crear ticket — diseño unificado con LiderTickets */}
       <Modal
         isOpen={ticketModal !== null}
-        onClose={() => setTicketModal(null)}
-        title="Nuevo ticket"
+        onClose={() => { setTicketModal(null); setFormError(null); }}
+        title="Crear Nueva Tarea"
       >
         <form
           onSubmit={e => {
             e.preventDefault();
+            setFormError(null);
             const f = new FormData(e.currentTarget);
+            const asignadoRaw = f.get('asignado_a_id');
             createTicketMutation.mutate({
-              proyecto_id: ticketModal,
-              titulo:       f.get('titulo'),
-              descripcion:  f.get('descripcion'),
-              prioridad:    f.get('prioridad'),
+              proyecto_id:   ticketModal,
+              titulo:        f.get('titulo') as string,
+              descripcion:   (f.get('descripcion') as string) || '',
+              tipo:          f.get('tipo') as string,
+              prioridad:     f.get('prioridad') as string,
+              asignado_a_id: asignadoRaw ? Number(asignadoRaw) : undefined,
+              fecha_limite:  (f.get('fecha_limite') as string) || undefined,
+              sprint_id:     f.get('sprint_id') ? Number(f.get('sprint_id')) : undefined,
               creado_por_id: user?.id,
             });
           }}
           className="space-y-4"
         >
-          <div className="space-y-1.5">
-            <label className="text-xs font-medium text-dark-muted">Título del ticket</label>
-            <input name="titulo" required className="input-dark text-sm py-2.5" placeholder="Breve descripción de la tarea" />
+          <FormField label="Título *">
+            <input
+              name="titulo"
+              required
+              placeholder="Descripción breve de la tarea"
+              className="w-full bg-dark-bg border border-dark-border rounded-xl px-3 py-2.5 text-sm text-dark-text outline-none focus:border-blue-500/50 transition-colors placeholder:text-dark-muted/50"
+            />
+          </FormField>
+
+          <FormField label="Descripción">
+            <textarea
+              name="descripcion"
+              rows={3}
+              placeholder="Detalles, criterios de aceptación..."
+              className="w-full bg-dark-bg border border-dark-border rounded-xl px-3 py-2.5 text-sm text-dark-text outline-none focus:border-blue-500/50 transition-colors resize-none placeholder:text-dark-muted/50"
+            />
+          </FormField>
+
+          <div className="grid grid-cols-2 gap-3">
+            <FormField label="Tipo">
+              <select name="tipo" defaultValue="task"
+                className="w-full bg-dark-bg border border-dark-border rounded-xl px-3 py-2.5 text-sm text-dark-text outline-none focus:border-blue-500/50 transition-colors"
+              >
+                <option value="task">✅ Tarea</option>
+                <option value="bug">🐛 Bug</option>
+                <option value="story">📖 Historia</option>
+              </select>
+            </FormField>
+            <FormField label="Prioridad">
+              <select name="prioridad" defaultValue="media"
+                className="w-full bg-dark-bg border border-dark-border rounded-xl px-3 py-2.5 text-sm text-dark-text outline-none focus:border-blue-500/50 transition-colors"
+              >
+                <option value="alta">🔴 Alta</option>
+                <option value="media">🟡 Media</option>
+                <option value="baja">🟢 Baja</option>
+              </select>
+            </FormField>
           </div>
-          <div className="space-y-1.5">
-            <label className="text-xs font-medium text-dark-muted">Descripción</label>
-            <textarea name="descripcion" rows={3} className="input-dark text-sm resize-none" placeholder="Detalle del ticket..." />
-          </div>
-          <div className="space-y-1.5">
-            <label className="text-xs font-medium text-dark-muted">Prioridad</label>
-            <select name="prioridad" className="input-dark text-sm py-2.5" defaultValue="media">
-              <option value="alta">Alta</option>
-              <option value="media">Media</option>
-              <option value="baja">Baja</option>
+
+          <FormField label="Asignar a (miembro del proyecto)">
+            <select name="asignado_a_id"
+              className="w-full bg-dark-bg border border-dark-border rounded-xl px-3 py-2.5 text-sm text-dark-text outline-none focus:border-blue-500/50 transition-colors"
+            >
+              <option value="">Sin asignar</option>
+              {modalMembersArr.map((m: any) => (
+                <option key={m.id} value={m.id}>
+                  {m.nombre} ({m.es_lider_tecnico ? 'Líder Técnico' : 'Aprendiz'})
+                </option>
+              ))}
             </select>
-          </div>
+            {modalMembersArr.length === 0 && ticketModal && (
+              <p className="text-[10px] text-dark-muted mt-1 ml-1">No hay miembros aprendices en este proyecto</p>
+            )}
+          </FormField>
+
+          <FormField label="Módulo (opcional)">
+            <select name="sprint_id"
+              className="w-full bg-dark-bg border border-dark-border rounded-xl px-3 py-2.5 text-sm text-dark-text outline-none focus:border-blue-500/50 transition-colors"
+            >
+              <option value="">Sin módulo asignado</option>
+              {modalSprintsArr.map((s: any) => (
+                <option key={s.id} value={s.id}>{s.nombre}</option>
+              ))}
+            </select>
+          </FormField>
+
+          <FormField label="Fecha límite">
+            <input name="fecha_limite" type="date"
+              className="w-full bg-dark-bg border border-dark-border rounded-xl px-3 py-2.5 text-sm text-dark-text outline-none focus:border-blue-500/50 transition-colors"
+            />
+          </FormField>
+
+          {formError && (
+            <div className="flex items-center gap-2 px-3 py-2.5 bg-rose-500/10 border border-rose-500/20 rounded-xl">
+              <AlertCircle size={13} className="text-rose-400 shrink-0" />
+              <p className="text-xs text-rose-400">{formError}</p>
+            </div>
+          )}
+
           <button
             type="submit"
             disabled={createTicketMutation.isPending}
-            className="w-full py-2.5 bg-primary-600 hover:bg-primary-500 disabled:opacity-60 text-white text-sm font-medium rounded-xl transition-colors"
+            className="w-full py-3 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-black uppercase tracking-widest rounded-xl text-xs transition-all flex items-center justify-center gap-2"
           >
-            {createTicketMutation.isPending ? 'Creando...' : 'Crear ticket'}
+            {createTicketMutation.isPending
+              ? <><Loader2 size={14} className="animate-spin" /> Creando tarea...</>
+              : <><Plus size={14} /> Crear Tarea</>
+            }
           </button>
         </form>
       </Modal>
@@ -165,16 +266,29 @@ const ProyectoRow = ({ proyecto: pr, expanded, onToggle, onCreateTicket }: any) 
     staleTime: 30_000,
   });
 
-  const toggleLiderMutation = useMutation({
-    mutationFn: ({ userId }: { userId: number }) =>
-      userService.toggleLiderTecnico(userId),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['projects', pr.id, 'members'] }),
+  // Sprint activo — se carga siempre (no solo expandido) para mostrarlo en la cabecera
+  const { data: activeSprint } = useQuery({
+    queryKey: ['projects', pr.id, 'sprint', 'active'],
+    queryFn:  () => projectService.getActiveSprint(pr.id),
+    staleTime: 60_000,
+  });
+
+  // Usa el endpoint correcto: setea project.liderId + es_lider_tecnico + envía notificación/email
+  const assignLiderMutation = useMutation({
+    mutationFn: ({ liderId }: { liderId: number | null }) =>
+      projectService.assignLider(pr.id, liderId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['projects', pr.id, 'members'] });
+      // Refresca la cabecera del proyecto (pr.lider?.nombre)
+      qc.invalidateQueries({ queryKey: ['projects', 'for-me'] });
+    },
   });
 
   const m = miembros as any[];
   const t = tickets as any[];
-  const aprendices = m.filter(u => u.rol === 'aprendiz');
-  const lideres    = m.filter(u => u.rol === 'lider_tecnico');
+  // Separar por el liderId del PROYECTO, no por el flag global
+  const liderDelProyecto = m.find((u: any) => u.id === pr.liderId);
+  const aprendices       = m.filter((u: any) => u.rol === 'aprendiz' && u.id !== pr.liderId);
   const done       = t.filter(tk => tk.estado === 'done').length;
   const progress   = t.length ? Math.round((done / t.length) * 100) : 0;
 
@@ -193,6 +307,12 @@ const ProyectoRow = ({ proyecto: pr, expanded, onToggle, onCreateTicket }: any) 
           <p className="text-xs text-dark-muted">
             {pr.ficha?.codigo ?? 'Sin ficha'} · {pr.lider?.nombre ?? 'Sin líder'}
           </p>
+          {/* Sprint activo visible sin expandir */}
+          {activeSprint && (
+            <div className="mt-1.5">
+              <SprintContextBanner sprint={activeSprint} compact />
+            </div>
+          )}
         </div>
         <div className="flex items-center gap-3 shrink-0">
           <StatusBadge estado={pr.estado} />
@@ -226,19 +346,39 @@ const ProyectoRow = ({ proyecto: pr, expanded, onToggle, onCreateTicket }: any) 
                 </h4>
               </div>
               <div className="space-y-2 max-h-48 overflow-y-auto">
-                {lideres.map((u: any) => (
-                  <div key={u.id} className="flex items-center gap-2.5">
-                    <div className="w-6 h-6 rounded-full bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center shrink-0">
-                      <span className="text-[9px] font-semibold text-emerald-400">{u.nombre?.slice(0,2).toUpperCase()}</span>
+
+                {/* ── Líder técnico del proyecto ── */}
+                {liderDelProyecto ? (
+                  <div className="flex items-center gap-2.5 group">
+                    <div className="w-6 h-6 rounded-full bg-violet-500/20 border border-violet-500/30 flex items-center justify-center shrink-0">
+                      <span className="text-[9px] font-semibold text-violet-400">{liderDelProyecto.nombre?.slice(0,2).toUpperCase()}</span>
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-xs font-medium text-dark-text truncate">{u.nombre}</p>
+                      <p className="text-xs font-medium text-dark-text truncate">{liderDelProyecto.nombre}</p>
                     </div>
-                    <span className="text-[10px] text-emerald-400 font-medium flex items-center gap-1">
-                      <ShieldCheck size={10} /> Líder
+                    <span className="text-[10px] text-violet-400 font-medium flex items-center gap-1 mr-1">
+                      <Crown size={10} /> Líder
                     </span>
+                    <button
+                      disabled={assignLiderMutation.isPending}
+                      onClick={() => {
+                        if (confirm(`¿Quitar a ${liderDelProyecto.nombre} como Líder Técnico de este proyecto?`)) {
+                          assignLiderMutation.mutate({ liderId: null });
+                        }
+                      }}
+                      className="text-[10px] opacity-0 group-hover:opacity-100 transition-all border rounded px-1.5 py-0.5 text-dark-muted hover:text-rose-400 border-dark-border hover:border-rose-500/30 disabled:opacity-50"
+                    >
+                      Quitar
+                    </button>
                   </div>
-                ))}
+                ) : (
+                  <div className="flex items-center gap-2 px-2.5 py-2 rounded-lg border border-dashed border-dark-border/60 bg-dark-bg/40">
+                    <ShieldCheck size={12} className="text-dark-muted/50 shrink-0" />
+                    <p className="text-[11px] text-dark-muted/60 italic">Sin líder técnico asignado</p>
+                  </div>
+                )}
+
+                {/* ── Aprendices (no líder) ── */}
                 {aprendices.map((u: any) => (
                   <div key={u.id} className="flex items-center gap-2.5 group">
                     <div className="w-6 h-6 rounded-full bg-dark-border/40 border border-dark-border flex items-center justify-center shrink-0">
@@ -248,23 +388,22 @@ const ProyectoRow = ({ proyecto: pr, expanded, onToggle, onCreateTicket }: any) 
                       <p className="text-xs font-medium text-dark-text truncate">{u.nombre}</p>
                     </div>
                     <button
+                      disabled={assignLiderMutation.isPending}
                       onClick={() => {
-                        const action = u.es_lider_tecnico ? 'Quitar sub-rol de Líder Técnico' : 'Asignar sub-rol de Líder Técnico';
-                        if (confirm(`¿${action} a ${u.nombre}? El rol base de aprendiz no cambia.`)) {
-                          toggleLiderMutation.mutate({ userId: u.id });
+                        if (confirm(`¿Asignar a ${u.nombre} como Líder Técnico de "${pr.nombre}"?\n\nEl aprendiz recibirá un correo y accederá al dashboard de gestión.`)) {
+                          assignLiderMutation.mutate({ liderId: u.id });
                         }
                       }}
-                      className={`text-[10px] opacity-0 group-hover:opacity-100 transition-all border rounded px-1.5 py-0.5 ${
-                        u.es_lider_tecnico
-                          ? 'text-emerald-400 border-emerald-500/30 hover:bg-rose-500/10 hover:text-rose-400 hover:border-rose-500/30'
-                          : 'text-dark-muted hover:text-primary-400 border-dark-border hover:border-primary-500/30'
-                      }`}
+                      className="text-[10px] opacity-0 group-hover:opacity-100 transition-all border rounded px-1.5 py-0.5 text-dark-muted hover:text-violet-400 border-dark-border hover:border-violet-500/30 disabled:opacity-50 flex items-center gap-1"
                     >
-                      {u.es_lider_tecnico ? '★ Líder (quitar)' : '→ Líder'}
+                      <Crown size={9} /> Líder
                     </button>
                   </div>
                 ))}
-                {m.length === 0 && <p className="text-xs text-dark-muted">Sin miembros</p>}
+
+                {m.length === 0 && (
+                  <p className="text-xs text-dark-muted">Sin miembros en el proyecto</p>
+                )}
               </div>
             </div>
 

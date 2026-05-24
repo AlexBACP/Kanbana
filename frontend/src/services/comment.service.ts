@@ -11,4 +11,8 @@ export const commentService = {
     const { data } = await api.post(`/tickets/${ticketId}/comments`, dto);
     return data;
   },
+
+  deleteComment: async (ticketId: number, commentId: number): Promise<void> => {
+    await api.delete(`/tickets/${ticketId}/comments/${commentId}`);
+  },
 };

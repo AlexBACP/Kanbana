@@ -4,7 +4,10 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
 import { User, UserRole } from './entities/user.entity';
+import { Project } from '../projects/entities/project.entity';
 import * as bcrypt from 'bcrypt';
+import * as crypto from 'crypto';
+import * as nodemailer from 'nodemailer';
 import * as path from 'path';
 import * as fs from 'fs';
 
@@ -13,10 +16,38 @@ export class UsersService {
   constructor(
     @InjectRepository(User)
     private usersRepository: Repository<User>,
+    @InjectRepository(Project)
+    private projectsRepository: Repository<Project>,
   ) {}
 
   async create(createUserDto: any): Promise<User> {
-    const { contrasena, fichaId, ...userData } = createUserDto;
+    const { contrasena, fichaId, enviar_invitacion, cedula_documento, ...userData } = createUserDto;
+
+    // ── Modo invitación: genera token, envía correo, usa la cédula como contraseña temporal ──
+    if (enviar_invitacion) {
+      if (!cedula_documento) {
+        throw new BadRequestException('El número de documento es obligatorio para enviar una invitación');
+      }
+      const token = crypto.randomBytes(32).toString('hex');
+      const tempPass = await bcrypt.hash(String(cedula_documento), 10);
+      const user = this.usersRepository.create({
+        ...userData,
+        contrasena: tempPass,
+        rol: userData.rol || UserRole.APRENDIZ,
+        activo: true,
+        token_activacion: token,
+        cuenta_confirmada: false,
+        ...(fichaId ? { fichaId: Number(fichaId) } : {}),
+      } as Partial<User>);
+      const saved = await this.usersRepository.save(user);
+      // Enviar correo en background — no bloquea la respuesta
+      this.sendInvitationEmail(saved.correo, saved.nombre, token, String(cedula_documento)).catch(
+        (err) => console.error('[UsersService] Error al enviar correo de invitación:', err),
+      );
+      return saved;
+    }
+
+    // ── Modo manual: contraseña requerida ────────────────────────────────────────
     if (!contrasena) throw new BadRequestException('La contraseña es obligatoria');
     const hashedContrasena = await bcrypt.hash(contrasena, 10);
     const user = this.usersRepository.create({
@@ -24,9 +55,100 @@ export class UsersService {
       contrasena: hashedContrasena,
       rol: userData.rol || UserRole.APRENDIZ,
       activo: true,
+      cuenta_confirmada: true,
       ...(fichaId ? { fichaId: Number(fichaId) } : {}),
     } as Partial<User>);
     return this.usersRepository.save(user);
+  }
+
+  // ── Correo de invitación ─────────────────────────────────────────────────────
+  private async sendInvitationEmail(
+    correo: string,
+    nombre: string,
+    token: string,
+    cedula: string,
+  ): Promise<void> {
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    const confirmLink = `${frontendUrl}/confirmar-cuenta?token=${token}`;
+
+    const transporter = nodemailer.createTransport({
+      host:   process.env.MAIL_HOST   || 'smtp.gmail.com',
+      port:   Number(process.env.MAIL_PORT) || 587,
+      secure: process.env.MAIL_SECURE === 'true',
+      auth: {
+        user: process.env.MAIL_USER,
+        pass: process.env.MAIL_PASS,
+      },
+    });
+
+    await transporter.sendMail({
+      from:    `"Kanbana SENA" <${process.env.MAIL_USER}>`,
+      to:      correo,
+      subject: 'Te han invitado a Kanbana — Activa tu cuenta',
+      html: `
+        <!DOCTYPE html>
+        <html lang="es">
+        <head><meta charset="UTF-8"></head>
+        <body style="margin:0;padding:0;background:#09090b;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+          <table width="100%" cellpadding="0" cellspacing="0" style="background:#09090b;padding:40px 16px;">
+            <tr><td align="center">
+              <table width="100%" style="max-width:480px;background:#18181b;border:1px solid #3f3f46;border-radius:12px;padding:40px;">
+                <tr><td>
+                  <p style="margin:0 0 8px;font-size:11px;font-weight:900;letter-spacing:4px;text-transform:uppercase;color:#22d3ee;">KANBANA</p>
+                  <h1 style="margin:0 0 6px;font-size:22px;font-weight:900;color:#f4f4f5;letter-spacing:-0.5px;">
+                    ¡Has sido invitado!
+                  </h1>
+                  <p style="margin:0 0 24px;font-size:12px;color:#71717a;text-transform:uppercase;font-weight:700;letter-spacing:2px;">
+                    Plataforma de gestión de proyectos SENA
+                  </p>
+                  <p style="margin:0 0 12px;font-size:14px;line-height:1.7;color:#a1a1aa;">
+                    Hola <strong style="color:#f4f4f5;">${nombre}</strong>,
+                  </p>
+                  <p style="margin:0 0 24px;font-size:14px;line-height:1.7;color:#a1a1aa;">
+                    Tu coordinador te ha registrado en <strong style="color:#f4f4f5;">Kanbana</strong>.
+                    Activa tu cuenta haciendo clic en el botón de abajo.
+                  </p>
+
+                  <!-- Credenciales temporales -->
+                  <div style="background:#09090b;border:1px solid #3f3f46;border-radius:8px;padding:16px;margin-bottom:24px;">
+                    <p style="margin:0 0 8px;font-size:10px;font-weight:900;letter-spacing:3px;text-transform:uppercase;color:#52525b;">
+                      Credenciales temporales
+                    </p>
+                    <p style="margin:0 0 4px;font-size:13px;color:#a1a1aa;">
+                      Correo: <strong style="color:#f4f4f5;">${correo}</strong>
+                    </p>
+                    <p style="margin:0;font-size:13px;color:#a1a1aa;">
+                      Contraseña temporal: <strong style="color:#22d3ee;font-family:monospace;letter-spacing:1px;">${cedula}</strong>
+                    </p>
+                  </div>
+
+                  <!-- CTA -->
+                  <table width="100%" cellpadding="0" cellspacing="0">
+                    <tr><td align="center" style="padding-bottom:24px;">
+                      <a href="${confirmLink}"
+                        style="display:inline-block;padding:14px 36px;background:#0891b2;color:#fff;text-decoration:none;border-radius:8px;font-size:14px;font-weight:900;letter-spacing:0.5px;">
+                        Activar mi cuenta
+                      </a>
+                    </td></tr>
+                  </table>
+
+                  <p style="margin:0 0 8px;font-size:11px;color:#52525b;">Si el botón no funciona, copia este enlace:</p>
+                  <p style="margin:0 0 24px;font-size:11px;color:#22d3ee;word-break:break-all;">${confirmLink}</p>
+
+                  <hr style="border:none;border-top:1px solid #3f3f46;margin:0 0 20px;">
+                  <p style="margin:0;font-size:11px;color:#52525b;line-height:1.6;">
+                    Después de activar tu cuenta, podrás cambiar la contraseña desde tu perfil.
+                    Si no esperabas este correo, puedes ignorarlo.
+                  </p>
+                </td></tr>
+              </table>
+            </td></tr>
+          </table>
+        </body>
+        </html>
+      `,
+      text: `Hola ${nombre},\n\nFuiste invitado a Kanbana.\n\nCorreo: ${correo}\nContraseña temporal: ${cedula}\n\nActiva tu cuenta: ${confirmLink}\n\nSi no esperabas este correo, ignóralo.`,
+    });
   }
 
   async findAll(rol?: string): Promise<User[]> {
@@ -52,8 +174,19 @@ export class UsersService {
   async findByEmail(correo: string): Promise<User> {
     return this.usersRepository.findOne({
       where: { correo },
-      select: ['id', 'nombre', 'correo', 'contrasena', 'rol', 'es_lider_tecnico', 'activo', 'creado_en'],
+      select: ['id', 'nombre', 'correo', 'contrasena', 'rol', 'es_lider_tecnico',
+               'activo', 'creado_en', 'cuenta_confirmada', 'token_activacion',
+               'totp_enabled'],
     });
+  }
+
+  /** Carga el usuario incluyendo el secreto TOTP (solo para verificación interna). */
+  async findWithTotpSecret(id: number): Promise<User | null> {
+    return this.usersRepository
+      .createQueryBuilder('user')
+      .addSelect('user.totp_secret')
+      .where('user.id = :id', { id })
+      .getOne();
   }
 
   async findByResetToken(token: string): Promise<User> {
@@ -160,6 +293,7 @@ export class UsersService {
       rol: user.rol,
       es_lider_tecnico: user.es_lider_tecnico,
       avatar_url: user.avatar_url,
+      banner_url: user.banner_url,
       telefono: user.telefono,
       bio: user.bio,
       activo: user.activo,
@@ -326,6 +460,18 @@ export class UsersService {
     return { avatar_url };
   }
 
+  // ── Upload de banner (portada) ────────────────────────────────────────────
+  async updateBanner(userId: number, file: Express.Multer.File): Promise<{ banner_url: string }> {
+    const user = await this.findOne(userId);
+    if (user.banner_url && user.banner_url.startsWith('/uploads/')) {
+      const oldPath = path.join(process.cwd(), user.banner_url);
+      if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
+    }
+    const banner_url = `/uploads/banners/${file.filename}`;
+    await this.usersRepository.update(userId, { banner_url });
+    return { banner_url };
+  }
+
   async update(id: number, updateUserDto: any): Promise<User> {
     await this.findOne(id);
     if (updateUserDto.contrasena) {
@@ -342,6 +488,16 @@ export class UsersService {
    */
   async updateRole(id: number, rol: UserRole): Promise<User> {
     const user = await this.findOne(id);
+
+    // Si era líder técnico y cambia de rol → limpiar liderId del proyecto
+    if (user.rol === UserRole.APRENDIZ && user.es_lider_tecnico && rol !== UserRole.APRENDIZ) {
+      const proyecto = await this.projectsRepository.findOne({ where: { liderId: id } });
+      if (proyecto) {
+        proyecto.liderId = null as any;
+        await this.projectsRepository.save(proyecto);
+      }
+    }
+
     user.rol = rol;
     if (rol !== UserRole.APRENDIZ) {
       user.es_lider_tecnico = false;
@@ -364,7 +520,39 @@ export class UsersService {
         'El sub-rol de Líder Técnico solo puede asignarse a aprendices.'
       );
     }
-    user.es_lider_tecnico = !user.es_lider_tecnico;
+
+    const newValue = !user.es_lider_tecnico;
+    user.es_lider_tecnico = newValue;
+
+    if (newValue) {
+      // ── Promover a líder: busca el proyecto donde es miembro y lo asigna ─
+      const proyecto = await this.projectsRepository
+        .createQueryBuilder('p')
+        .leftJoin('p.miembros', 'm')
+        .where('m.id = :uid', { uid: id })
+        .getOne();
+
+      if (proyecto) {
+        // Quitar el sub-rol al líder anterior si era diferente
+        if (proyecto.liderId && proyecto.liderId !== id) {
+          const oldLider = await this.usersRepository.findOne({ where: { id: proyecto.liderId } });
+          if (oldLider && oldLider.rol === UserRole.APRENDIZ) {
+            oldLider.es_lider_tecnico = false;
+            await this.usersRepository.save(oldLider);
+          }
+        }
+        proyecto.liderId = id;
+        await this.projectsRepository.save(proyecto);
+      }
+    } else {
+      // ── Degradar: quita liderId en el proyecto donde era líder ───────────
+      const proyecto = await this.projectsRepository.findOne({ where: { liderId: id } });
+      if (proyecto) {
+        proyecto.liderId = null as any;
+        await this.projectsRepository.save(proyecto);
+      }
+    }
+
     return this.usersRepository.save(user);
   }
 
@@ -379,13 +567,14 @@ export class UsersService {
     await this.usersRepository.remove(user);
   }
 
-  async confirmAccount(token: string): Promise<void> {
+  async confirmAccount(token: string): Promise<User> {
     const user = await this.usersRepository.findOne({ where: { token_activacion: token } });
-    if (!user) throw new Error('Token inválido o ya utilizado');
+    if (!user) throw new BadRequestException('Token inválido o ya utilizado');
     await this.usersRepository.update(user.id, {
       cuenta_confirmada: true,
       token_activacion:  null,
     });
+    return this.usersRepository.findOne({ where: { id: user.id } });
   }
 
   async getLeaderStats(leaderId: number) {

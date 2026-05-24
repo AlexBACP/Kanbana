@@ -156,4 +156,12 @@ export class Ticket {
   // Se cargan en findOne() y se verifican en updateStatus() y closeSprint().
   @OneToMany(() => TicketAttachment, (att) => att.ticket)
   adjuntos: TicketAttachment[];
+
+  // ── NUEVO: flujo de revisión por aprendiz ─────────────────────────────────
+  // true  → el aprendiz marcó el trabajo como listo; el líder debe revisar.
+  // false → estado normal (sin completar o ya aprobado/rechazado por el líder).
+  // Este campo permanece en 'in_progress' — la tarjeta se vuelve verde en el
+  // tablero para que el líder sepa que debe evaluar antes de mover a 'testing'.
+  @Column({ default: false })
+  completado_por_aprendiz: boolean;
 }

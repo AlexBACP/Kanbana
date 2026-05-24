@@ -13,12 +13,21 @@ export class AuthController {
 
   @Post('login')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Login with email and password' })
-  async login(@Body() body: { email: string; password: string }) {
+  @ApiOperation({ summary: 'Login with email and password (+ optional TOTP code)' })
+  async login(@Body() body: { email: string; password: string; totpCode?: string }) {
     const user = await this.authService.validateUser(body.email, body.password);
-    if (!user) {
-      throw new UnauthorizedException('Credenciales inválidas');
+    if (!user) throw new UnauthorizedException('Credenciales inválidas');
+
+    // ── Si el usuario tiene 2FA activado ─────────────────────────────────────
+    if (user.totp_enabled) {
+      if (!body.totpCode) {
+        // Primera fase — decirle al frontend que necesita el código
+        return { requires2fa: true };
+      }
+      // Segunda fase — verificar el código TOTP
+      await this.authService.verifyLoginTotp(user.id, body.totpCode);
     }
+
     return this.authService.login(user);
   }
 
@@ -28,6 +37,42 @@ export class AuthController {
   @ApiOperation({ summary: 'Get current authenticated user' })
   async getProfile(@Request() req: any) {
     return req.user;
+  }
+
+  // ── 2FA — configuración ───────────────────────────────────────────────────
+
+  @Post('2fa/setup')
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Genera QR code para configurar Google Authenticator' })
+  async setup2fa(@Request() req: any) {
+    return this.authService.setup2fa(req.user.id);
+  }
+
+  @Post('2fa/enable')
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Activa el 2FA tras verificar el primer código del Authenticator' })
+  async enable2fa(@Request() req: any, @Body('code') code: string) {
+    if (!code) throw new UnauthorizedException('Debes proporcionar el código de 6 dígitos.');
+    return this.authService.enable2fa(req.user.id, code);
+  }
+
+  @Post('2fa/disable')
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Desactiva el 2FA verificando un código válido' })
+  async disable2fa(@Request() req: any, @Body('code') code: string) {
+    if (!code) throw new UnauthorizedException('Debes proporcionar el código de 6 dígitos.');
+    return this.authService.disable2fa(req.user.id, code);
+  }
+
+  @Get('2fa/status')
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Estado actual del 2FA del usuario autenticado' })
+  async get2faStatus(@Request() req: any) {
+    return { enabled: !!req.user.totp_enabled };
   }
 
   @Post('logout')

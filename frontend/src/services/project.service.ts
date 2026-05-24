@@ -33,7 +33,7 @@ export const projectService = {
   updateStatus: (id: number, estado: string) =>
     api.patch(`/projects/${id}/status`, { estado }).then(r => r.data),
 
-  assignLider: (id: number, liderId: number) =>
+  assignLider: (id: number, liderId: number | null) =>
     api.patch(`/projects/${id}/assign-lider`, { liderId }).then(r => r.data),
 
   delete: (id: number) => api.delete(`/projects/${id}`).then(r => r.data),
@@ -56,6 +56,9 @@ export const projectService = {
 
   createSprint: (id: number, dto: any) =>
     api.post(`/projects/${id}/sprints`, dto).then(r => r.data),
+
+  updateSprint: (sprintId: number, dto: { nombre?: string; fecha_inicio?: string; fecha_fin?: string; descripcion?: string | null }) =>
+    api.patch(`/projects/sprints/${sprintId}`, dto).then(r => r.data),
 
   startSprint: (sprintId: number) =>
     api.patch(`/projects/sprints/${sprintId}/start`).then(r => r.data),
@@ -106,5 +109,20 @@ export const projectService = {
   // Sprints sin trimestre asignado de un proyecto
   getSprintsSinTrimestre: (proyectoId: number) =>
     api.get(`/projects/${proyectoId}/trimestres/sprints-sin-trimestre`).then(r => r.data),
+
+  // ══ FLUJO DE REVISIÓN DE MÓDULOS ══════════════════════════════════════════
+
+  // Líder envía un módulo (sprint) a revisión del instructor.
+  // Valida que todas las tareas estén en testing o done.
+  solicitarRevision: (sprintId: number) =>
+    api.post(`/projects/sprints/${sprintId}/solicitar-revision`).then(r => r.data),
+
+  // Instructor solicita correcciones al líder sobre un módulo.
+  solicitarCorrecciones: (sprintId: number, mensaje: string) =>
+    api.post(`/projects/sprints/${sprintId}/correcciones`, { mensaje }).then(r => r.data),
+
+  // Instructor: lista de sprints pendientes de revisión en sus proyectos.
+  getSprintsPendientesRevision: () =>
+    api.get('/projects/sprints/pending-review').then(r => r.data),
 
 };

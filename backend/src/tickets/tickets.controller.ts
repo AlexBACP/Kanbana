@@ -129,9 +129,11 @@ export class TicketsController {
   }
 
   // MODIFICADO: ahora valida adjunto antes de pasar a done
+  // actor (req.user) se pasa al service para que las notificaciones
+  // muestren QUIÉN realmente cambió el estado, no el creador del ticket.
   @Patch(':id/status')
-  updateStatus(@Param('id') id: string, @Body() statusDto: any) {
-    return this.ticketsService.updateStatus(+id, statusDto);
+  updateStatus(@Param('id') id: string, @Body() statusDto: any, @Request() req: any) {
+    return this.ticketsService.updateStatus(+id, statusDto, req.user);
   }
 
   @Patch(':id/move')
@@ -197,6 +199,32 @@ export class TicketsController {
   @Get(':id/attachments')
   findAttachments(@Param('id') id: string) {
     return this.ticketsService.findAttachments(+id);
+  }
+
+  // ══ NUEVOS ENDPOINTS: flujo de reclamación y revisión ════════════════════
+
+  // POST /tickets/:id/claim — aprendiz toma una tarea disponible
+  @Post(':id/claim')
+  claimTicket(@Param('id') id: string, @Request() req: any) {
+    return this.ticketsService.claimTicket(+id, req.user.id);
+  }
+
+  // POST /tickets/:id/mark-complete — aprendiz marca su trabajo como listo
+  @Post(':id/mark-complete')
+  markCompleteByAprendiz(@Param('id') id: string, @Request() req: any) {
+    return this.ticketsService.markCompleteByAprendiz(+id, req.user.id);
+  }
+
+  // POST /tickets/:id/lider-approve — líder aprueba → pasa a testing
+  @Post(':id/lider-approve')
+  liderApprove(@Param('id') id: string) {
+    return this.ticketsService.liderApprove(+id);
+  }
+
+  // POST /tickets/:id/lider-reject — líder rechaza → devuelve al pool
+  @Post(':id/lider-reject')
+  liderReject(@Param('id') id: string) {
+    return this.ticketsService.liderReject(+id);
   }
 
   // DELETE /api/tickets/:id/attachments/:aid

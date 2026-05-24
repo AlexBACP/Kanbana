@@ -92,6 +92,36 @@ export class FichasController {
     res.send(buffer);
   }
 
+  @Post('solicitar-crear')
+  @ApiOperation({ summary: 'Instructor solicita permiso al coordinador para crear una ficha' })
+  solicitarCrear(@Request() req: any) {
+    // NOTA: req.user es el objeto DB completo devuelto por JwtStrategy.validate(),
+    // por lo tanto tiene .id (no .sub — eso es del payload JWT sin transformar).
+    return this.fichasService.solicitarCrearFicha(req.user.id).then(() => ({
+      message: 'Tu solicitud fue enviada al coordinador. Te notificaremos cuando sea aprobada.',
+    }));
+  }
+
+  /**
+   * POST /fichas/responder-solicitud
+   * El coordinador aprueba o rechaza la solicitud de un instructor para crear una ficha.
+   * Envía notificación in-app + email al instructor con el resultado.
+   * Body: { instructorId: number; aprobada: boolean; motivo?: string }
+   */
+  @Post('responder-solicitud')
+  @ApiOperation({ summary: 'Coordinador responde la solicitud de creación de ficha de un instructor' })
+  responderSolicitud(@Body() body: { instructorId: number; aprobada: boolean; motivo?: string }) {
+    return this.fichasService.notificarRespuestaFicha(
+      body.instructorId,
+      body.aprobada,
+      body.motivo,
+    ).then(() => ({
+      message: body.aprobada
+        ? 'Solicitud aprobada. El instructor fue notificado.'
+        : 'Solicitud rechazada. El instructor fue notificado.',
+    }));
+  }
+
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.fichasService.findOne(+id);

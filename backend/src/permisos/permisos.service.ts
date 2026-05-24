@@ -6,6 +6,7 @@ import { Repository, MoreThan } from 'typeorm';
 import { PermisoTemporal, TipoPermiso, EstadoPermiso } from './entities/permiso-temporal.entity';
 import { NotificationsService } from '../notifications/notifications.service';
 import { UsersService }         from '../users/users.service';
+import { EmailService }         from '../email/email.service';
 
 const DIAS_MINIMOS = 5;
 
@@ -16,6 +17,7 @@ export class PermisosService {
     private permisosRepo: Repository<PermisoTemporal>,
     private notificationsService: NotificationsService,
     private usersService: UsersService,
+    private emailService: EmailService,
   ) {}
 
   /**
@@ -105,18 +107,35 @@ export class PermisosService {
     permiso.expira_en = expira;
     const updated = await this.permisosRepo.save(permiso);
 
+    // Marcar la notificación original como leída (ya no necesita acción)
+    if (permiso.notificacion_id) {
+      await this.notificationsService.markAsRead(permiso.notificacion_id, instructorId);
+    }
+
     // Notificar al líder
     const liderUser = await this.usersService.findOne(permiso.lider_id);
     const tipoLabel = permiso.tipo === TipoPermiso.EDITAR_TRIMESTRE
       ? 'editar fechas y nombre de trimestres'
       : 'crear módulos';
 
+    // In-app
     await this.notificationsService.create({
       usuario_id: permiso.lider_id,
       titulo:     '✓ Permiso concedido',
       mensaje:    `Tu solicitud para ${tipoLabel} fue aceptada. Tienes ${dias} días (hasta el ${expira.toLocaleDateString('es-CO')}).`,
       tipo:       'success' as any,
     });
+
+    // Email al líder
+    if (liderUser?.correo) {
+      await this.emailService.notificarPermisoConcedido({
+        destinatario: liderUser.correo,
+        liderNombre:  liderUser.nombre,
+        tipo:         tipoLabel,
+        expira,
+        dias,
+      });
+    }
 
     return updated;
   }
@@ -138,16 +157,34 @@ export class PermisosService {
     permiso.estado = EstadoPermiso.RECHAZADO;
     const updated = await this.permisosRepo.save(permiso);
 
+    // Marcar la notificación original como leída
+    if (permiso.notificacion_id) {
+      await this.notificationsService.markAsRead(permiso.notificacion_id, instructorId);
+    }
+
     const tipoLabel = permiso.tipo === TipoPermiso.EDITAR_TRIMESTRE
       ? 'editar fechas y nombre de trimestres'
       : 'crear módulos';
 
+    const liderUser = await this.usersService.findOne(permiso.lider_id);
+
+    // In-app
     await this.notificationsService.create({
       usuario_id: permiso.lider_id,
       titulo:     '✗ Permiso rechazado',
       mensaje:    `Tu solicitud para ${tipoLabel} fue rechazada.${motivo ? ` Motivo: "${motivo}"` : ''}`,
       tipo:       'error' as any,
     });
+
+    // Email al líder
+    if (liderUser?.correo) {
+      await this.emailService.notificarPermisoRechazado({
+        destinatario: liderUser.correo,
+        liderNombre:  liderUser.nombre,
+        tipo:         tipoLabel,
+        motivo,
+      });
+    }
 
     return updated;
   }

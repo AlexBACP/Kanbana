@@ -385,8 +385,8 @@ export const LiderEquipo = ({ proyecto }: { proyecto: any }) => {
   });
 
   const m = miembros as any[];
-  const aprendices = m.filter(u => u.rol === 'aprendiz');
-  const lideres    = m.filter(u => u.rol === 'lider_tecnico');
+  const aprendices = m.filter(u => u.rol === 'aprendiz' && !u.es_lider_tecnico);
+  const lideres    = m.filter(u => u.rol === 'aprendiz' && u.es_lider_tecnico);
 
   if (!proyecto) return <p className="text-sm text-dark-muted">Sin proyecto asignado</p>;
 

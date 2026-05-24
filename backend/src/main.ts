@@ -24,10 +24,10 @@ async function bootstrap() {
   // Se crean si no existen. Esto evita errores al subir el primer archivo.
   const uploadsPath      = path.join(process.cwd(), 'uploads');
   const avatarsPath      = path.join(uploadsPath, 'avatars');
-  // ── NUEVO: carpeta para adjuntos de tickets ───────────────────────────
   const attachmentsPath  = path.join(uploadsPath, 'attachments');
+  const bannersPath      = path.join(uploadsPath, 'banners');
 
-  [uploadsPath, avatarsPath, attachmentsPath].forEach(dir => {
+  [uploadsPath, avatarsPath, attachmentsPath, bannersPath].forEach(dir => {
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
     }

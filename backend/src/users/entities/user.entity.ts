@@ -64,6 +64,9 @@ export class User {
   avatar_url: string;
 
   @Column({ nullable: true })
+  banner_url: string;
+
+  @Column({ nullable: true })
   telefono: string;
 
   @Column({ type: 'text', nullable: true })
@@ -91,6 +94,15 @@ export class User {
 
   @Column({ default: true })
   activo: boolean;
+
+  // ── Autenticación de dos factores (TOTP / Google Authenticator) ────────────
+  /** Secreto TOTP — nunca se devuelve al cliente (select: false) */
+  @Column({ nullable: true, select: false })
+  totp_secret: string | null;
+
+  /** true cuando el usuario completó la configuración de 2FA */
+  @Column({ default: false })
+  totp_enabled: boolean;
 
   @CreateDateColumn()
   creado_en: Date;

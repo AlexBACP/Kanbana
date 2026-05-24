@@ -4,6 +4,9 @@ import { Repository, IsNull } from 'typeorm';
 import { Ficha } from './entities/ficha.entity';
 import { Trimestre, TipoTrimestre } from '../projects/entities/trimestre.entity';
 import { User, UserRole } from '../users/entities/user.entity';
+import { NotificationsService } from '../notifications/notifications.service';
+import { NotificationType } from '../notifications/entities/notification.entity';
+import { EmailService } from '../email/email.service';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 import * as nodemailer from 'nodemailer';
@@ -17,6 +20,8 @@ export class FichasService {
     private usersRepository: Repository<User>,
     @InjectRepository(Trimestre)
     private trimestresRepo: Repository<Trimestre>,
+    private notificationsService: NotificationsService,
+    private emailService: EmailService,
   ) {}
 
   async create(createFichaDto: any): Promise<Ficha> {
@@ -523,4 +528,67 @@ export class FichasService {
     return this.trimestresRepo.save(t as Trimestre);
   }
 
+  // ── Solicitar permiso para crear una ficha (instructor → coordinadores) ───
+  async solicitarCrearFicha(instructorId: number): Promise<void> {
+    if (!instructorId) throw new BadRequestException('ID de instructor inválido. Asegúrate de estar autenticado.');
+    const instructor = await this.usersRepository.findOne({ where: { id: instructorId } });
+    if (!instructor) throw new NotFoundException('Instructor no encontrado');
+
+    const coordinadores = await this.usersRepository.find({ where: { rol: UserRole.COORDINADOR } });
+    for (const coord of coordinadores) {
+      // In-app
+      await this.notificationsService.create({
+        usuario_id: coord.id,
+        titulo:     '📋 Solicitud de nueva ficha',
+        mensaje:    `El instructor ${instructor.nombre} solicita permiso para crear una nueva ficha de formación.`,
+        tipo:       NotificationType.INFO,
+        action_type: 'approve_ficha_request',
+        action_data: JSON.stringify({ instructorId, instructorNombre: instructor.nombre }),
+      });
+
+      // Email al coordinador
+      if (coord.correo) {
+        await this.emailService.notificarSolicitudFicha({
+          destinatario:      coord.correo,
+          coordinadorNombre: coord.nombre,
+          instructorNombre:  instructor.nombre,
+          instructorCorreo:  instructor.correo,
+        });
+      }
+    }
+  }
+
+  /**
+   * Notifica al instructor el resultado de su solicitud de ficha.
+   * Llamar desde el controller cuando el coordinador aprueba/rechaza.
+   */
+  async notificarRespuestaFicha(
+    instructorId: number,
+    aprobada: boolean,
+    motivo?: string,
+  ): Promise<void> {
+    if (!instructorId) throw new BadRequestException('ID de instructor inválido en la solicitud.');
+    const instructor = await this.usersRepository.findOne({ where: { id: instructorId } });
+    if (!instructor) throw new NotFoundException('Instructor no encontrado.');
+
+    // In-app al instructor
+    await this.notificationsService.create({
+      usuario_id: instructorId,
+      titulo:     aprobada ? '✓ Solicitud de ficha aprobada' : '✗ Solicitud de ficha rechazada',
+      mensaje:    aprobada
+        ? 'El coordinador aprobó tu solicitud. Ya puedes crear la nueva ficha desde el panel.'
+        : `El coordinador rechazó tu solicitud.${motivo ? ` Motivo: "${motivo}"` : ''}`,
+      tipo: aprobada ? NotificationType.SUCCESS : NotificationType.ERROR,
+    } as any);
+
+    // Email al instructor (solo si tiene correo registrado)
+    if (instructor.correo) {
+      await this.emailService.notificarRespuestaFicha({
+        destinatario:     instructor.correo,
+        instructorNombre: instructor.nombre,
+        aprobada,
+        motivo,
+      });
+    }
+  }
 }

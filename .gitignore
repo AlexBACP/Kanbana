@@ -1,6 +1,29 @@
-
-# Playwright
+# ── Dependencias ──────────────────────────────────────────────────────────────
 node_modules/
+
+# ── Variables de entorno (¡NUNCA subir al repo!) ──────────────────────────────
+.env
+.env.*
+!.env.example
+
+# ── Compilados ────────────────────────────────────────────────────────────────
+dist/
+build/
+
+# ── Uploads (archivos de usuarios — van a Supabase Storage en producción) ─────
+backend/uploads/
+
+# ── Logs ──────────────────────────────────────────────────────────────────────
+*.log
+logs/
+
+# ── IDE / OS ──────────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# ── Playwright ────────────────────────────────────────────────────────────────
 /test-results/
 /playwright-report/
 /blob-report/

@@ -3,9 +3,11 @@ import { persist } from 'zustand/middleware';
 import { User } from '../types/user.types';
 
 export type ThemeColor = 'violet' | 'blue' | 'emerald' | 'rose' | 'amber' | 'cyan';
+export type ThemeMode  = 'dark' | 'light' | 'dim';
 
 export interface AppSettings {
   themeColor: ThemeColor;
+  themeMode:  ThemeMode;
   sidebarCompact: boolean;
   notificationsEnabled: boolean;
   animationsEnabled: boolean;
@@ -27,7 +29,8 @@ interface AuthState {
 }
 
 const defaultSettings: AppSettings = {
-  themeColor: 'violet',
+  themeColor: 'blue',
+  themeMode:  'dark',
   sidebarCompact: false,
   notificationsEnabled: true,
   animationsEnabled: true,

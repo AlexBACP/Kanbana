@@ -13,12 +13,15 @@ import { User }       from '../users/entities/user.entity';
 // ── NUEVO IMPORT ─────────────────────────────────────────────────────────────
 import { Trimestre }  from './entities/trimestre.entity';
 import { NotificationsModule } from '../notifications/notifications.module';
+// EmailModule es @Global(), se inyecta automáticamente — solo importamos para explicitud
+import { EmailModule } from '../email/email.module';
 
 @Module({
   // ── CAMBIO: se agrega Trimestre al array ─────────────────────────────────
   imports: [
     TypeOrmModule.forFeature([Project, Sprint, User, Trimestre]),
     NotificationsModule,
+    EmailModule,
   ],
   controllers: [ProjectsController],
   providers: [ProjectsService],

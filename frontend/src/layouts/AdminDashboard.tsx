@@ -1,25 +1,28 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
+import { useSearchParams } from 'react-router-dom';
 import { useAuthStore } from '../store/auth.store';
 import { useAuth } from '../hooks/useAuth';
 import { Sidebar } from '../components/Sidebar';
 import { TopBar } from '../components/TopBar';
-import {
-  LayoutDashboard, FolderKanban, GraduationCap,
-  Users, Crown, Bell, Settings,
-} from 'lucide-react';
 import { Overview } from '../dashboard/components/Overview';
+import { AprendizOverview } from '../dashboard/Aprendiz/AprendizOverview';
+import { LiderDashboard }  from '../dashboard/Lider/LiderDashboard';
+import { LiderProyecto }   from '../dashboard/Lider/LiderProyecto';
+import { InstructorOverview } from '../dashboard/instructor/InstructorOverview';
 import { ProjectsPanel } from '../dashboard/panels/ProjectsPanel';
 import { FichasPanel } from '../dashboard/panels/FichasPanel';
 import { UsersPanel } from '../dashboard/panels/UsersPanel';
 import { LeadersPanel } from '../dashboard/panels/LeadersPanel';
 import { MiEquipoPanel } from '../dashboard/panels/MiEquipoPanel';
+import { TareasPanel } from '../dashboard/panels/TareasPanel';
 import { NotificationsPanel } from '../dashboard/panels/NotificationsPanel';
 import { SettingsPanel } from '../dashboard/panels/SettingsPanel';
 import { ProfilePage } from '../pages/ProfilePage';
 
 export type Section =
-  | 'overview' | 'projects' | 'fichas' | 'users' | 'leaders' | 'equipo'
+  | 'overview' | 'projects' | 'fichas' | 'users' | 'leaders' | 'equipo' | 'tareas' | 'tickets'
+  | 'recursos' | 'tablero'
   | 'notifications' | 'settings' | 'profile';
 
 const TITLES: Record<Section, string> = {
@@ -29,6 +32,10 @@ const TITLES: Record<Section, string> = {
   users:         'Usuarios',
   leaders:       'Líderes técnicos',
   equipo:        'Mi Equipo',
+  tareas:        'Mis Tareas',
+  tickets:       'Tareas del proyecto',
+  recursos:      'Recursos del proyecto',
+  tablero:       'Tablero del proyecto',
   notifications: 'Notificaciones',
   settings:      'Configuración',
   profile:       'Mi perfil',
@@ -40,26 +47,27 @@ const panelVariants = {
   exit:    { opacity: 0, y: -4 },
 };
 
-// ▼ Todos los items posibles — se filtran según allowedSections del rol
-const ALL_MENU_ITEMS = [
-  { key: 'overview', label: 'Panel de control',  icon: LayoutDashboard },
-  { key: 'projects', label: 'Proyectos',         icon: FolderKanban },
-  { key: 'fichas',   label: 'Fichas',            icon: GraduationCap },
-  { key: 'users',    label: 'Usuarios',          icon: Users },
-  { key: 'leaders',  label: 'Líderes técnicos',  icon: Crown },
-  { key: 'equipo',   label: 'Mi Equipo',          icon: Users },
-];
-const ALL_SYSTEM_ITEMS = [
-  { key: 'notifications', label: 'Notificaciones', icon: Bell },
-  { key: 'settings',      label: 'Configuración',  icon: Settings },
-];
 
 export const AdminDashboard = () => {
   const { user } = useAuthStore();
   const { logout } = useAuth();
-  const [section, setSection] = useState<Section>('overview');
+  const [searchParams, setSearchParams] = useSearchParams();
 
-  const esLider = user?.rol === 'aprendiz' && (user as any)?.es_lider_tecnico;
+  // ── Sección activa: restaurada desde ?s= en la URL al volver de una página externa
+  const [section, setSection] = useState<Section>(() => {
+    const s = searchParams.get('s') as Section | null;
+    return s || 'overview';
+  });
+
+  const esLider      = user?.rol === 'aprendiz' && (user as any)?.es_lider_tecnico;
+  const esInstructor = user?.rol === 'instructor';
+
+  // ── Cambia sección y actualiza la URL para que el botón "atrás" del browser
+  //    regrese aquí (en lugar de al overview) tras navegar a rutas externas.
+  const changeSection = useCallback((s: Section) => {
+    setSection(s);
+    setSearchParams({ s }, { replace: true });
+  }, [setSearchParams]);
 
   const allowedSections = useMemo(() => {
     if (!user) return [];
@@ -74,39 +82,33 @@ export const AdminDashboard = () => {
       return ['overview','projects','fichas','notifications','settings','profile'];
     }
     if (esLider) {
-      // ── MODIFICADO: el líder ve 'equipo' (MiEquipoPanel) en lugar de
-      // 'users' (UsersPanel completo del coordinador — incorrecto para el líder)
-      return ['overview','projects','equipo','notifications','settings','profile'];
+      return ['overview','projects','notifications','settings','profile'];
     }
-    return ['overview','profile'];
+    // Aprendiz sin sub-rol de líder
+    return ['overview','tareas','notifications','settings','profile'];
   }, [user, esLider]);
 
   if (!user) return null;
 
-  // ▼ CAMBIO: filtrar los items según el rol, para pasarlos al nuevo Sidebar
-  const menuItems   = ALL_MENU_ITEMS.filter(i => allowedSections.includes(i.key));
-  const systemItems = ALL_SYSTEM_ITEMS.filter(i => allowedSections.includes(i.key));
-
-  const rolLabel =
-    user.rol === 'coordinador' ? 'Coordinador' :
-    user.rol === 'instructor'  ? 'Instructor'  :
-    esLider                    ? 'Líder técnico' : 'Usuario';
+  // Aprendiz sin sub-rol de líder técnico
+  const esAprendizNormal = user.rol === 'aprendiz' && !esLider;
 
   return (
-    <div className="flex h-screen bg-dark-bg overflow-hidden">
+    <div className="flex h-screen bg-zinc-950 overflow-hidden">
       <Sidebar
-        setSection={setSection}
+        setSection={changeSection}
         activeSection={section}
         allowedSections={allowedSections}
       />
 
       <div className="flex-1 flex flex-col overflow-hidden">
         <TopBar
-          title={TITLES[section]}
+          title={section === 'projects' && esLider ? 'Mi Proyecto' : TITLES[section]}
           user={user}
-          onNotifications={() => setSection('notifications')}
-          onProfile={() => setSection('profile')}
-          onSettings={() => setSection('settings')}
+          onNotifications={() => changeSection('notifications')}
+          onProfile={() => changeSection('profile')}
+          onSettings={() => changeSection('settings')}
+          onNavigate={changeSection}
           onLogout={logout}
         />
 
@@ -120,13 +122,21 @@ export const AdminDashboard = () => {
               exit="exit"
               transition={{ duration: 0.15 }}
             >
-              {section === 'overview'      && <Overview />}
-              {section === 'projects'      && <ProjectsPanel />}
+              {/* Overview por rol */}
+              {section === 'overview' && (
+                esAprendizNormal  ? <AprendizOverview /> :
+                esLider           ? <LiderDashboard />   :
+                esInstructor      ? <InstructorOverview onNavigate={changeSection} /> :
+                                    <Overview />
+              )}
+              {/* Proyectos: lider → panel unificado con tabs, otros roles → listado */}
+              {section === 'projects' && (esLider ? <LiderProyecto /> : <ProjectsPanel />)}
               {section === 'fichas'        && allowedSections.includes('fichas')   && <FichasPanel />}
               {section === 'users'         && allowedSections.includes('users')    && <UsersPanel />}
               {section === 'leaders'       && allowedSections.includes('leaders')  && <LeadersPanel />}
-              {/* ── NUEVO: Mi Equipo para el líder técnico */}
               {section === 'equipo'        && allowedSections.includes('equipo')   && <MiEquipoPanel />}
+              {/* Mis Tareas — solo el aprendiz normal */}
+              {section === 'tareas'        && allowedSections.includes('tareas')   && <TareasPanel />}
               {section === 'notifications' && <NotificationsPanel />}
               {section === 'settings'      && <SettingsPanel />}
               {section === 'profile'       && <ProfilePage />}

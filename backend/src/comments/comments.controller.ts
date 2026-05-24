@@ -1,13 +1,26 @@
-import { Controller, Get, Post, Body, Param, Delete } from '@nestjs/common';
+import {
+  Controller, Get, Post, Body, Param,
+  Delete, UseGuards, Request,
+} from '@nestjs/common';
+import { AuthGuard } from '@nestjs/passport';
 import { CommentsService } from './comments.service';
 
+@UseGuards(AuthGuard('jwt'))
 @Controller('tickets/:ticketId/comments')
 export class CommentsController {
   constructor(private readonly commentsService: CommentsService) {}
 
   @Post()
-  create(@Param('ticketId') ticketId: string, @Body() createCommentDto: any) {
-    return this.commentsService.create(+ticketId, createCommentDto);
+  create(
+    @Param('ticketId') ticketId: string,
+    @Body() body: any,
+    @Request() req: any,
+  ) {
+    // Inyectar usuario_id desde el JWT — el frontend no lo envía, el backend lo asigna.
+    return this.commentsService.create(+ticketId, {
+      ...body,
+      usuario_id: req.user.id,
+    });
   }
 
   @Get()
@@ -16,7 +29,7 @@ export class CommentsController {
   }
 
   @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.commentsService.remove(+id);
+  remove(@Param('id') id: string, @Request() req: any) {
+    return this.commentsService.remove(+id, req.user);
   }
 }

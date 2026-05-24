@@ -43,6 +43,9 @@ lerna-debug.log*
 .env.production.local
 .env.local
 
+# Uploads (archivos de usuarios — van a Supabase Storage en producción)
+uploads/
+
 # temp directory
 .temp
 .tmp

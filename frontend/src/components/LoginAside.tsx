@@ -3,6 +3,7 @@ import { useForm } from 'react-hook-form';
 import { Link } from 'react-router-dom';
 import { Mail, Lock, Eye, EyeOff, AlertCircle, X, GripVertical } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
+import { KanbanaLogo } from './KanbanaLogo';
 
 interface LoginCredentials {
   email: string;
@@ -14,14 +15,14 @@ interface LoginAsideProps {
   onClose: () => void;
 }
 
-const MIN_WIDTH = 320;
-const MAX_WIDTH = 620;
+const MIN_WIDTH     = 320;
+const MAX_WIDTH     = 620;
 const DEFAULT_WIDTH = 440;
 
 export const LoginAside = ({ isOpen, onClose }: LoginAsideProps) => {
   const [showPassword, setShowPassword] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [width, setWidth] = useState(DEFAULT_WIDTH);
+  const [error,        setError]        = useState<string | null>(null);
+  const [width,        setWidth]        = useState(DEFAULT_WIDTH);
   const { login } = useAuth();
 
   const isDragging = useRef(false);
@@ -36,18 +37,15 @@ export const LoginAside = ({ isOpen, onClose }: LoginAsideProps) => {
   } = useForm<LoginCredentials>({ defaultValues: { email: '', password: '' } });
 
   useEffect(() => {
-    if (!isOpen) {
-      setError(null);
-      reset();
-    }
+    if (!isOpen) { setError(null); reset(); }
   }, [isOpen, reset]);
 
   // ── Drag-to-resize ────────────────────────────────────────────────────────
   const onMouseDown = useCallback((e: React.MouseEvent) => {
-    isDragging.current = true;
-    startX.current     = e.clientX;
-    startWidth.current = width;
-    document.body.style.cursor    = 'ew-resize';
+    isDragging.current  = true;
+    startX.current      = e.clientX;
+    startWidth.current  = width;
+    document.body.style.cursor     = 'ew-resize';
     document.body.style.userSelect = 'none';
   }, [width]);
 
@@ -60,15 +58,15 @@ export const LoginAside = ({ isOpen, onClose }: LoginAsideProps) => {
     };
     const onMouseUp = () => {
       if (!isDragging.current) return;
-      isDragging.current            = false;
-      document.body.style.cursor    = '';
+      isDragging.current             = false;
+      document.body.style.cursor     = '';
       document.body.style.userSelect = '';
     };
     window.addEventListener('mousemove', onMouseMove);
-    window.addEventListener('mouseup', onMouseUp);
+    window.addEventListener('mouseup',   onMouseUp);
     return () => {
       window.removeEventListener('mousemove', onMouseMove);
-      window.removeEventListener('mouseup', onMouseUp);
+      window.removeEventListener('mouseup',   onMouseUp);
     };
   }, []);
 
@@ -95,24 +93,25 @@ export const LoginAside = ({ isOpen, onClose }: LoginAsideProps) => {
       {/* Panel aside */}
       <aside
         style={{ width: isOpen ? width : 0 }}
-        className={`fixed top-0 right-0 h-full z-[100] bg-zinc-950 border-l border-zinc-800/80 flex flex-col justify-between overflow-y-auto overflow-x-hidden shadow-[0_0_60px_rgba(0,0,0,0.8)] transition-[transform,opacity] duration-300 ease-in-out text-zinc-100 selection:bg-[#27ae60] selection:text-white ${
+        className={`fixed top-0 right-0 h-full z-[100] bg-zinc-950 border-l border-zinc-800 flex flex-col justify-between overflow-y-auto overflow-x-hidden shadow-[0_0_60px_rgba(0,0,0,0.8)] transition-[transform,opacity] duration-300 ease-in-out text-zinc-100 selection:bg-blue-600 selection:text-white ${
           isOpen ? 'translate-x-0 opacity-100' : 'translate-x-full opacity-0'
         }`}
       >
-        {/* Drag handle — borde izquierdo */}
+        {/* Drag handle */}
         <div
           onMouseDown={onMouseDown}
           className="absolute left-0 top-0 h-full w-3 z-10 flex items-center justify-center cursor-ew-resize group"
           title="Arrastrar para redimensionar"
         >
-          <div className="w-[3px] h-16 rounded-full bg-zinc-700 group-hover:bg-[#27ae60] transition-colors" />
+          <div className="w-[3px] h-16 rounded-full bg-zinc-700 group-hover:bg-blue-500 transition-colors" />
           <GripVertical
             size={14}
-            className="absolute text-zinc-600 group-hover:text-[#27ae60] transition-colors opacity-0 group-hover:opacity-100"
+            className="absolute text-zinc-600 group-hover:text-blue-500 transition-colors opacity-0 group-hover:opacity-100"
           />
         </div>
 
         <div className="pl-5 pr-6 pt-5 pb-8 md:pl-8 md:pr-8 flex flex-col gap-6 flex-1">
+
           {/* Cerrar */}
           <div className="flex justify-end">
             <button
@@ -123,46 +122,21 @@ export const LoginAside = ({ isOpen, onClose }: LoginAsideProps) => {
             </button>
           </div>
 
-          {/* Logo */}
-          <div className="text-center">
-            <div className="relative w-12 h-12 inline-flex items-center justify-center mb-3">
-              <div
-                className="absolute inset-0 rounded-xl shadow-inner"
-                style={{ background: 'radial-gradient(circle, #064e3b, #022c22)' }}
-              />
-              <svg className="absolute inset-0 w-full h-full" viewBox="0 0 28 28">
-                <circle cx="14" cy="14" r="12" fill="none" stroke="#27ae60" strokeWidth="0.6"
-                  strokeDasharray="4 6" opacity="0.5"
-                  style={{ transformOrigin: '14px 14px', animation: 'spin 10s linear infinite' }} />
-                <circle cx="14" cy="14" r="9" fill="none" stroke="#065f46" strokeWidth="0.8" />
-                <circle cx="14" cy="2"  r="2"   fill="#6ee7b7" style={{ transformOrigin: '14px 14px', animation: 'spin 10s linear infinite' }} />
-                <circle cx="26" cy="14" r="1.5" fill="#fcd34d" opacity="0.85" style={{ transformOrigin: '14px 14px', animation: 'spin 16s linear infinite reverse' }} />
-                <circle cx="14" cy="26" r="1.2" fill="#fb7185" opacity="0.75" style={{ transformOrigin: '14px 14px', animation: 'spin 8s linear infinite' }} />
-              </svg>
-              <span
-                className="relative z-10 text-base font-black"
-                style={{
-                  fontFamily: 'Georgia, serif',
-                  background: 'linear-gradient(135deg, #6ee7b7, #27ae60)',
-                  WebkitBackgroundClip: 'text',
-                  WebkitTextFillColor: 'transparent',
-                  animation: 'kcolor 6s ease-in-out infinite',
-                }}
-              >K</span>
+          {/* ── Logo animado ──────────────────────────────────────────── */}
+          <div className="flex flex-col items-center gap-3">
+            <KanbanaLogo
+              size={60}
+              iconBorder="ring-1 ring-blue-500/20"
+            />
+            <div className="text-center">
+              <h1 className="text-2xl font-black tracking-[-0.05em] text-white">Kanbana</h1>
+              <p className="text-xs text-zinc-400 font-medium mt-0.5">
+                Sistema de gestión <span className="text-blue-400 font-bold">SENA · ADSO</span>
+              </p>
             </div>
-
-            <style>{`
-              @keyframes spin   { from { transform: rotate(0deg);   } to { transform: rotate(360deg); } }
-              @keyframes kcolor { 0%,100% { filter: hue-rotate(0deg); } 50% { filter: hue-rotate(20deg); } }
-            `}</style>
-
-            <h1 className="text-2xl font-black tracking-[-0.05em] text-white">Kanbana</h1>
-            <p className="text-xs text-zinc-400 font-medium mt-1">
-              Sistema de gestión <span className="text-[#27ae60] font-bold">SENA · ADSO</span>
-            </p>
           </div>
 
-          {/* Formulario */}
+          {/* ── Formulario ───────────────────────────────────────────── */}
           <div className="bg-zinc-900/60 border border-zinc-800/60 rounded-2xl p-6 space-y-5 shadow-inner">
             <div>
               <h2 className="text-base font-bold tracking-tight text-white">Iniciar sesión</h2>
@@ -178,7 +152,7 @@ export const LoginAside = ({ isOpen, onClose }: LoginAsideProps) => {
 
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
               {/* Email */}
-              <div className="space-y-1.5 text-left">
+              <div className="space-y-1.5">
                 <label className="block text-[10px] uppercase tracking-[0.2em] font-black text-zinc-400">
                   Correo electrónico
                 </label>
@@ -191,21 +165,21 @@ export const LoginAside = ({ isOpen, onClose }: LoginAsideProps) => {
                     })}
                     type="email"
                     placeholder="ejemplo@misena.edu.co"
-                    className="w-full bg-zinc-950 border border-zinc-800/80 rounded-xl pl-10 pr-4 py-3 text-sm text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-[#27ae60] focus:ring-1 focus:ring-[#27ae60] transition-all duration-200"
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded-xl pl-10 pr-4 py-3 text-sm text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/50 transition-all duration-200"
                   />
                 </div>
                 {errors.email && <p className="text-xs text-rose-400 pl-1">{errors.email.message}</p>}
               </div>
 
               {/* Contraseña */}
-              <div className="space-y-1.5 text-left">
+              <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
                   <label className="block text-[10px] uppercase tracking-[0.2em] font-black text-zinc-400">
                     Contraseña
                   </label>
                   <Link
                     to="/forgot-password"
-                    className="text-xs font-semibold text-[#27ae60] hover:text-[#219653] transition-colors"
+                    className="text-xs font-semibold text-blue-400 hover:text-blue-300 transition-colors"
                     onClick={onClose}
                   >
                     ¿Olvidaste tu contraseña?
@@ -217,7 +191,7 @@ export const LoginAside = ({ isOpen, onClose }: LoginAsideProps) => {
                     {...register('password', { required: 'La contraseña es obligatoria' })}
                     type={showPassword ? 'text' : 'password'}
                     placeholder="••••••••"
-                    className="w-full bg-zinc-950 border border-zinc-800/80 rounded-xl pl-10 pr-11 py-3 text-sm text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-[#27ae60] focus:ring-1 focus:ring-[#27ae60] transition-all duration-200"
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded-xl pl-10 pr-11 py-3 text-sm text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/50 transition-all duration-200"
                   />
                   <button
                     type="button"
@@ -233,7 +207,7 @@ export const LoginAside = ({ isOpen, onClose }: LoginAsideProps) => {
               <button
                 type="submit"
                 disabled={isSubmitting}
-                className="w-full mt-2 py-3 bg-[#27ae60] hover:bg-[#219653] disabled:opacity-60 disabled:pointer-events-none text-white text-sm font-black rounded-xl transition-all shadow-lg active:scale-95 duration-200 flex items-center justify-center gap-2"
+                className="w-full mt-2 py-3 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 disabled:pointer-events-none text-white text-sm font-black rounded-xl transition-all shadow-lg shadow-blue-600/20 active:scale-95 duration-200 flex items-center justify-center gap-2"
               >
                 {isSubmitting ? (
                   <>
@@ -249,18 +223,18 @@ export const LoginAside = ({ isOpen, onClose }: LoginAsideProps) => {
               <Link
                 to="/register"
                 onClick={onClose}
-                className="text-[#27ae60] hover:text-[#219653] font-bold transition-colors"
+                className="text-blue-400 hover:text-blue-300 font-bold transition-colors"
               >
                 Regístrate ahora
               </Link>
             </p>
           </div>
 
-          {/* Hint dev */}
+          {/* Dev hint */}
           {import.meta.env.DEV && (
             <div className="p-3 bg-zinc-900 border border-zinc-800/60 rounded-xl">
               <p className="text-[10px] text-zinc-500 tracking-wide text-center">
-                <span className="font-bold text-[#27ae60] uppercase mr-1">Dev:</span>
+                <span className="font-bold text-blue-400 uppercase mr-1">Dev:</span>
                 coordinador@sena.edu.co · kanbana2026
               </p>
             </div>

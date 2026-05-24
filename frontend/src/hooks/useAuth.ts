@@ -28,9 +28,20 @@ export const useAuth = () => {
   const { user, isAuthenticated, isLoading, token, setUser, setToken, clearUser } = useAuthStore();
   const navigate = useNavigate();
 
-  const login = async (email: string, password: string) => {
-    const response = await authService.login({ email, password });
-    const { access_token, refresh_token } = response.tokens;
+  const login = async (
+    email: string,
+    password: string,
+    redirectAfter?: string,
+    totpCode?: string,
+  ): Promise<{ requires2fa: boolean }> => {
+    const response = await authService.login({ email, password, totpCode });
+
+    // El servidor pide el código 2FA — no hay tokens aún
+    if ('requires2fa' in response && response.requires2fa) {
+      return { requires2fa: true };
+    }
+
+    const { access_token, refresh_token } = (response as any).tokens;
 
     // Guardar tokens en localStorage
     localStorage.setItem('access_token', access_token);
@@ -38,13 +49,14 @@ export const useAuth = () => {
 
     // Hidratar el store de autenticación
     setToken(access_token);
-    setUser(response.user);
+    setUser((response as any).user);
 
-    // ── MODIFICADO: navegación única, sin rama de popup ──────────────────
-    // Antes aquí se comprobaba isPopup() y, de ser popup, se hacía
-    // postMessage + window.close(). Ahora siempre se navega normal.
-    const rol = response.user.rol;
-    navigate(rol === 'aprendiz' ? '/kanban' : '/dashboard', { replace: true });
+    // ── Navegación post-login ────────────────────────────────────────────
+    const rol  = (response as any).user.rol;
+    const dest = redirectAfter || (rol === 'aprendiz' ? '/kanban' : '/dashboard');
+    navigate(dest, { replace: true });
+
+    return { requires2fa: false };
   };
 
   const logout = () => {

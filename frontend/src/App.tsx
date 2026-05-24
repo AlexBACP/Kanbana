@@ -18,6 +18,7 @@ import { TrimestreDetailPage }   from './pages/TrimestreDetailPage';
 import { TrimestreKanbanPage }   from './pages/TrimestreKanbanPage';
 import { BacklogPage } from './pages/BacklogPage';
 import { NotFoundPage } from './pages/NotFoundPage';
+import { ChatBubble }  from './components/ChatBubble';
 // ── CAMBIO: importamos las páginas de recuperación de contraseña ──────────
 import { ForgotPasswordPage }    from './pages/ForgotPasswordPage';
 import { ResetPasswordPage }     from './pages/ResetPasswordPage';
@@ -94,6 +95,9 @@ function App() {
 
           <Route path="*" element={<NotFoundPage />} />
         </Routes>
+
+        {/* ── KanbanaAI — Asistente flotante global ────────────────── */}
+        <ChatBubble />
       </BrowserRouter>
     </QueryClientProvider>
   );

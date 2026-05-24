@@ -27,6 +27,9 @@ export class Sprint {
   @Column()
   nombre: string;
 
+  @Column({ type: 'text', nullable: true, default: null })
+  descripcion: string | null;
+
   @Column({ type: 'date' })
   fecha_inicio: Date;
 
@@ -38,6 +41,13 @@ export class Sprint {
 
   @Column({ default: false })
   esta_finalizado: boolean;
+
+  /**
+   * pendiente_revision: true cuando el líder envía el módulo a revisión del instructor.
+   * Se pone en false cuando el instructor aprueba (cierra el sprint) o envía correcciones.
+   */
+  @Column({ default: false })
+  pendiente_revision: boolean;
 
   // ── FK hacia Proyecto (sin cambios) ─────────────────────────────────────
   @Column()

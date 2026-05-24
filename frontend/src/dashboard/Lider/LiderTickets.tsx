@@ -93,10 +93,10 @@ const AsigneeDropdown = ({
       >
         {asignado ? (
           <>
-            <div className="w-5 h-5 rounded-full bg-primary-600/20 border border-primary-500/30 flex items-center justify-center overflow-hidden shrink-0">
+            <div className="w-5 h-5 rounded-full bg-blue-600/20 border border-blue-500/30 flex items-center justify-center overflow-hidden shrink-0">
               {asignado.avatar_url
                 ? <img src={userService.getAvatarUrl(asignado.avatar_url) || ''} className="w-full h-full object-cover" alt="" />
-                : <span className="text-[8px] font-semibold text-primary-400">{asignado.nombre?.slice(0, 2).toUpperCase()}</span>
+                : <span className="text-[8px] font-semibold text-blue-400">{asignado.nombre?.slice(0, 2).toUpperCase()}</span>
               }
             </div>
             <span className="truncate max-w-[100px]">{asignado.nombre}</span>
@@ -129,15 +129,15 @@ const AsigneeDropdown = ({
                 onClick={() => { onUpdate(m.id); setOpen(false); }}
                 className={`w-full flex items-center gap-2 px-3 py-2 text-xs hover:bg-dark-bg/50 transition-colors ${ticket.asignado_a?.id === m.id ? 'bg-dark-bg/30' : ''}`}
               >
-                <div className="w-5 h-5 rounded-full bg-primary-600/20 border border-primary-500/30 flex items-center justify-center overflow-hidden shrink-0">
+                <div className="w-5 h-5 rounded-full bg-blue-600/20 border border-blue-500/30 flex items-center justify-center overflow-hidden shrink-0">
                   {m.avatar_url
                     ? <img src={userService.getAvatarUrl(m.avatar_url) || ''} className="w-full h-full object-cover" alt="" />
-                    : <span className="text-[8px] font-semibold text-primary-400">{m.nombre?.slice(0, 2).toUpperCase()}</span>
+                    : <span className="text-[8px] font-semibold text-blue-400">{m.nombre?.slice(0, 2).toUpperCase()}</span>
                   }
                 </div>
                 <span className="text-dark-text truncate">{m.nombre}</span>
-                <span className={`ml-auto text-[9px] shrink-0 ${m.rol === 'lider_tecnico' ? 'text-emerald-400' : 'text-amber-400'}`}>
-                  {m.rol === 'lider_tecnico' ? 'Líder' : 'Aprendiz'}
+                <span className={`ml-auto text-[9px] shrink-0 ${m.es_lider_tecnico ? 'text-emerald-400' : 'text-amber-400'}`}>
+                  {m.es_lider_tecnico ? 'Líder' : 'Aprendiz'}
                 </span>
               </button>
             ))}
@@ -187,9 +187,8 @@ export const LiderTickets = () => {
     staleTime: 60_000,
   });
 
- const miembrosArr = (miembros as any[]).filter(
-    (m: any) => m.rol === 'aprendiz' || m.rol === 'lider_tecnico'
-  );
+  // Los líderes técnicos siguen teniendo rol 'aprendiz' — se identifican por es_lider_tecnico
+  const miembrosArr = (miembros as any[]).filter((m: any) => m.rol === 'aprendiz');
 
   // Módulos (sprints) del proyecto para asignar la tarea
   const { data: sprints = [] } = useQuery({
@@ -297,7 +296,7 @@ export const LiderTickets = () => {
         <div className="flex items-center gap-2">
           <button
             onClick={() => setSolicitarOpen(true)}
-            className="py-1.5 px-3 text-xs flex items-center gap-2 border border-dark-border rounded-xl text-dark-muted hover:text-dark-text hover:border-primary-500/40 transition-all"
+            className="py-1.5 px-3 text-xs flex items-center gap-2 border border-dark-border rounded-xl text-dark-muted hover:text-dark-text hover:border-blue-500/40 transition-all"
           >
             <Plus size={14} /> Solicitar módulo
           </button>
@@ -320,7 +319,7 @@ export const LiderTickets = () => {
               onClick={() => setFilterEstado(active ? 'all' : e.key)}
               className={`p-3 rounded-xl border text-left transition-all ${
                 active
-                  ? 'border-primary-500/40 bg-primary-500/5'
+                  ? 'border-blue-500/40 bg-blue-500/5'
                   : 'border-dark-border bg-dark-card hover:border-dark-border/80'
               }`}
             >
@@ -340,7 +339,7 @@ export const LiderTickets = () => {
             placeholder="Buscar por título..."
             value={search}
             onChange={e => setSearch(e.target.value)}
-            className="w-full bg-dark-card border border-dark-border rounded-lg pl-9 pr-4 py-2 text-sm text-dark-text outline-none focus:border-primary-500/50 transition-colors"
+            className="w-full bg-dark-card border border-dark-border rounded-lg pl-9 pr-4 py-2 text-sm text-dark-text outline-none focus:border-blue-500/50 transition-colors"
           />
         </div>
         {filterEstado !== 'all' && (
@@ -425,7 +424,7 @@ export const LiderTickets = () => {
               name="titulo"
               required
               placeholder="Descripción breve de la tarea"
-              className="w-full bg-dark-bg border border-dark-border rounded-xl px-3 py-2.5 text-sm text-dark-text outline-none focus:border-primary-500/50 transition-colors placeholder:text-dark-muted/50"
+              className="w-full bg-dark-bg border border-dark-border rounded-xl px-3 py-2.5 text-sm text-dark-text outline-none focus:border-blue-500/50 transition-colors placeholder:text-dark-muted/50"
             />
           </FormField>
           <FormField label="Descripción">
@@ -433,13 +432,13 @@ export const LiderTickets = () => {
               name="descripcion"
               rows={3}
               placeholder="Detalles de la tarea, criterios de aceptación..."
-              className="w-full bg-dark-bg border border-dark-border rounded-xl px-3 py-2.5 text-sm text-dark-text outline-none focus:border-primary-500/50 transition-colors resize-none placeholder:text-dark-muted/50"
+              className="w-full bg-dark-bg border border-dark-border rounded-xl px-3 py-2.5 text-sm text-dark-text outline-none focus:border-blue-500/50 transition-colors resize-none placeholder:text-dark-muted/50"
             />
           </FormField>
           <div className="grid grid-cols-2 gap-3">
             <FormField label="Tipo">
               <select name="tipo" defaultValue="task"
-                className="w-full bg-dark-bg border border-dark-border rounded-xl px-3 py-2.5 text-sm text-dark-text outline-none focus:border-primary-500/50 transition-colors"
+                className="w-full bg-dark-bg border border-dark-border rounded-xl px-3 py-2.5 text-sm text-dark-text outline-none focus:border-blue-500/50 transition-colors"
               >
                 <option value="task">Tarea</option>
                 <option value="bug">Bug</option>
@@ -448,7 +447,7 @@ export const LiderTickets = () => {
             </FormField>
             <FormField label="Prioridad">
               <select name="prioridad" defaultValue="media"
-                className="w-full bg-dark-bg border border-dark-border rounded-xl px-3 py-2.5 text-sm text-dark-text outline-none focus:border-primary-500/50 transition-colors"
+                className="w-full bg-dark-bg border border-dark-border rounded-xl px-3 py-2.5 text-sm text-dark-text outline-none focus:border-blue-500/50 transition-colors"
               >
                 <option value="alta">🔴 Alta</option>
                 <option value="media">🟡 Media</option>
@@ -458,12 +457,12 @@ export const LiderTickets = () => {
           </div>
           <FormField label="Asignar a (miembro del proyecto)">
             <select name="asignado_a_id"
-              className="w-full bg-dark-bg border border-dark-border rounded-xl px-3 py-2.5 text-sm text-dark-text outline-none focus:border-primary-500/50 transition-colors"
+              className="w-full bg-dark-bg border border-dark-border rounded-xl px-3 py-2.5 text-sm text-dark-text outline-none focus:border-blue-500/50 transition-colors"
             >
               <option value="">Sin asignar</option>
               {miembrosArr.map((m: any) => (
                 <option key={m.id} value={m.id}>
-                  {m.nombre} ({m.rol === 'lider_tecnico' ? 'Líder Técnico' : 'Aprendiz'})
+                  {m.nombre} ({m.es_lider_tecnico ? 'Líder Técnico' : 'Aprendiz'})
                 </option>
               ))}
             </select>
@@ -473,7 +472,7 @@ export const LiderTickets = () => {
           </FormField>
           <FormField label="Módulo (opcional)">
             <select name="sprint_id"
-              className="w-full bg-dark-bg border border-dark-border rounded-xl px-3 py-2.5 text-sm text-dark-text outline-none focus:border-primary-500/50 transition-colors"
+              className="w-full bg-dark-bg border border-dark-border rounded-xl px-3 py-2.5 text-sm text-dark-text outline-none focus:border-blue-500/50 transition-colors"
             >
               <option value="">Sin módulo asignado</option>
               {sprintsArr.map((s: any) => (
@@ -488,7 +487,7 @@ export const LiderTickets = () => {
           </FormField>
           <FormField label="Fecha límite">
             <input name="fecha_limite" type="date"
-              className="w-full bg-dark-bg border border-dark-border rounded-xl px-3 py-2.5 text-sm text-dark-text outline-none focus:border-primary-500/50 transition-colors"
+              className="w-full bg-dark-bg border border-dark-border rounded-xl px-3 py-2.5 text-sm text-dark-text outline-none focus:border-blue-500/50 transition-colors"
             />
           </FormField>
           {formError && (
@@ -500,7 +499,7 @@ export const LiderTickets = () => {
           <button
             type="submit"
             disabled={createTicketMutation.isPending}
-            className="w-full py-3 bg-primary-600 hover:bg-primary-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-black uppercase tracking-widest rounded-xl text-xs transition-all flex items-center justify-center gap-2"
+            className="w-full py-3 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-black uppercase tracking-widest rounded-xl text-xs transition-all flex items-center justify-center gap-2"
           >
             {createTicketMutation.isPending
               ? <><Loader2 size={14} className="animate-spin" /> Creando tarea...</>
@@ -528,7 +527,7 @@ export const LiderTickets = () => {
                   value={solicitarForm.nombre}
                   onChange={e => setSolicitarForm(f => ({ ...f, nombre: e.target.value }))}
                   placeholder="Ej: Módulo 2 — Desarrollo backend"
-                  className="w-full bg-dark-bg border border-dark-border rounded-xl px-3 py-2.5 text-sm text-dark-text outline-none focus:border-primary-500/50 transition-colors placeholder:text-dark-muted/50"
+                  className="w-full bg-dark-bg border border-dark-border rounded-xl px-3 py-2.5 text-sm text-dark-text outline-none focus:border-blue-500/50 transition-colors placeholder:text-dark-muted/50"
                 />
               </FormField>
               <FormField label="Justificación (opcional)">
@@ -537,13 +536,13 @@ export const LiderTickets = () => {
                   onChange={e => setSolicitarForm(f => ({ ...f, justificacion: e.target.value }))}
                   rows={3}
                   placeholder="¿Por qué necesitas este módulo?"
-                  className="w-full bg-dark-bg border border-dark-border rounded-xl px-3 py-2.5 text-sm text-dark-text outline-none focus:border-primary-500/50 transition-colors resize-none placeholder:text-dark-muted/50"
+                  className="w-full bg-dark-bg border border-dark-border rounded-xl px-3 py-2.5 text-sm text-dark-text outline-none focus:border-blue-500/50 transition-colors resize-none placeholder:text-dark-muted/50"
                 />
               </FormField>
               <button
                 onClick={handleSolicitarModulo}
                 disabled={solicitarLoading || !solicitarForm.nombre.trim()}
-                className="w-full py-3 bg-primary-600 hover:bg-primary-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-black uppercase tracking-widest rounded-xl text-xs transition-all flex items-center justify-center gap-2"
+                className="w-full py-3 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-black uppercase tracking-widest rounded-xl text-xs transition-all flex items-center justify-center gap-2"
               >
                 {solicitarLoading ? 'Enviando...' : 'Enviar solicitud'}
               </button>

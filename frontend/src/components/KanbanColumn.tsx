@@ -1,58 +1,63 @@
 import { useDroppable } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { Ticket, TicketStatus } from '../types/ticket.types';
-import { TicketCard } from './TicketCard';
+import { TicketCard, TicketCardActions } from './TicketCard';
 
 interface KanbanColumnProps {
-  status: TicketStatus;
-  label: string;
-  // ▼ NUEVO: descripción corta que aparece bajo el título de la columna
-  desc: string;
-  tickets: Ticket[];
-  color: string;
+  status:     TicketStatus;
+  label:      string;
+  desc:       string;
+  tickets:    Ticket[];
+  color:      string;
+  getActions?: (ticket: Ticket) => TicketCardActions | undefined;
 }
 
-export const KanbanColumn = ({ status, label, desc, tickets, color }: KanbanColumnProps) => {
+export const KanbanColumn = ({
+  status, label, desc, tickets, color, getActions,
+}: KanbanColumnProps) => {
   const { setNodeRef, isOver } = useDroppable({ id: status });
 
   return (
     <div
       ref={setNodeRef}
-      className={`flex flex-col bg-dark-card/50 rounded-[2.5rem] p-5 w-80 min-h-[600px] border transition-all duration-200 ${
+      className={`flex flex-col w-72 shrink-0 h-full rounded-xl border transition-all duration-200 ${
         isOver
-          ? 'bg-primary-500/5 ring-2 ring-primary-500/30 border-primary-500/40 scale-[1.01]'
-          : 'border-dark-border'
+          ? 'bg-blue-950/20 border-blue-500/30 ring-1 ring-blue-500/20'
+          : 'bg-zinc-900/50 border-zinc-700/40'
       }`}
     >
-      {/* ▼ CAMBIO: encabezado con label en español + descripción + contador */}
-      <div className="flex items-start justify-between mb-6 px-1">
-        <div className="flex flex-col gap-1">
-          <div className="flex items-center gap-2.5">
-            <div className={`h-2.5 w-2.5 rounded-full ${color} shadow-[0_0_8px_rgba(0,0,0,0.4)]`} />
-            <h3 className="text-sm font-black text-dark-text uppercase tracking-widest">{label}</h3>
-          </div>
-          {/* ▼ NUEVO: subtítulo descriptivo de la columna */}
-          <p className="text-[10px] text-dark-muted ml-5 leading-tight">{desc}</p>
+      {/* ── Column header ─────────────────────────────────────────────── */}
+      <div className="shrink-0 flex items-center justify-between px-3 py-2.5 border-b border-zinc-700/40">
+        <div className="flex items-center gap-2 min-w-0">
+          <div className={`h-1.5 w-1.5 rounded-full shrink-0 ${color}`} />
+          <h3 className="text-[10px] font-black text-zinc-400 uppercase tracking-widest truncate" title={desc}>
+            {label}
+          </h3>
         </div>
-        <span className="text-[10px] font-black text-dark-muted bg-dark-bg border border-dark-border rounded-full px-3 py-1 shadow-inner shrink-0">
+        <span className="shrink-0 text-[10px] font-black text-zinc-600 tabular-nums ml-2">
           {tickets.length}
         </span>
       </div>
 
+      {/* ── Cards — independently scrollable ──────────────────────────── */}
       <SortableContext items={tickets.map(t => t.id)} strategy={verticalListSortingStrategy}>
-        <div className="flex flex-col gap-4 flex-1">
+        <div className="flex-1 min-h-0 overflow-y-auto p-2 flex flex-col gap-1.5">
           {tickets.map(ticket => (
-            <TicketCard key={ticket.id} ticket={ticket} />
+            <TicketCard
+              key={ticket.id}
+              ticket={ticket}
+              actions={getActions ? getActions(ticket) : undefined}
+            />
           ))}
-          {/* ▼ CAMBIO: zona de drop vacía más visible cuando la columna no tiene tickets */}
+
           {tickets.length === 0 && (
-            <div className={`flex-1 flex flex-col items-center justify-center border-2 border-dashed rounded-[2rem] transition-all min-h-32 ${
+            <div className={`flex-1 flex items-center justify-center border-2 border-dashed rounded-md min-h-16 transition-all ${
               isOver
-                ? 'border-primary-500/50 bg-primary-500/5'
-                : 'border-dark-border opacity-30'
+                ? 'border-blue-500/40 bg-blue-500/5 text-blue-400'
+                : 'border-zinc-700/30 text-zinc-700'
             }`}>
-              <span className="text-[10px] font-black uppercase tracking-widest text-dark-muted">
-                {isOver ? 'Soltar aquí' : 'Sin tareas'}
+              <span className="text-[9px] font-black uppercase tracking-widest">
+                {isOver ? 'Soltar aquí' : 'Vacía'}
               </span>
             </div>
           )}

@@ -376,7 +376,7 @@ export const TrimestresView = ({ proyectoId }: Props) => {
                       {fmt(trim.fecha_inicio?.toString())} → {fmt(trim.fecha_fin?.toString())}
                     </span>
                     <span className="text-[11px] text-dark-muted">
-                      {sprints.length} modulo{sprints.length !== 1 ? 's' : ''} · {doneTix}/{allTickets.length} tickets
+                      {sprints.length} módulo{sprints.length !== 1 ? 's' : ''} · {doneTix}/{allTickets.length} tareas
                     </span>
                   </div>
                 </div>
@@ -524,7 +524,7 @@ export const TrimestresView = ({ proyectoId }: Props) => {
                     onClick={() => setModal({ type: 'createSprint', trimestreId: trim.id, trimestreNombre: trim.nombre })}
                     className="w-full flex items-center justify-center gap-2 p-3 border-2 border-dashed border-dark-border rounded-2xl text-xs font-black text-dark-muted uppercase tracking-widest hover:border-primary-500/40 hover:text-primary-400 transition-all"
                   >
-                    <Plus size={13} /> Crear sprint en {trim.nombre}
+                    <Plus size={13} /> Crear módulo en {trim.nombre}
                   </button>
                 )}
               </div>
@@ -696,7 +696,7 @@ export const TrimestresView = ({ proyectoId }: Props) => {
       <Modal
         isOpen={modal?.type === 'createSprint'}
         onClose={() => { setModal(null); resetSprint(); }}
-        title={`Nuevo Sprint — ${modal?.type === 'createSprint' ? modal.trimestreNombre : ''}`}
+        title={`Nuevo Módulo — ${modal?.type === 'createSprint' ? modal.trimestreNombre : ''}`}
       >
         <form
           onSubmit={hSprint(data =>
@@ -710,7 +710,7 @@ export const TrimestresView = ({ proyectoId }: Props) => {
             <input
               {...regSprint('nombre', { required: true })}
               className="w-full px-5 py-4 bg-dark-bg/50 border border-dark-border rounded-2xl text-sm text-dark-text outline-none focus:ring-4 focus:ring-primary-500/10 focus:border-primary-500 transition-all placeholder:text-dark-muted/30"
-              placeholder="Ej: Sprint 1 — Levantamiento de requisitos"
+              placeholder="Ej: Módulo 1 — Levantamiento de requisitos"
             />
           </div>
           <div className="grid grid-cols-2 gap-4">
@@ -727,7 +727,7 @@ export const TrimestresView = ({ proyectoId }: Props) => {
           </div>
           <div className="flex justify-end gap-3 pt-2">
             <Button variant="secondary" onClick={() => { setModal(null); resetSprint(); }}>Cancelar</Button>
-            <Button type="submit" isLoading={createSprintMut.isPending}>Crear Sprint</Button>
+            <Button type="submit" isLoading={createSprintMut.isPending}>Crear Módulo</Button>
           </div>
         </form>
       </Modal>

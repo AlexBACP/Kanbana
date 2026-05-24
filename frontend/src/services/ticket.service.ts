@@ -91,6 +91,34 @@ export const ticketService = {
     return data;
   },
 
+  // ══ NUEVOS: flujo de reclamación y revisión ══════════════════════════════
+
+  // Aprendiz reclama una tarea disponible (to_do, sin asignar).
+  // El backend la mueve a in_progress y notifica al líder.
+  claimTicket: async (ticketId: number): Promise<Ticket> => {
+    const { data } = await api.post(`/tickets/${ticketId}/claim`);
+    return data;
+  },
+
+  // Aprendiz indica que terminó su trabajo → activa la bandera de revisión.
+  // La tarjeta se vuelve verde en el tablero para alertar al líder.
+  markCompleteByAprendiz: async (ticketId: number): Promise<Ticket> => {
+    const { data } = await api.post(`/tickets/${ticketId}/mark-complete`);
+    return data;
+  },
+
+  // Líder aprueba el trabajo del aprendiz → la tarea pasa a testing.
+  approveCompletion: async (ticketId: number): Promise<Ticket> => {
+    const { data } = await api.post(`/tickets/${ticketId}/lider-approve`);
+    return data;
+  },
+
+  // Líder rechaza el trabajo → la tarea vuelve al pool (to_do, sin asignar).
+  rejectCompletion: async (ticketId: number): Promise<Ticket> => {
+    const { data } = await api.post(`/tickets/${ticketId}/lider-reject`);
+    return data;
+  },
+
   // Lista todos los adjuntos de un ticket, ordenados del más reciente al más antiguo.
   getAttachments: async (ticketId: number): Promise<TicketAttachment[]> => {
     const { data } = await api.get(`/tickets/${ticketId}/attachments`);

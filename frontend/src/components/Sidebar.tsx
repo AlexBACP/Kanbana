@@ -4,7 +4,8 @@ import { Section } from '../layouts/AdminDashboard';
 import { useAuth } from '../hooks/useAuth';
 import {
   LayoutDashboard, GraduationCap, Users, ShieldCheck,
-  Bell, Settings, LogOut, ChevronRight, PanelLeftClose, PanelLeftOpen, Menu,
+  Bell, Settings, ChevronRight, PanelLeftClose, PanelLeftOpen, Menu, CheckSquare, FolderKanban,
+  Link2,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -37,12 +38,17 @@ const MENUS: Record<string, MenuDef> = {
     { label: 'Mis fichas',       key: 'fichas',    icon: GraduationCap },
   ],
   // Aprendiz con sub-rol de líder técnico
- lider: [
+  lider: [
     { label: 'Panel de control', key: 'overview',  icon: LayoutDashboard },
-    { label: 'Mi proyecto',      key: 'projects',  icon: GraduationCap },
-    // ── CORREGIDO: key era 'users', debe ser 'equipo' para que
-    // AdminDashboard renderice MiEquipoPanel en lugar de nada
-    { label: 'Mi Equipo',        key: 'equipo',    icon: Users },
+    { label: 'Mi Proyecto',      key: 'projects',  icon: FolderKanban },
+    { label: 'Recursos',         key: 'recursos',  icon: Link2 },
+  ],
+  // Aprendiz sin sub-rol de líder
+  aprendiz: [
+    { label: 'Panel de control', key: 'overview',  icon: LayoutDashboard },
+    { label: 'Tablero',          key: 'tablero',   icon: FolderKanban },
+    { label: 'Mis Tareas',       key: 'tareas',    icon: CheckSquare },
+    { label: 'Recursos',         key: 'recursos',  icon: Link2 },
   ],
 };
 
@@ -111,7 +117,9 @@ export const Sidebar = ({ setSection, activeSection, allowedSections }: Props) =
 
   // Determinar el menú según el rol efectivo
   const esLider = user?.rol === 'aprendiz' && (user as any)?.es_lider_tecnico;
-  const menuKey = esLider ? 'lider' : (user?.rol ?? 'lider');
+  const menuKey = esLider ? 'lider'
+    : user?.rol === 'aprendiz' ? 'aprendiz'
+    : (user?.rol ?? 'aprendiz');
 
   const rawMenu = MENUS[menuKey] ?? MENUS.lider;
   const menu = allowedSections
@@ -184,8 +192,8 @@ export const Sidebar = ({ setSection, activeSection, allowedSections }: Props) =
           {/* Textos solo visibles cuando no está colapsado */}
           {(!collapsed || isDrawer) && (
             <div className="min-w-0">
-              <p className="text-[18px] font-semibold text-ink-primary leading-none">Kanbana</p>
-              <p className="text-[10px] text-ink-muted mt-0.5">SENA · ADSO</p>
+              <p className="text-[18px] font-semibold text-zinc-100 leading-none">Kanbana</p>
+              <p className="text-[10px] text-zinc-500 mt-0.5">SENA · ADSO</p>
             </div>
           )}
         </div>
@@ -193,7 +201,7 @@ export const Sidebar = ({ setSection, activeSection, allowedSections }: Props) =
 
       {/* Nav principal */}
       <nav className="flex-1 px-2 py-3 overflow-y-auto">
-        <div className="space-y-0.5 border-b border-zinc-600">
+        <div className="space-y-0.5 border-b border-zinc-800">
           {menu.map((item) => {
             const Icon = item.icon;
             const isActive = activeSection === item.key;
@@ -218,7 +226,7 @@ export const Sidebar = ({ setSection, activeSection, allowedSections }: Props) =
 
         <div className="mt-4 pt-3">
           {(!collapsed || isDrawer) && (
-            <p className="px-2 text-[15px] font-medium text-ink-muted uppercase tracking-widest mb-2">Sistema</p>
+            <p className="px-3 text-[10px] font-bold text-zinc-600 uppercase tracking-widest mb-1.5">Sistema</p>
           )}
           <div className="space-y-0.5">
             {[
@@ -234,7 +242,7 @@ export const Sidebar = ({ setSection, activeSection, allowedSections }: Props) =
                   title={collapsed && !isDrawer ? item.label : undefined}
                   className={`nav-item ${isActive ? 'active' : ''} ${collapsed && !isDrawer ? 'justify-center px-0' : ''}`}
                 >
-                  <Icon size={15} className="shrink-0" />
+                  <Icon size={16} className="shrink-0" />
                   {(!collapsed || isDrawer) && <span>{item.label}</span>}
                 </button>
               );
@@ -242,6 +250,7 @@ export const Sidebar = ({ setSection, activeSection, allowedSections }: Props) =
           </div>
         </div>
       </nav>
+
     </>
   );
 
@@ -252,7 +261,7 @@ export const Sidebar = ({ setSection, activeSection, allowedSections }: Props) =
         {/* Botón hamburguesa flotante encima del contenido */}
         <button
           onClick={() => setMobileOpen(true)}
-          className="fixed top-3 left-3 z-40 p-2.5 rounded-xl bg-zinc-800 border border-surface-border shadow-lg hover:bg-zinc-700 transition-all"
+          className="fixed top-3 left-3 z-40 p-2.5 rounded-xl bg-zinc-800 border border-zinc-700 shadow-lg hover:bg-zinc-700 transition-all"
           aria-label="Abrir menú"
         >
           <Menu size={18} className="text-white" />
@@ -278,7 +287,7 @@ export const Sidebar = ({ setSection, activeSection, allowedSections }: Props) =
                 exit={{ x: '-100%' }}
                 transition={{ type: 'spring', damping: 28, stiffness: 300 }}
                 style={{ width: sidebarWidth }}
-                className="fixed top-0 left-0 bottom-0 z-50 bg-[#1f1f21] border-r border-surface-border flex flex-col shadow-2xl"
+                className="fixed top-0 left-0 bottom-0 z-50 bg-zinc-900 border-r border-zinc-800 flex flex-col shadow-2xl"
               >
                 <SidebarContent isDrawer />
               </motion.aside>
@@ -293,7 +302,7 @@ export const Sidebar = ({ setSection, activeSection, allowedSections }: Props) =
   return (
     <aside
       style={{ width: effectiveWidth }}
-      className="relative bg-zinc-900 border-r border-surface-border flex flex-col h-full shrink-0 transition-[width] duration-200 ease-in-out overflow-hidden"
+      className="relative bg-zinc-900 border-r border-zinc-800 flex flex-col h-full shrink-0 transition-[width] duration-200 ease-in-out overflow-hidden"
     >
       <SidebarContent />
 
@@ -301,7 +310,7 @@ export const Sidebar = ({ setSection, activeSection, allowedSections }: Props) =
       <button
         onClick={() => setCollapsed(prev => !prev)}
         title={collapsed ? 'Expandir sidebar' : 'Colapsar sidebar'}
-        className="absolute top-4 right-2 z-20 p-1 rounded-lg text-white hover:text-ink-primary hover:bg-zinc-700 transition-all"
+        className="absolute top-4 right-2 z-20 p-1 rounded-lg text-zinc-500 hover:text-zinc-100 hover:bg-zinc-800 transition-all"
       >
         {collapsed
           ? <PanelLeftOpen size={20} />
@@ -315,7 +324,7 @@ export const Sidebar = ({ setSection, activeSection, allowedSections }: Props) =
           onMouseDown={handleMouseDown}
           className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize group flex items-center justify-center z-10"
         >
-          <div className="w-0.5 h-10 rounded-full bg-surface-border group-hover:bg-primary-500 group-hover:h-16 transition-all duration-200" />
+          <div className="w-0.5 h-10 rounded-full bg-zinc-700 group-hover:bg-primary-500 group-hover:h-16 transition-all duration-200" />
         </div>
       )}
     </aside>
