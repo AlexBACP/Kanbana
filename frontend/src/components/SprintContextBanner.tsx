@@ -44,10 +44,10 @@ type Urgency = {
 
 function getUrgency(daysLeft: number, pendiente: boolean): Urgency {
   if (pendiente) return {
-    bg:     'bg-violet-500/10',
-    border: 'border-violet-500/20',
-    text:   'text-violet-400',
-    dot:    'bg-violet-500',
+    bg:     'bg-blue-500/10',
+    border: 'border-blue-500/20',
+    text:   'text-blue-400',
+    dot:    'bg-blue-500',
     label:  'En revisión',
   };
   if (daysLeft < 0) return {

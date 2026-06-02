@@ -1,8 +1,9 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, IsNull } from 'typeorm';
-import { Ficha } from './entities/ficha.entity';
+import { Ficha, TipoFormacion } from './entities/ficha.entity';
 import { Trimestre, TipoTrimestre } from '../projects/entities/trimestre.entity';
+import { PLANTILLAS_POR_TIPO, CATALOGO_SUGERENCIAS, TrimestrePlantilla } from './plantillas-sdlc';
 import { User, UserRole } from '../users/entities/user.entity';
 import { NotificationsService } from '../notifications/notifications.service';
 import { NotificationType } from '../notifications/entities/notification.entity';
@@ -10,6 +11,7 @@ import { EmailService } from '../email/email.service';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 import * as nodemailer from 'nodemailer';
+import { promises as dns } from 'dns';
 
 @Injectable()
 export class FichasService {
@@ -24,15 +26,138 @@ export class FichasService {
     private emailService: EmailService,
   ) {}
 
-  async create(createFichaDto: any): Promise<Ficha> {
-    const { instructorId, instructor_id, ...rest } = createFichaDto;
-    const resolvedInstructorId = instructorId ?? instructor_id ?? null;
+  /**
+   * Crea una ficha y genera automáticamente los trimestres lectivos según
+   * el tipo de formación (tecnólogo=7, técnico=3). Cada trimestre dura ~12
+   * semanas (3 meses) y se encadena desde `fecha_inicio` (o desde hoy si no
+   * se especifica). `fecha_fin` se calcula automáticamente como el final del
+   * último trimestre.
+   *
+   * Permisos:
+   *  - El coordinador puede asignar la ficha a cualquier instructor.
+   *  - El instructor crea fichas directamente para sí mismo (sin pedir permiso).
+   */
+  async create(createFichaDto: any, actor?: any): Promise<Ficha> {
+    const { instructorId, instructor_id, tipo_formacion, fecha_inicio, ...rest } = createFichaDto;
+
+    // ── Validar código duplicado ANTES de insertar (mensaje claro al usuario) ──
+    const codigo = String(rest.codigo ?? '').trim();
+    if (!codigo) {
+      throw new BadRequestException('El código de la ficha es obligatorio.');
+    }
+    const yaExiste = await this.fichasRepository.findOne({ where: { codigo } });
+    if (yaExiste) {
+      throw new BadRequestException(`Ya existe una ficha con el código ${codigo}. Usa un código diferente.`);
+    }
+    rest.codigo = codigo;
+
+    // ── Resolver el instructor encargado ─────────────────────────────────
+    // Si quien crea es instructor, la ficha siempre queda a su nombre
+    // (no se permite manipulación del instructor_id desde el body).
+    // Si es coordinador, respeta el instructor_id enviado.
+    const resolvedInstructorId = actor?.rol === 'instructor'
+      ? actor.id
+      : (instructorId ?? instructor_id ?? null);
+
+    // ── Resolver tipo de formación ───────────────────────────────────────
+    const tipo: TipoFormacion = (tipo_formacion === TipoFormacion.TECNICO)
+      ? TipoFormacion.TECNICO
+      : TipoFormacion.TECNOLOGO; // default
+
+    // ── Resolver fechas ──────────────────────────────────────────────────
+    // fecha_inicio default = hoy. Cada trimestre = 12 semanas (84 días).
+    const plantilla = PLANTILLAS_POR_TIPO[tipo];
+    const inicio = fecha_inicio ? new Date(fecha_inicio) : new Date();
+    inicio.setHours(0, 0, 0, 0);
+
+    const semanasPorTrimestre = 12;
+    const totalSemanas = plantilla.length * semanasPorTrimestre;
+    const fin = new Date(inicio);
+    fin.setDate(fin.getDate() + totalSemanas * 7 - 1);
+
+    // ── Crear la ficha ───────────────────────────────────────────────────
     const ficha = this.fichasRepository.create({
       ...rest,
-      instructor_id: resolvedInstructorId,
+      tipo_formacion: tipo,
+      fecha_inicio:   inicio.toISOString().slice(0, 10),
+      fecha_fin:      fin.toISOString().slice(0, 10),
+      instructor_id:  resolvedInstructorId,
     } as any);
-    const saved = await this.fichasRepository.save(ficha as any);
-    return this.findOne((saved as any).id);
+    const saved = await this.fichasRepository.save(ficha as any) as any;
+
+    // ── Generar trimestres lectivos según la plantilla SDLC ──────────────
+    await this.generarTrimestresDePlantilla(saved.id, plantilla, inicio);
+
+    return this.findOne(saved.id);
+  }
+
+  /**
+   * Genera los trimestres de una ficha siguiendo una plantilla SDLC.
+   * Cada trimestre dura exactamente 12 semanas y se encadena al anterior.
+   * NOTA: los módulos (sprints) de la plantilla no se crean aquí porque
+   * los sprints requieren `proyecto_id`. Se crearán cuando el instructor
+   * cree un proyecto dentro de la ficha (vía `projectsService.createWithPlantilla`).
+   */
+  private async generarTrimestresDePlantilla(
+    fichaId:    number,
+    plantilla:  TrimestrePlantilla[],
+    inicio:     Date,
+  ): Promise<void> {
+    const semanasPorTrimestre = 12;
+    let cursor = new Date(inicio);
+    cursor.setHours(0, 0, 0, 0);
+
+    const trimestresACrear: Partial<Trimestre>[] = plantilla.map((tp, i) => {
+      const fechaInicio = new Date(cursor);
+      const fechaFin    = new Date(cursor);
+      fechaFin.setDate(fechaFin.getDate() + semanasPorTrimestre * 7 - 1);
+
+      const row: Partial<Trimestre> = {
+        ficha_id:     fichaId,
+        numero:       i + 1,
+        nombre:       tp.nombre,
+        descripcion:  tp.descripcion,
+        tipo:         tp.tipo,
+        fecha_inicio: fechaInicio.toISOString().slice(0, 10) as any,
+        fecha_fin:    fechaFin.toISOString().slice(0, 10) as any,
+        esta_finalizado: false,
+      };
+
+      // Avanza el cursor al siguiente trimestre
+      cursor = new Date(fechaFin);
+      cursor.setDate(cursor.getDate() + 1);
+      return row;
+    });
+
+    for (const t of trimestresACrear) {
+      const entity = this.trimestresRepo.create(t as any);
+      await this.trimestresRepo.save(entity as any);
+    }
+  }
+
+  /**
+   * Devuelve la plantilla SDLC para un tipo de formación. Usado por el
+   * frontend para mostrar un preview de los trimestres que se generarán.
+   */
+  getPlantilla(tipo: string): TrimestrePlantilla[] {
+    const key = tipo === 'tecnico' ? 'tecnico' : 'tecnologo';
+    return PLANTILLAS_POR_TIPO[key];
+  }
+
+  /**
+   * Devuelve las sugerencias de módulos relevantes para un número de trimestre
+   * (1-indexed) y opcionalmente filtra por categoría.
+   * Usado por el líder técnico al solicitar un módulo nuevo.
+   */
+  getSugerenciasModulos(numeroTrimestre: number, categoria?: string): {
+    categoria:   string;
+    nombre:      string;
+    descripcion: string;
+  }[] {
+    return CATALOGO_SUGERENCIAS
+      .filter(s => s.trimestres_relevantes.includes(numeroTrimestre))
+      .filter(s => !categoria || s.categoria.toLowerCase() === categoria.toLowerCase())
+      .map(({ trimestres_relevantes: _, ...rest }) => rest);
   }
 
   async findAll(): Promise<Ficha[]> {
@@ -249,7 +374,61 @@ export class FichasService {
    * Crea usuarios nuevos o vincula existentes a la ficha.
    * Contraseña predeterminada para cuentas nuevas: Sena2025*
    */
-  async importFromExcel(fichaId: number, buffer: Buffer, originalName?: string): Promise<{
+  // ── Validación de dominios de correo (MX) ────────────────────────────────
+  // Cache de resultados por dominio durante la vida del proceso para no repetir
+  // consultas DNS al mismo dominio (ej: 30 correos @gmail.com → 1 sola consulta).
+  private mxCache = new Map<string, boolean>();
+
+  /**
+   * Verifica si el DOMINIO de un correo puede recibir emails (tiene registros MX).
+   * Esto NO valida que el buzón exista — Google no lo permite — pero SÍ detecta:
+   *   - Typos de dominio: @gmial.com, @gmail.co, @gmai.com (no tienen MX)
+   *   - Dominios inexistentes o mal escritos
+   * Es la verificación preventiva más fuerte posible sin enviar el correo.
+   */
+  private async domainHasMx(domain: string): Promise<boolean> {
+    const d = domain.toLowerCase().trim();
+    if (!d) return false;
+    if (this.mxCache.has(d)) return this.mxCache.get(d)!;
+
+    let ok = false;
+    try {
+      const records = await dns.resolveMx(d);
+      ok = Array.isArray(records) && records.length > 0;
+    } catch {
+      // ENOTFOUND / ENODATA → dominio sin MX o inexistente
+      ok = false;
+    }
+    this.mxCache.set(d, ok);
+    return ok;
+  }
+
+  /**
+   * Valida una lista de correos: formato + existencia de MX del dominio.
+   * Usado por el preview del frontend ANTES de importar.
+   * Devuelve por cada correo si su dominio puede recibir emails.
+   */
+  async validarCorreos(correos: string[]): Promise<{
+    correo: string;
+    formatoValido: boolean;
+    dominioValido: boolean;
+  }[]> {
+    const unicos = Array.from(new Set((correos ?? []).map(c => c.trim().toLowerCase()).filter(Boolean)));
+    const resultados: { correo: string; formatoValido: boolean; dominioValido: boolean }[] = [];
+
+    for (const correo of unicos) {
+      const formatoValido = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(correo);
+      let dominioValido = false;
+      if (formatoValido) {
+        const dominio = correo.split('@')[1];
+        dominioValido = await this.domainHasMx(dominio);
+      }
+      resultados.push({ correo, formatoValido, dominioValido });
+    }
+    return resultados;
+  }
+
+  async importFromExcel(fichaId: number, buffer: Buffer, originalName?: string, importadorId?: number): Promise<{
     created: number;
     linked: number;
     errors: { fila: number; correo: string; reason: string }[];
@@ -286,7 +465,9 @@ export class FichasService {
 
     let created = 0;
     let linked  = 0;
-    const errors: { fila: number; correo: string; reason: string }[] = [];
+    const errors:    { fila: number; correo: string; reason: string }[] = [];
+    const creadosList:   { nombre: string; correo: string }[] = [];
+    const vinculadosList: { nombre: string; correo: string }[] = [];
 
     for (let i = 0; i < rows.length; i++) {
       const row      = rows[i];
@@ -300,6 +481,16 @@ export class FichasService {
       if (!cedula) { errors.push({ fila, correo, reason: 'Cédula/documento vacío' }); continue; }
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(correo)) {
         errors.push({ fila, correo, reason: 'Correo inválido' }); continue;
+      }
+
+      // ── Validación MX: el dominio debe poder recibir correos ──────────────
+      // Previene crear cuentas con dominios inexistentes/mal escritos a las que
+      // el correo de confirmación rebotaría (@gmial.com, @gmail.co, etc.).
+      const dominio = correo.split('@')[1];
+      const dominioOk = await this.domainHasMx(dominio);
+      if (!dominioOk) {
+        errors.push({ fila, correo, reason: `El dominio "${dominio}" no puede recibir correos (inexistente o mal escrito)` });
+        continue;
       }
 
       let user = await this.usersRepository.findOne({ where: { correo }, relations: ['ficha'] });
@@ -321,6 +512,7 @@ export class FichasService {
         } as object);
         user = await this.usersRepository.save(newUser as User);
         created++;
+        creadosList.push({ nombre, correo });
         try {
           await this.sendConfirmationEmail(correo, nombre, token);
         } catch { /* no bloquea el import */ }
@@ -332,8 +524,73 @@ export class FichasService {
         if (!user.ficha) {
           await this.usersRepository.update(user.id, { ficha } as any);
           linked++;
+          vinculadosList.push({ nombre: user.nombre, correo: user.correo });
         }
       }
+    }
+
+    // ── Notificación resumen (una sola) → importador + coordinadores ──────────
+    const fichaNombre = ficha ? `${ficha.codigo} — ${ficha.programa}` : `Ficha #${fichaId}`;
+    const totalAct = created + linked;
+
+    // Determinar nombre del importador (una sola consulta)
+    let importadorNombre = 'Sistema';
+    let importadorEntity: User | null = null;
+    if (importadorId) {
+      importadorEntity = await this.usersRepository.findOne({ where: { id: importadorId } });
+      if (importadorEntity) importadorNombre = importadorEntity.nombre;
+    }
+
+    // Mensaje resumen para notificación in-app
+    const resumenMsg = `Se importaron ${totalAct} aprendiz${totalAct !== 1 ? 'ces' : ''} a ${fichaNombre}: `
+      + `${created} cuenta${created !== 1 ? 's' : ''} creada${created !== 1 ? 's' : ''}, `
+      + `${linked} vinculado${linked !== 1 ? 's' : ''}`
+      + (errors.length > 0 ? `, ${errors.length} error${errors.length !== 1 ? 'es' : ''}` : '');
+
+    // In-app al importador (si existe y no es coordinador — los coords se notifican abajo)
+    if (importadorId) {
+      await this.notificationsService.create({
+        usuario_id: importadorId,
+        titulo:     `📊 Importación completada — ${fichaNombre}`,
+        mensaje:    resumenMsg,
+        tipo:       NotificationType.SUCCESS,
+      });
+    }
+
+    // In-app + email a todos los coordinadores
+    const coordinadores = await this.usersRepository.find({ where: { rol: UserRole.COORDINADOR as any, activo: true } });
+    for (const coord of coordinadores) {
+      if (coord.id === importadorId) continue; // evitar duplicado si el coord mismo importó
+      await this.notificationsService.create({
+        usuario_id: coord.id,
+        titulo:     `📊 Importación en ${fichaNombre}`,
+        mensaje:    resumenMsg,
+        tipo:       NotificationType.INFO,
+      });
+      if (coord.correo) {
+        this.emailService.notificarResumenImportacion({
+          destinatario:     coord.correo,
+          receptorNombre:   coord.nombre,
+          fichaNombre,
+          importadorNombre,
+          creados:          creadosList,
+          vinculados:       vinculadosList,
+          errores:          errors,
+        }).catch(() => { /* no bloquea la respuesta */ });
+      }
+    }
+
+    // Email resumen también al importador si es instructor
+    if (importadorEntity && importadorEntity.correo && importadorEntity.rol === UserRole.INSTRUCTOR) {
+      this.emailService.notificarResumenImportacion({
+        destinatario:     importadorEntity.correo,
+        receptorNombre:   importadorEntity.nombre,
+        fichaNombre,
+        importadorNombre,
+        creados:          creadosList,
+        vinculados:       vinculadosList,
+        errores:          errors,
+      }).catch(() => { /* no bloquea */ });
     }
 
     return { created, linked, errors };
@@ -464,9 +721,13 @@ export class FichasService {
   // ── Trimestres de la ficha ─────────────────────────────────────────────────
 
   async getTrimestres(fichaId: number): Promise<Trimestre[]> {
+    // No cargamos la relación 'sprints' aquí porque:
+    // 1. FichasPanel solo necesita metadatos del trimestre (fecha, tipo, nombre)
+    // 2. La relación FK filtra sprints huérfanos (trimestre_id = null)
+    // 3. Si la ficha tiene múltiples proyectos, los sprints se mezclarían entre trimestres
+    // Los sprints se cargan en projectService.getTrimestres(proyectoId) con lógica correcta.
     return this.trimestresRepo.find({
       where: { ficha_id: fichaId },
-      relations: ['sprints', 'sprints.tickets'],
       order: { numero: 'ASC' },
     });
   }
@@ -528,6 +789,46 @@ export class FichasService {
     return this.trimestresRepo.save(t as Trimestre);
   }
 
+  /**
+   * Devuelve el estado del permiso del instructor para crear una nueva ficha.
+   * También indica si hay una solicitud pendiente (notificación activa al
+   * coordinador) para que el frontend no muestre el botón "Solicitar permiso"
+   * mientras la solicitud previa aún no ha sido procesada.
+   */
+  async getPermisoCrearFicha(instructorId: number): Promise<{
+    puede_crear: boolean;
+    solicitud_pendiente: boolean;
+  }> {
+    if (!instructorId) throw new BadRequestException('ID de instructor inválido.');
+    const me = await this.usersRepository.findOne({ where: { id: instructorId } });
+    if (!me) throw new NotFoundException('Usuario no encontrado.');
+
+    // Pendiente = el coordinador aún no ha aprobado/rechazado.
+    // Buscamos cualquier notificación pendiente con este instructorId en su action_data.
+    let solicitud_pendiente = false;
+    try {
+      const coordinadores = await this.usersRepository.find({ where: { rol: UserRole.COORDINADOR } });
+      for (const coord of coordinadores) {
+        const notifs = await this.notificationsService.findAllForUser(coord.id);
+        const tiene = notifs.some(n => {
+          if (n.action_type !== 'approve_ficha_request') return false;
+          try {
+            const d = JSON.parse(n.action_data || '{}');
+            return d.instructorId === instructorId;
+          } catch { return false; }
+        });
+        if (tiene) { solicitud_pendiente = true; break; }
+      }
+    } catch (err) {
+      console.error('[FichasService.getPermisoCrearFicha] No se pudo evaluar pendiente:', err?.message);
+    }
+
+    return {
+      puede_crear: !!me.puede_crear_ficha,
+      solicitud_pendiente,
+    };
+  }
+
   // ── Solicitar permiso para crear una ficha (instructor → coordinadores) ───
   async solicitarCrearFicha(instructorId: number): Promise<void> {
     if (!instructorId) throw new BadRequestException('ID de instructor inválido. Asegúrate de estar autenticado.');
@@ -570,6 +871,28 @@ export class FichasService {
     if (!instructorId) throw new BadRequestException('ID de instructor inválido en la solicitud.');
     const instructor = await this.usersRepository.findOne({ where: { id: instructorId } });
     if (!instructor) throw new NotFoundException('Instructor no encontrado.');
+
+    // ── PRIMERO: eliminar TODAS las notificaciones de solicitud pendientes ──
+    // Sin esto, los botones "Aprobar"/"Rechazar" siguen apareciendo después
+    // de procesar la acción y el coordinador puede aprobar varias veces.
+    // Hay una notif por cada coordinador del sistema; las limpiamos todas
+    // porque la solicitud ya quedó resuelta para todo el mundo.
+    try {
+      await this.notificationsService.deleteByActionPayloadMatch(
+        'approve_ficha_request',
+        'instructorId',
+        instructorId,
+      );
+    } catch (err) {
+      console.error('[FichasService.notificarRespuestaFicha] No se pudieron limpiar las notificaciones de solicitud:', err?.message);
+    }
+
+    // ── Si fue aprobada, conceder el permiso temporal de crear UNA ficha ─
+    // El flag se consumirá automáticamente cuando el instructor cree la ficha.
+    if (aprobada) {
+      instructor.puede_crear_ficha = true;
+      await this.usersRepository.save(instructor);
+    }
 
     // In-app al instructor
     await this.notificationsService.create({

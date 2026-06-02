@@ -24,6 +24,16 @@ export interface User {
   telefono?: string;
   bio?: string;
   banner_url?: string;
+  documento?: string;
+  /** false → usuario de Google/GitHub que aún no ha creado su contraseña propia */
+  password_set?: boolean;
+  fichaId?: number | null;
+  // ── Vinculación de aprendices auto-registrados a una ficha ──────────
+  ficha_solicitada_id?: number | null;
+  jornada_solicitada?: 'mañana' | 'tarde' | 'noche' | null;
+  vinculacion_estado?: 'none' | 'pendiente' | 'aprobado' | 'rechazado';
+  vinculacion_solicitada_en?: string | null;
+  vinculacion_motivo_rechazo?: string | null;
 }
 
 export type UserRole = 'coordinador' | 'instructor' | 'aprendiz';

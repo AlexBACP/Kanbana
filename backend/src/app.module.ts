@@ -14,6 +14,9 @@ import { DashboardModule }  from './dashboard/dashboard.module';
 import { PermisosModule }   from './permisos/permisos.module';
 import { ChatModule }       from './chat/chat.module';
 import { RecursosModule }   from './recursos/recursos.module';
+import { GithubModule }     from './github/github.module';
+import { SearchModule }     from './search/search.module';
+import { IntegrationsModule } from './integrations/integrations.module';
 // ── EmailModule: global (@Global), incluye ScheduleModule y cron jobs ────
 import { EmailModule }      from './email/email.module';
 
@@ -44,6 +47,9 @@ import { EmailModule }      from './email/email.module';
     PermisosModule,
     ChatModule,
     RecursosModule,
+    GithubModule,
+    SearchModule,
+    IntegrationsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

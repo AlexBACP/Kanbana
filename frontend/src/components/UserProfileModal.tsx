@@ -21,6 +21,7 @@ import {
   GraduationCap, FolderKanban, Ticket, Users,
   CheckCircle2, Clock, AlertCircle, Hash,
   Key, Eye, EyeOff, Loader2, Lock, Camera,
+  Crown, TrendingUp, Activity,
 } from 'lucide-react';
 import { userService } from '../services/user.service';
 import { AvatarUploader } from './AvatarUploader';
@@ -38,8 +39,8 @@ const ROL_LABEL: Record<string, string> = {
   aprendiz: 'Aprendiz',
 };
 const ROL_COLOR: Record<string, string> = {
-  coordinador: 'bg-violet-500/10 text-violet-400 border-violet-500/20',
-  instructor:  'bg-blue-500/10 text-blue-400 border-blue-500/20',
+  coordinador: 'bg-blue-500/10 text-blue-400 border-blue-500/20',
+  instructor:  'bg-cyan-500/10 text-cyan-400 border-cyan-500/20',
   lider_tecnico: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
   aprendiz:    'bg-amber-500/10 text-amber-400 border-amber-500/20',
 };
@@ -50,13 +51,24 @@ const STATUS_DOT: Record<string, string> = {
   done:        'bg-emerald-500',
 };
 
-// Portadas por defecto según rol (gradientes únicos por rol)
+// Portadas por defecto según rol — paleta neutral, profesional, visible y sin connotaciones de género
 const ROL_DEFAULT_BANNER: Record<string, string> = {
-  coordinador:  'linear-gradient(135deg, #4c1d95 0%, #7c3aed 40%, #2e1065 100%)',
-  instructor:   'linear-gradient(135deg, #1e3a5f 0%, #2563eb 40%, #0f172a 100%)',
-  lider_tecnico:'linear-gradient(135deg, #064e3b 0%, #059669 40%, #022c22 100%)',
-  aprendiz:     'linear-gradient(135deg, #78350f 0%, #d97706 40%, #451a03 100%)',
+  coordinador:  'linear-gradient(135deg, #0f2744 0%, #1a4f96 40%, #0a1e36 100%)',  // azul acero
+  instructor:   'linear-gradient(135deg, #083a38 0%, #0e7a70 40%, #052828 100%)',  // cian profundo (matches instructor badge)
+  lider_tecnico:'linear-gradient(135deg, #0a2e18 0%, #16653a 40%, #061a0e 100%)',  // verde pizarra
+  aprendiz:     'linear-gradient(135deg, #382a07 0%, #8a6517 40%, #1c1408 100%)',  // ámbar slate
 };
+
+// ── Formateador de hora en formato 12h con am/pm ──────────────────────────────
+const fmt12h = (iso: string | null | undefined): string => {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  const date = d.toLocaleDateString('es-CO', { day: 'numeric', month: 'short', year: 'numeric' });
+  const time = d.toLocaleTimeString('es-CO', { hour: 'numeric', minute: '2-digit', hour12: true }).toLowerCase();
+  return `${date} · ${time}`;
+};
+const fmtDate = (iso: string | null | undefined): string =>
+  iso ? new Date(iso).toLocaleDateString('es-CO', { day: 'numeric', month: 'short', year: 'numeric' }) : '—';
 
 // ── Sección de cambio de contraseña ──────────────────────────────────────────
 const PasswordSection = ({ targetId, canAdmin }: { targetId: number; canAdmin: boolean }) => {
@@ -154,8 +166,17 @@ const PasswordSection = ({ targetId, canAdmin }: { targetId: number; canAdmin: b
               )}
               <button
                 onClick={() => {
-                  if (pwd.length < 6) { setMsg({ type: 'err', text: 'Mínimo 6 caracteres' }); return; }
-                  if (pwd !== confirm) { setMsg({ type: 'err', text: 'Las contraseñas no coinciden' }); return; }
+                  // Política de contraseña — mismas reglas que el backend
+                  if (pwd.length < 7)     { setMsg({ type: 'err', text: 'Mínimo 7 caracteres' }); return; }
+                  if (!/[A-Z]/.test(pwd)) { setMsg({ type: 'err', text: 'Incluye al menos una letra mayúscula' }); return; }
+                  if (!/[0-9]/.test(pwd)) { setMsg({ type: 'err', text: 'Incluye al menos un número' }); return; }
+                  if (pwd !== confirm)    { setMsg({ type: 'err', text: 'Las contraseñas no coinciden' }); return; }
+                  // Solo cuando es self-change podemos comparar con la actual aquí.
+                  // (En admin-change no tenemos la actual; el backend valida igual con bcrypt.)
+                  if (isOwnProfile && actual && pwd === actual) {
+                    setMsg({ type: 'err', text: 'La nueva contraseña es igual a la actual. Elige una diferente.' });
+                    return;
+                  }
                   mutation.mutate();
                 }}
                 disabled={mutation.isPending}
@@ -177,7 +198,8 @@ export const UserProfileModal = ({ userId, onClose }: UserProfileModalProps) => 
   const { user: me, updateUser } = useAuthStore();
   const queryClient = useQueryClient();
   const bannerInputRef = useRef<HTMLInputElement>(null);
-  const [bannerLoading, setBannerLoading] = useState(false);
+  const [bannerLoading,  setBannerLoading]  = useState(false);
+  const [bannerDeleting, setBannerDeleting] = useState(false);
 
   const { data: profile, isLoading } = useQuery({
     queryKey: ['user-profile', userId],
@@ -211,6 +233,18 @@ export const UserProfileModal = ({ userId, onClose }: UserProfileModalProps) => 
     } finally {
       setBannerLoading(false);
       if (bannerInputRef.current) bannerInputRef.current.value = '';
+    }
+  };
+
+  const handleDeleteBanner = async () => {
+    if (!profile || bannerDeleting) return;
+    setBannerDeleting(true);
+    try {
+      await userService.update(profile.id, { banner_url: null as unknown as undefined });
+      if (isOwnProfile) updateUser({ banner_url: undefined });
+      await queryClient.invalidateQueries({ queryKey: ['user-profile', userId] });
+    } finally {
+      setBannerDeleting(false);
     }
   };
 
@@ -252,20 +286,38 @@ export const UserProfileModal = ({ userId, onClose }: UserProfileModalProps) => 
             {/* ── Banner + Avatar superpuesto ──────────────────────── */}
             <div className="shrink-0">
               {/* Banner */}
-              <div className="relative h-36 w-full group" style={bannerStyle}>
+              <div className="relative h-36 w-full group" style={bannerStyle} data-testid="profile-banner">
                 <div className="absolute inset-0 bg-black/25" />
+
                 {isOwnProfile && (
                   <>
-                    <button
-                      onClick={() => bannerInputRef.current?.click()}
-                      disabled={bannerLoading}
-                      className="absolute inset-0 flex items-center justify-center gap-2 bg-black/0 group-hover:bg-black/40 transition-all opacity-0 group-hover:opacity-100 text-white text-xs font-bold"
-                    >
-                      {bannerLoading
-                        ? <Loader2 size={18} className="animate-spin" />
-                        : <><Camera size={16} /> Cambiar portada</>
-                      }
-                    </button>
+                    {/* Overlay hover con acciones */}
+                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/45 transition-all opacity-0 group-hover:opacity-100 flex items-center justify-center gap-2">
+                      {(bannerLoading || bannerDeleting) ? (
+                        <Loader2 size={20} className="text-white animate-spin" />
+                      ) : (
+                        <>
+                          {/* Cambiar portada */}
+                          <button
+                            onClick={() => bannerInputRef.current?.click()}
+                            className="flex items-center gap-1.5 px-3 py-1.5 bg-black/50 hover:bg-black/70 text-white text-[11px] font-black rounded-lg border border-white/20 backdrop-blur-sm transition-all"
+                          >
+                            <Camera size={13} /> Cambiar
+                          </button>
+
+                          {/* Eliminar portada — solo si hay foto subida */}
+                          {bannerSrc && (
+                            <button
+                              onClick={handleDeleteBanner}
+                              className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-600/70 hover:bg-rose-600/90 text-white text-[11px] font-black rounded-lg border border-rose-400/30 backdrop-blur-sm transition-all"
+                            >
+                              <X size={13} /> Eliminar portada
+                            </button>
+                          )}
+                        </>
+                      )}
+                    </div>
+
                     <input
                       ref={bannerInputRef}
                       type="file"
@@ -289,6 +341,9 @@ export const UserProfileModal = ({ userId, onClose }: UserProfileModalProps) => 
                       editable={isOwnProfile}
                       onSuccess={(avatar_url) => {
                         if (isOwnProfile) updateUser({ avatar_url });
+                        queryClient.invalidateQueries({ queryKey: ['user-profile', userId] });
+                      }}
+                      onDelete={() => {
                         queryClient.invalidateQueries({ queryKey: ['user-profile', userId] });
                       }}
                     />
@@ -328,7 +383,7 @@ export const UserProfileModal = ({ userId, onClose }: UserProfileModalProps) => 
                   {[
                     { icon: Mail,     label: 'Correo',          value: profile.correo },
                     { icon: Phone,    label: 'Teléfono',        value: profile.telefono || '—' },
-                    { icon: Calendar, label: 'Miembro desde',   value: profile.creado_en ? new Date(profile.creado_en).toLocaleDateString('es-CO') : '—' },
+                    { icon: Calendar, label: 'Miembro desde',   value: fmt12h(profile.creado_en) },
                   ].map(({ icon: Icon, label, value }) => (
                     <div key={label} className="flex items-center gap-3">
                       <Icon size={13} className="text-zinc-500 shrink-0" />
@@ -349,53 +404,232 @@ export const UserProfileModal = ({ userId, onClose }: UserProfileModalProps) => 
                   )}
                 </div>
 
-                {/* ── Stats rápidos ─────────────────────────────────── */}
-                {profile.stats && (
-                  <div className="grid grid-cols-2 gap-2">
-                    {profile.rol === 'coordinador' && [
-                      { label: 'Usuarios',  value: profile.stats.totalUsers    ?? 0, icon: '👥' },
-                      { label: 'Proyectos', value: profile.stats.totalProyectos ?? 0, icon: '📁' },
-                      { label: 'Fichas',    value: profile.stats.totalFichas    ?? 0, icon: '📋' },
-                    ].map(s => (
-                      <div key={s.label} className="bg-zinc-800/40 rounded-xl border border-zinc-700/50 p-3 text-center">
-                        <p className="text-base mb-0.5">{s.icon}</p>
-                        <p className="text-lg font-black text-zinc-100">{s.value}</p>
-                        <p className="text-[9px] text-zinc-500 uppercase tracking-wider">{s.label}</p>
+                {/* ── Panel inteligente por rol ──────────────────────── */}
+
+                {/* ─ COORDINADOR ──────────────────────────────────── */}
+                {profile.rol === 'coordinador' && profile.stats && (
+                  <>
+                    <div className="grid grid-cols-3 gap-2">
+                      {[
+                        { label: 'Usuarios',  value: profile.stats.totalUsers    ?? 0, Icon: Users,       color: 'text-sky-400',    bg: 'bg-sky-500/10',    border: 'border-sky-500/20' },
+                        { label: 'Proyectos', value: profile.stats.totalProyectos ?? 0, Icon: FolderKanban,color: 'text-blue-400', bg: 'bg-blue-500/10', border: 'border-blue-500/20' },
+                        { label: 'Fichas',    value: profile.stats.totalFichas    ?? 0, Icon: GraduationCap,color:'text-teal-400',   bg: 'bg-teal-500/10',   border: 'border-teal-500/20' },
+                      ].map(({ label, value, Icon, color, bg, border }) => (
+                        <div key={label} className={`rounded-xl border p-3 text-center ${bg} ${border}`}>
+                          <Icon size={14} className={`mx-auto mb-1 ${color}`} />
+                          <p className={`text-xl font-black ${color}`}>{value}</p>
+                          <p className="text-[9px] text-zinc-500 uppercase tracking-wider mt-0.5">{label}</p>
+                        </div>
+                      ))}
+                    </div>
+                    {/* Indicador de salud del sistema */}
+                    <div className="bg-zinc-800/40 rounded-xl border border-zinc-700/50 p-3">
+                      <p className="text-[10px] font-black text-zinc-500 uppercase tracking-widest flex items-center gap-1.5 mb-2.5">
+                        <Activity size={11} /> Salud del sistema
+                      </p>
+                      {(() => {
+                        const total = profile.stats.totalUsers ?? 0;
+                        const fichas = profile.stats.totalFichas ?? 0;
+                        const proyectos = profile.stats.totalProyectos ?? 0;
+                        const ratio = fichas > 0 ? Math.round((proyectos / fichas) * 10) / 10 : 0;
+                        return (
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between text-[10px]">
+                              <span className="text-zinc-400">Promedio proyectos/ficha</span>
+                              <span className={`font-black ${ratio >= 1 ? 'text-emerald-400' : 'text-amber-400'}`}>{ratio}</span>
+                            </div>
+                            <div className="flex items-center justify-between text-[10px]">
+                              <span className="text-zinc-400">Total de usuarios registrados</span>
+                              <span className="font-black text-sky-400">{total}</span>
+                            </div>
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  </>
+                )}
+
+                {/* ─ INSTRUCTOR ───────────────────────────────────── */}
+                {profile.rol === 'instructor' && profile.stats && (
+                  <>
+                    <div className="grid grid-cols-3 gap-2">
+                      {[
+                        { label: 'Fichas',    value: profile.stats.fichas_count     ?? 0, color: 'text-teal-400',    bg: 'bg-teal-500/10',    border: 'border-teal-500/20' },
+                        { label: 'Proyectos', value: profile.stats.proyectos_count  ?? 0, color: 'text-sky-400',     bg: 'bg-sky-500/10',     border: 'border-sky-500/20' },
+                        { label: 'Activos',   value: profile.stats.proyectos_activos ?? 0, color: 'text-emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/20' },
+                      ].map(({ label, value, color, bg, border }) => (
+                        <div key={label} className={`rounded-xl border p-3 text-center ${bg} ${border}`}>
+                          <p className={`text-xl font-black ${color}`}>{value}</p>
+                          <p className="text-[9px] text-zinc-500 uppercase tracking-wider mt-0.5">{label}</p>
+                        </div>
+                      ))}
+                    </div>
+                    {/* Estado de proyectos en barra */}
+                    {(profile.proyectos?.length ?? 0) > 0 && (
+                      <div className="bg-zinc-800/40 rounded-xl border border-zinc-700/50 p-3">
+                        <p className="text-[10px] font-black text-zinc-500 uppercase tracking-widest flex items-center gap-1.5 mb-2.5">
+                          <TrendingUp size={11} /> Estado de proyectos
+                        </p>
+                        {['activo', 'pausado', 'finalizado'].map(estado => {
+                          const count = profile.proyectos.filter((p: any) => p.estado === estado).length;
+                          if (!count) return null;
+                          const pct = Math.round((count / profile.proyectos.length) * 100);
+                          const col = estado === 'activo' ? 'bg-emerald-500' : estado === 'pausado' ? 'bg-amber-500' : 'bg-slate-500';
+                          const txt = estado === 'activo' ? 'text-emerald-400' : estado === 'pausado' ? 'text-amber-400' : 'text-slate-400';
+                          return (
+                            <div key={estado} className="flex items-center gap-2 mb-1.5 last:mb-0">
+                              <span className={`text-[10px] w-16 capitalize font-bold ${txt}`}>{estado}</span>
+                              <div className="flex-1 h-1.5 rounded-full bg-zinc-700 overflow-hidden">
+                                <div className={`h-full rounded-full ${col}`} style={{ width: `${pct}%` }} />
+                              </div>
+                              <span className="text-[10px] font-black text-zinc-400 w-4 text-right">{count}</span>
+                            </div>
+                          );
+                        })}
                       </div>
-                    ))}
-                    {profile.rol === 'instructor' && [
-                      { label: 'Fichas',    value: profile.stats.fichas_count     ?? 0 },
-                      { label: 'Proyectos', value: profile.stats.proyectos_count  ?? 0 },
-                      { label: 'Activos',   value: profile.stats.proyectos_activos ?? 0 },
-                    ].map(s => (
-                      <div key={s.label} className="bg-zinc-800/40 rounded-xl border border-zinc-700/50 p-3 text-center">
-                        <p className="text-lg font-black text-zinc-100">{s.value}</p>
-                        <p className="text-[9px] text-zinc-500 uppercase tracking-wider">{s.label}</p>
+                    )}
+                  </>
+                )}
+
+                {/* ─ LÍDER TÉCNICO ────────────────────────────────── */}
+                {(profile.rol === 'aprendiz' && profile.es_lider_tecnico) && profile.stats && (
+                  <>
+                    <div className="grid grid-cols-2 gap-2">
+                      {[
+                        { label: 'Proyectos',   value: profile.stats.proyectos_count    ?? 0, Icon: FolderKanban, color: 'text-sky-400',     bg: 'bg-sky-500/10',     border: 'border-sky-500/20' },
+                        { label: 'Equipo',      value: profile.stats.equipo_count        ?? 0, Icon: Users,        color: 'text-cyan-400',  bg: 'bg-cyan-500/10',  border: 'border-cyan-500/20' },
+                        { label: 'Asignadas',   value: profile.stats.tickets_asignados   ?? 0, Icon: Ticket,       color: 'text-amber-400',   bg: 'bg-amber-500/10',   border: 'border-amber-500/20' },
+                        { label: 'Completadas', value: profile.stats.tickets_completados ?? 0, Icon: CheckCircle2, color: 'text-emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/20' },
+                      ].map(({ label, value, Icon, color, bg, border }) => (
+                        <div key={label} className={`rounded-xl border p-3 flex items-center gap-2.5 ${bg} ${border}`}>
+                          <Icon size={14} className={`${color} shrink-0`} />
+                          <div>
+                            <p className={`text-base font-black leading-tight ${color}`}>{value}</p>
+                            <p className="text-[9px] text-zinc-500 uppercase tracking-wider">{label}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    {/* Barra de tasa de completado */}
+                    {(profile.stats.tickets_asignados ?? 0) > 0 && (
+                      <div className="bg-zinc-800/40 rounded-xl border border-zinc-700/50 p-3">
+                        <div className="flex items-center justify-between mb-1.5">
+                          <p className="text-[10px] font-black text-zinc-500 uppercase tracking-widest flex items-center gap-1.5">
+                            <TrendingUp size={11} /> Tasa de completado
+                          </p>
+                          {(() => {
+                            const pct = Math.round(((profile.stats.tickets_completados ?? 0) / (profile.stats.tickets_asignados ?? 1)) * 100);
+                            return <span className={`text-sm font-black ${pct >= 75 ? 'text-emerald-400' : pct >= 40 ? 'text-sky-400' : 'text-amber-400'}`}>{pct}%</span>;
+                          })()}
+                        </div>
+                        {(() => {
+                          const pct = Math.round(((profile.stats.tickets_completados ?? 0) / (profile.stats.tickets_asignados ?? 1)) * 100);
+                          return (
+                            <>
+                              <div className="h-2 bg-zinc-700 rounded-full overflow-hidden">
+                                <div className={`h-full rounded-full transition-all ${pct >= 75 ? 'bg-gradient-to-r from-emerald-600 to-emerald-400' : pct >= 40 ? 'bg-gradient-to-r from-sky-600 to-sky-400' : 'bg-gradient-to-r from-amber-600 to-amber-400'}`}
+                                  style={{ width: `${pct}%` }} />
+                              </div>
+                              <div className="flex justify-between text-[10px] text-zinc-600 mt-1">
+                                <span>{profile.stats.tickets_completados ?? 0} completadas</span>
+                                <span>{profile.stats.tickets_asignados ?? 0} totales</span>
+                              </div>
+                            </>
+                          );
+                        })()}
                       </div>
-                    ))}
-                    {(profile.rol === 'aprendiz' && profile.es_lider_tecnico) && [
-                      { label: 'Proyectos',    value: profile.stats.proyectos_count   ?? 0 },
-                      { label: 'Equipo',       value: profile.stats.equipo_count       ?? 0 },
-                      { label: 'Tareas',       value: profile.stats.tickets_asignados  ?? 0 },
-                      { label: 'Completados',  value: profile.stats.tickets_completados ?? 0 },
-                    ].map(s => (
-                      <div key={s.label} className="bg-zinc-800/40 rounded-xl border border-zinc-700/50 p-3 text-center">
-                        <p className="text-lg font-black text-zinc-100">{s.value}</p>
-                        <p className="text-[9px] text-zinc-500 uppercase tracking-wider">{s.label}</p>
-                      </div>
-                    ))}
-                    {profile.rol === 'aprendiz' && [
-                      { label: 'Tareas',      value: profile.stats.tickets_total       ?? 0 },
-                      { label: 'Completados', value: profile.stats.tickets_completados  ?? 0 },
-                      { label: 'En progreso', value: profile.stats.tickets_en_progreso  ?? 0 },
-                      { label: 'Progreso',    value: `${profile.stats.progreso ?? 0}%` },
-                    ].map(s => (
-                      <div key={s.label} className="bg-zinc-800/40 rounded-xl border border-zinc-700/50 p-3 text-center">
-                        <p className="text-lg font-black text-zinc-100">{s.value}</p>
-                        <p className="text-[9px] text-zinc-500 uppercase tracking-wider">{s.label}</p>
-                      </div>
-                    ))}
-                  </div>
+                    )}
+                    {/* Alerta de tareas en revisión */}
+                    {(() => {
+                      const pending = (profile.tickets ?? []).filter((t: any) => t.estado === 'testing').length;
+                      return pending > 0 ? (
+                        <div className="flex items-center gap-3 p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl">
+                          <Crown size={14} className="text-amber-400 shrink-0" />
+                          <div>
+                            <p className="text-xs font-black text-amber-400">{pending} tarea{pending > 1 ? 's' : ''} en revisión</p>
+                            <p className="text-[10px] text-zinc-500">Esperando tu aprobación como líder</p>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-3 p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl">
+                          <CheckCircle2 size={14} className="text-emerald-400 shrink-0" />
+                          <p className="text-xs font-black text-emerald-400">Sin tareas pendientes de revisión</p>
+                        </div>
+                      );
+                    })()}
+                  </>
+                )}
+
+                {/* ─ APRENDIZ ─────────────────────────────────────── */}
+                {(profile.rol === 'aprendiz' && !profile.es_lider_tecnico) && profile.stats && (
+                  <>
+                    {/* Barra de progreso con color dinámico */}
+                    <div className="bg-zinc-800/40 rounded-xl border border-zinc-700/50 p-3">
+                      {(() => {
+                        const pct = profile.stats.progreso ?? 0;
+                        const colorBar = pct >= 80 ? 'bg-gradient-to-r from-emerald-600 to-emerald-400'
+                          : pct >= 50 ? 'bg-gradient-to-r from-sky-600 to-sky-400'
+                          : 'bg-gradient-to-r from-amber-600 to-amber-400';
+                        const colorTxt = pct >= 80 ? 'text-emerald-400' : pct >= 50 ? 'text-sky-400' : 'text-amber-400';
+                        const label = pct >= 80 ? '¡Excelente ritmo!' : pct >= 50 ? 'Buen avance' : 'Necesita impulso';
+                        return (
+                          <>
+                            <div className="flex items-center justify-between mb-1.5">
+                              <p className="text-[10px] font-black text-zinc-500 uppercase tracking-widest flex items-center gap-1.5">
+                                <Activity size={11} /> Progreso general
+                              </p>
+                              <div className="flex items-center gap-1.5">
+                                <span className={`text-[10px] font-bold ${colorTxt}`}>{label}</span>
+                                <span className={`text-sm font-black ${colorTxt}`}>{pct}%</span>
+                              </div>
+                            </div>
+                            <div className="h-2.5 bg-zinc-700 rounded-full overflow-hidden">
+                              <div className={`h-full rounded-full transition-all ${colorBar}`} style={{ width: `${pct}%` }} />
+                            </div>
+                            {/* Mini breakdown */}
+                            <div className="grid grid-cols-3 gap-1 mt-2.5">
+                              {(() => {
+                                const total = profile.stats.tickets_total ?? 0;
+                                const done  = profile.stats.tickets_completados ?? 0;
+                                const prog  = profile.stats.tickets_en_progreso ?? 0;
+                                const pend  = Math.max(0, total - done - prog);
+                                return [
+                                  { label: 'Pendientes',  value: pend, color: 'text-zinc-400' },
+                                  { label: 'En progreso', value: prog, color: 'text-sky-400'  },
+                                  { label: 'Completadas', value: done, color: 'text-emerald-400' },
+                                ].map(s => (
+                                  <div key={s.label} className="text-center">
+                                    <p className={`text-sm font-black ${s.color}`}>{s.value}</p>
+                                    <p className="text-[9px] text-zinc-600">{s.label}</p>
+                                  </div>
+                                ));
+                              })()}
+                            </div>
+                          </>
+                        );
+                      })()}
+                    </div>
+                    {/* Alerta de tareas críticas */}
+                    {(() => {
+                      const critical = (profile.tickets ?? []).filter((t: any) =>
+                        (t.prioridad === 'critica' || t.prioridad === 'alta') && t.estado !== 'done'
+                      ).length;
+                      return critical > 0 ? (
+                        <div className="flex items-center gap-3 p-3 bg-rose-500/10 border border-rose-500/20 rounded-xl">
+                          <AlertCircle size={14} className="text-rose-400 shrink-0" />
+                          <div>
+                            <p className="text-xs font-black text-rose-400">{critical} tarea{critical > 1 ? 's' : ''} de alta prioridad pendiente{critical > 1 ? 's' : ''}</p>
+                            <p className="text-[10px] text-zinc-500">Requieren atención pronto</p>
+                          </div>
+                        </div>
+                      ) : (profile.stats.tickets_total ?? 0) > 0 ? (
+                        <div className="flex items-center gap-3 p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl">
+                          <CheckCircle2 size={14} className="text-emerald-400 shrink-0" />
+                          <p className="text-xs font-black text-emerald-400">Sin tareas urgentes pendientes ✓</p>
+                        </div>
+                      ) : null;
+                    })()}
+                  </>
                 )}
 
                 {/* ── Fichas (instructor) ───────────────────────────── */}
@@ -465,36 +699,27 @@ export const UserProfileModal = ({ userId, onClose }: UserProfileModalProps) => 
 
                 {/* ── Tickets recientes ─────────────────────────────── */}
                 {profile.tickets?.length > 0 && (
-                  <div className="bg-zinc-800/40 rounded-2xl border border-zinc-700/50 p-4 space-y-3">
-                    <h4 className="text-[10px] font-black text-zinc-500 uppercase tracking-widest flex items-center gap-2">
-                      <Ticket size={12} /> Tareas ({profile.tickets.length})
+                  <div className="bg-zinc-800/40 rounded-2xl border border-zinc-700/50 p-4 space-y-2">
+                    <h4 className="text-[10px] font-black text-zinc-500 uppercase tracking-widest flex items-center gap-2 mb-3">
+                      <Ticket size={12} /> Tareas recientes ({profile.tickets.length})
                     </h4>
-                    {/* Progress bar para aprendiz */}
-                    {profile.rol === 'aprendiz' && profile.stats?.progreso !== undefined && (
-                      <div>
-                        <div className="flex justify-between text-[10px] text-zinc-500 mb-1">
-                          <span>Progreso general</span>
-                          <span className="text-primary-400 font-black">{profile.stats.progreso}%</span>
+                    {profile.tickets.slice(0, 8).map((t: any) => {
+                      const priorityColor = t.prioridad === 'critica' ? 'text-rose-400' : t.prioridad === 'alta' ? 'text-amber-400' : 'text-zinc-500';
+                      return (
+                        <div key={t.id}
+                          className="flex items-center gap-3 p-2.5 bg-zinc-900/60 rounded-xl border border-zinc-700/40"
+                        >
+                          <div className={`w-2 h-2 rounded-full shrink-0 ${STATUS_DOT[t.estado] || 'bg-slate-500'}`} />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-bold text-zinc-200 truncate">{t.titulo}</p>
+                            <p className="text-[10px] capitalize">
+                              <span className={`font-bold ${priorityColor}`}>{t.prioridad}</span>
+                              <span className="text-zinc-600"> · {t.estado?.replace('_', ' ')}</span>
+                            </p>
+                          </div>
                         </div>
-                        <div className="h-1.5 bg-zinc-800 rounded-full overflow-hidden">
-                          <div
-                            className="h-full bg-gradient-to-r from-primary-600 to-primary-400 rounded-full"
-                            style={{ width: `${profile.stats.progreso}%` }}
-                          />
-                        </div>
-                      </div>
-                    )}
-                    {profile.tickets.slice(0, 8).map((t: any) => (
-                      <a key={t.id} href={`/tickets/${t.id}`}
-                        className="flex items-center gap-3 p-2.5 bg-zinc-900/60 rounded-xl border border-zinc-700/40 hover:border-primary-500/30 transition-all group"
-                      >
-                        <div className={`w-2 h-2 rounded-full shrink-0 ${STATUS_DOT[t.estado] || 'bg-slate-500'}`} />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-xs font-bold text-zinc-200 truncate group-hover:text-primary-400 transition-colors">{t.titulo}</p>
-                          <p className="text-[10px] text-zinc-500 capitalize">{t.prioridad} · {t.estado?.replace('_', ' ')}</p>
-                        </div>
-                      </a>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
 

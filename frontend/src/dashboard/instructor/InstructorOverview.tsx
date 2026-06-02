@@ -1,4 +1,5 @@
 import { useMemo, useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '../../store/auth.store';
 import { projectService } from '../../services/project.service';
@@ -7,7 +8,7 @@ import { ticketService } from '../../services/ticket.service';
 import {
   FolderKanban, GraduationCap, Clock, CheckCircle2, ArrowRight,
   Calendar as CalendarIcon, Lightbulb, Layers, AlertTriangle, BarChart3,
-  PackageCheck, MessageSquareWarning, Loader2,
+  PackageCheck, MessageSquareWarning, Loader2, ExternalLink,
 } from 'lucide-react';
 
 // ── Sugerencias específicas para instructor ──────────────────────────────────
@@ -24,7 +25,7 @@ const SUGGESTIONS = [
 const STAT_CONFIG = [
   { key: 'activos',     label: 'Proyectos activos',  icon: FolderKanban,  color: 'text-emerald-400', bg: 'bg-emerald-500/10' },
   { key: 'en_progreso', label: 'Tareas en progreso', icon: Layers,        color: 'text-blue-400',    bg: 'bg-blue-500/10'    },
-  { key: 'completadas', label: 'Completadas',         icon: CheckCircle2,  color: 'text-violet-400',  bg: 'bg-violet-500/10'  },
+  { key: 'completadas', label: 'Completadas',         icon: CheckCircle2,  color: 'text-cyan-400',  bg: 'bg-cyan-500/10'  },
   { key: 'bloqueadas',  label: 'Bloqueadas',          icon: AlertTriangle, color: 'text-rose-400',    bg: 'bg-rose-500/10'    },
 ] as const;
 
@@ -34,6 +35,18 @@ interface Props {
 
 export const InstructorOverview = ({ onNavigate }: Props) => {
   const { user } = useAuthStore();
+  const navigate = useNavigate();
+
+  // Acceso directo al tablero del proyecto/módulo pendiente de revisión
+  const irAlModulo = (sprint: any) => {
+    const proyId = sprint.proyecto?.id ?? sprint.proyecto_id;
+    if (!proyId) return;
+    if (sprint.trimestre_id) {
+      navigate(`/projects/${proyId}/trimestre/${sprint.trimestre_id}/kanban`);
+    } else {
+      navigate(`/projects/${proyId}/kanban`);
+    }
+  };
 
   const formattedDate = useMemo(() => {
     return new Intl.DateTimeFormat('es-ES', {
@@ -45,11 +58,11 @@ export const InstructorOverview = ({ onNavigate }: Props) => {
 
   // Reloj en tiempo real
   const [time, setTime] = useState(() =>
-    new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+    new Date().toLocaleTimeString('es-CO', { hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: true }).toLowerCase()
   );
   useEffect(() => {
     const id = setInterval(() => {
-      setTime(new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+      setTime(new Date().toLocaleTimeString('es-CO', { hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: true }).toLowerCase());
     }, 1000);
     return () => clearInterval(id);
   }, []);
@@ -131,7 +144,7 @@ export const InstructorOverview = ({ onNavigate }: Props) => {
     <div className="space-y-6">
 
       {/* ── Banner ─────────────────────────────────────────────────────────── */}
-      <div className="relative overflow-hidden m-6 rounded-md p-8 text-white shadow-lg bg-gradient-to-br from-violet-700 via-purple-800 to-purple-950">
+      <div className="relative overflow-hidden m-6 rounded-md p-8 text-white shadow-lg" style={{ background: 'linear-gradient(135deg, #0f2b28 0%, #176d5f 50%, #081916 100%)' }}>
         {/* SVG decorativo: líneas onduladas académicas */}
         <div className="absolute top-0 right-0 w-2/5 h-full opacity-15 pointer-events-none">
           <svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
@@ -173,7 +186,7 @@ export const InstructorOverview = ({ onNavigate }: Props) => {
             <h1 className="text-3xl font-bold tracking-tight">
               Hola, {user?.nombre?.split(' ')[0]} {user?.nombre?.split(' ')[1] || ''}
             </h1>
-            <p className="text-violet-200 font-medium text-sm">
+            <p className="text-teal-200 font-medium text-sm">
               {misFichas.length > 0
                 ? `Supervisando ${misFichas.length} ficha${misFichas.length !== 1 ? 's' : ''} · ${activos} proyecto${activos !== 1 ? 's' : ''} activo${activos !== 1 ? 's' : ''}`
                 : 'Estado de tus fichas y proyectos formativos'}
@@ -192,10 +205,18 @@ export const InstructorOverview = ({ onNavigate }: Props) => {
               <span className="text-xs font-semibold uppercase tracking-wider opacity-80">Completadas</span>
             </div>
             {!isLoading && en_progreso > 0 && (
-              <div className="flex items-center gap-1.5 bg-violet-500/20 border border-violet-400/30 rounded-md px-3 py-1.5">
-                <Layers size={11} className="text-violet-300" />
-                <span className="text-xs font-bold text-violet-200">
+              <div className="flex items-center gap-1.5 bg-teal-500/20 border border-teal-400/30 rounded-md px-3 py-1.5">
+                <Layers size={11} className="text-teal-300" />
+                <span className="text-xs font-bold text-teal-200">
                   {en_progreso} en progreso
+                </span>
+              </div>
+            )}
+            {!isLoading && (pendingReview as any[]).length > 0 && (
+              <div className="flex items-center gap-1.5 bg-amber-500/20 border border-amber-400/30 rounded-md px-3 py-1.5">
+                <PackageCheck size={11} className="text-amber-300" />
+                <span className="text-xs font-bold text-amber-200">
+                  {(pendingReview as any[]).length} por revisar
                 </span>
               </div>
             )}
@@ -225,19 +246,19 @@ export const InstructorOverview = ({ onNavigate }: Props) => {
         <div className="mx-6 bg-zinc-900 border border-zinc-800 rounded-md p-5">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
-              <BarChart3 size={14} className="text-violet-400" />
+              <BarChart3 size={14} className="text-blue-400" />
               <span className="text-sm font-bold text-zinc-200">Progreso general de tareas</span>
             </div>
-            <span className="text-sm font-black text-violet-400">{avancePct}%</span>
+            <span className="text-sm font-black text-blue-400">{avancePct}%</span>
           </div>
           <div className="h-2 bg-zinc-800 rounded-full overflow-hidden">
             <div
-              className="h-full bg-gradient-to-r from-violet-600 to-violet-400 rounded-full transition-all duration-700"
+              className="h-full bg-gradient-to-r from-blue-600 to-blue-400 rounded-full transition-all duration-700"
               style={{ width: `${avancePct}%` }}
             />
           </div>
           <div className="flex items-center gap-3 mt-2.5 text-xs text-zinc-500 flex-wrap">
-            <span className="text-violet-400 font-medium">{completadas} completadas</span>
+            <span className="text-blue-400 font-medium">{completadas} completadas</span>
             <span>·</span>
             <span className="text-blue-400 font-medium">{en_progreso} en progreso</span>
             <span>·</span>
@@ -266,12 +287,12 @@ export const InstructorOverview = ({ onNavigate }: Props) => {
       <div className="mx-6 bg-zinc-900 border border-zinc-800 rounded-md overflow-hidden">
         <div className="flex items-center justify-between px-5 py-3 border-b border-zinc-800">
           <div className="flex items-center gap-2">
-            <GraduationCap size={14} className="text-violet-400" />
+            <GraduationCap size={14} className="text-blue-400" />
             <h3 className="text-sm font-bold text-zinc-200">Mis fichas</h3>
           </div>
           <button
             onClick={() => onNavigate('fichas')}
-            className="text-xs text-violet-400 hover:text-violet-300 flex items-center gap-1 transition-colors"
+            className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1 transition-colors"
           >
             Ver todas <ArrowRight size={11} />
           </button>
@@ -319,12 +340,12 @@ export const InstructorOverview = ({ onNavigate }: Props) => {
       <div className="mx-6 bg-zinc-900 border border-zinc-800 rounded-md overflow-hidden">
         <div className="flex items-center justify-between px-5 py-3 border-b border-zinc-800">
           <div className="flex items-center gap-2">
-            <FolderKanban size={14} className="text-violet-400" />
+            <FolderKanban size={14} className="text-blue-400" />
             <h3 className="text-sm font-bold text-zinc-200">Proyectos recientes</h3>
           </div>
           <button
             onClick={() => onNavigate('projects')}
-            className="text-xs text-violet-400 hover:text-violet-300 flex items-center gap-1 transition-colors"
+            className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1 transition-colors"
           >
             Ver todos <ArrowRight size={11} />
           </button>
@@ -339,8 +360,8 @@ export const InstructorOverview = ({ onNavigate }: Props) => {
             const avancePr   = ticketsPr.length > 0 ? Math.round((donesPr / ticketsPr.length) * 100) : 0;
             return (
               <div key={pr.id} className="flex items-center gap-3 px-5 py-3 hover:bg-zinc-800/30 transition-colors">
-                <div className="w-7 h-7 bg-violet-500/10 rounded-md flex items-center justify-center shrink-0">
-                  <FolderKanban size={13} className="text-violet-400" />
+                <div className="w-7 h-7 bg-blue-500/10 rounded-md flex items-center justify-center shrink-0">
+                  <FolderKanban size={13} className="text-blue-400" />
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-zinc-200 truncate">{pr.nombre}</p>
@@ -352,7 +373,7 @@ export const InstructorOverview = ({ onNavigate }: Props) => {
                         <div className="flex items-center gap-1.5 flex-1 min-w-0">
                           <div className="h-1 bg-zinc-800 rounded-full flex-1 overflow-hidden">
                             <div
-                              className="h-full bg-violet-500 rounded-full transition-all duration-500"
+                              className="h-full bg-blue-500 rounded-full transition-all duration-500"
                               style={{ width: `${avancePr}%` }}
                             />
                           </div>
@@ -379,13 +400,13 @@ export const InstructorOverview = ({ onNavigate }: Props) => {
 
       {/* ── Módulos pendientes de revisión ──────────────────────────────────── */}
       {(pendingReview as any[]).length > 0 && (
-        <div className="mx-6 bg-zinc-900 border border-violet-500/30 rounded-md overflow-hidden shadow-md shadow-violet-900/20">
-          <div className="flex items-center gap-2 px-5 py-3 border-b border-zinc-800 bg-violet-500/5">
-            <PackageCheck size={14} className="text-violet-400" />
+        <div className="mx-6 bg-zinc-900 border border-blue-500/30 rounded-md overflow-hidden shadow-md shadow-blue-900/20">
+          <div className="flex items-center gap-2 px-5 py-3 border-b border-zinc-800 bg-blue-500/5">
+            <PackageCheck size={14} className="text-blue-400" />
             <h3 className="text-sm font-bold text-zinc-200">
               Módulos pendientes de revisión
             </h3>
-            <span className="ml-auto bg-violet-500/20 text-violet-300 text-[10px] font-black px-2 py-0.5 rounded-full border border-violet-500/30">
+            <span className="ml-auto bg-blue-500/20 text-blue-300 text-[10px] font-black px-2 py-0.5 rounded-full border border-blue-500/30">
               {(pendingReview as any[]).length}
             </span>
           </div>
@@ -393,14 +414,21 @@ export const InstructorOverview = ({ onNavigate }: Props) => {
             {(pendingReview as any[]).map((sprint: any) => (
               <div key={sprint.id} className="p-4 space-y-3">
                 <div className="flex items-start justify-between gap-3 flex-wrap">
-                  <div>
-                    <p className="text-[13px] font-bold text-zinc-200">{sprint.nombre}</p>
-                    <p className="text-[11px] text-zinc-500 mt-0.5">
-                      {sprint.proyecto?.nombre} · {sprint.tickets?.length ?? 0} tarea{sprint.tickets?.length !== 1 ? 's' : ''}
-                      {sprint.proyecto?.lider && ` · Líder: ${sprint.proyecto.lider.nombre}`}
-                    </p>
-                  </div>
-                  <span className="text-[10px] font-black text-violet-400 bg-violet-500/10 border border-violet-500/20 px-2 py-1 rounded-full uppercase tracking-widest shrink-0">
+                  <button
+                    onClick={() => irAlModulo(sprint)}
+                    title="Abrir el tablero de este proyecto para revisar el módulo"
+                    className="group text-left flex items-start gap-2 hover:bg-blue-500/5 -mx-2 -my-1 px-2 py-1 rounded-lg transition-colors"
+                  >
+                    <ExternalLink size={13} className="text-zinc-600 group-hover:text-blue-400 mt-0.5 shrink-0 transition-colors" />
+                    <div>
+                      <p className="text-[13px] font-bold text-zinc-200 group-hover:text-blue-300 transition-colors">{sprint.nombre}</p>
+                      <p className="text-[11px] text-zinc-500 mt-0.5">
+                        {sprint.proyecto?.nombre} · {sprint.tickets?.length ?? 0} tarea{sprint.tickets?.length !== 1 ? 's' : ''}
+                        {sprint.proyecto?.lider && ` · Líder: ${sprint.proyecto.lider.nombre}`}
+                      </p>
+                    </div>
+                  </button>
+                  <span className="text-[10px] font-black text-blue-400 bg-blue-500/10 border border-blue-500/20 px-2 py-1 rounded-full uppercase tracking-widest shrink-0">
                     Esperando revisión
                   </span>
                 </div>

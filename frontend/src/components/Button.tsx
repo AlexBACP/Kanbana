@@ -13,9 +13,9 @@ interface ButtonProps {
 
 const variants = {
   primary: 'bg-primary-600 hover:bg-primary-700 text-white shadow-xl shadow-primary-500/20 active:scale-95 border border-primary-500/30',
-  secondary: 'bg-dark-bg border border-dark-border text-dark-text hover:bg-dark-border hover:border-dark-muted active:scale-95',
+  secondary: 'bg-zinc-950 border border-zinc-800 text-zinc-100 hover:bg-zinc-800 hover:border-zinc-700 active:scale-95',
   danger: 'bg-rose-500/10 border border-rose-500/20 text-rose-500 hover:bg-rose-500 hover:text-white active:scale-95 shadow-lg shadow-rose-500/5',
-  ghost: 'bg-transparent text-dark-muted hover:text-dark-text hover:bg-dark-card transition-all',
+  ghost: 'bg-transparent text-zinc-500 hover:text-zinc-100 hover:bg-zinc-900 transition-all',
 };
 
 const sizes = {

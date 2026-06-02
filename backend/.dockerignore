@@ -1,0 +1,17 @@
+node_modules
+dist
+uploads
+.env
+*.log
+boot.log
+boot.err
+startup.log
+startup.err
+# scripts de QA/seed que no deben ir a la imagen
+qa-user.js
+qa-aprendiz.js
+seed-modulos.js
+gen_excel.js
+verify-flows.js
+test-sugerencias.js
+gen.js

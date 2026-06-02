@@ -22,5 +22,17 @@ export const ThemeApplier = () => {
     }
   }, [settings.themeColor, settings.themeMode]);
 
+  // ── Animaciones globales ──────────────────────────────────────────────
+  // Cuando el usuario desactiva animaciones, añadimos la clase no-animations
+  // que mata transitions/animations vía CSS (ver index.css).
+  useEffect(() => {
+    const html = document.documentElement;
+    if (settings.animationsEnabled === false) {
+      html.classList.add('no-animations');
+    } else {
+      html.classList.remove('no-animations');
+    }
+  }, [settings.animationsEnabled]);
+
   return null;
 };

@@ -31,8 +31,10 @@ import * as path from 'path';
 import { Ticket, TicketStatus }   from './entities/ticket.entity';
 import { TicketAttachment }        from './entities/ticket-attachment.entity';
 import { TipoTrimestre }           from '../projects/entities/trimestre.entity';
+import { Sprint }                  from '../projects/entities/sprint.entity';
 import { NotificationsService }    from '../notifications/notifications.service';
 import { EmailService }            from '../email/email.service';
+import { KanbanGateway }           from '../notifications/kanban.gateway';
 
 // Mapas de etiquetas para notificaciones
 const ESTADO_LABEL: Record<string, string> = {
@@ -51,26 +53,67 @@ export class TicketsService {
     private attachmentsRepo: Repository<TicketAttachment>,
     private readonly notificationsService: NotificationsService,
     private readonly emailService: EmailService,
+    private readonly gateway: KanbanGateway,
   ) {}
 
   // ── MODIFICADO: detecta si el ticket debe requerir adjunto ───────────────
   // Regla: si el ticket se crea dentro de un sprint de un trimestre documental,
   // requiere_adjunto se activa automáticamente.
-  async create(createTicketDto: any): Promise<Ticket> {
-    let requiere_adjunto = createTicketDto.requiere_adjunto ?? false;
+  async create(createTicketDto: any, actor?: any): Promise<Ticket> {
+    // ── Validación: el líder técnico solo puede crear tareas en SU proyecto ──
+    // Coordinador e instructor no tienen esta restricción aquí (el frontend
+    // ya filtra qué proyectos ven, pero podríamos endurecerlo más adelante).
+    if (actor && actor.rol === 'aprendiz' && actor.es_lider_tecnico === true) {
+      if (!createTicketDto.proyecto_id) {
+        throw new BadRequestException('Falta el proyecto al crear la tarea.');
+      }
+      const proyectoId = Number(createTicketDto.proyecto_id);
+      const actorId    = Number(actor.id);
 
-    // Si el ticket tiene sprint_id, verificar si ese sprint es de un
-    // trimestre documental para activar requiere_adjunto automáticamente.
-    if (createTicketDto.sprint_id && !requiere_adjunto) {
+      const proyecto = await this.ticketsRepository.manager
+        .getRepository('Project')
+        .findOne({ where: { id: proyectoId } as any });
+      if (!proyecto) throw new NotFoundException('Proyecto no encontrado.');
+
+      // Verificar pertenencia: primero via liderId (fuente principal),
+      // como fallback via proyecto_usuarios (por si liderId quedó NULL por inconsistencia de datos).
+      const esLiderDirecto = Number((proyecto as any).liderId) === actorId;
+
+      let esLiderPorMembresía = false;
+      if (!esLiderDirecto) {
+        const count = await this.ticketsRepository.manager.query(
+          `SELECT COUNT(*) as cnt FROM proyecto_usuarios WHERE project_id = ? AND user_id = ?`,
+          [proyectoId, actorId],
+        );
+        esLiderPorMembresía = Number(count[0]?.cnt) > 0;
+      }
+
+      if (!esLiderDirecto && !esLiderPorMembresía) {
+        throw new ForbiddenException(
+          'Solo puedes crear tareas en el proyecto del que eres líder técnico.'
+        );
+      }
+    }
+
+    let requiere_adjunto = createTicketDto.requiere_adjunto ?? false;
+    // trimestre_id por defecto: el que envíe el frontend (cola de trabajo del
+    // trimestre activo). Si la tarea tiene módulo, se sobrescribe con el del módulo.
+    let trimestre_id = createTicketDto.trimestre_id ?? null;
+
+    // Si el ticket tiene sprint_id, cargamos su trimestre para:
+    //   1) acotar la tarea al trimestre del módulo (trimestre_id)
+    //   2) activar requiere_adjunto si el trimestre es documental
+    if (createTicketDto.sprint_id) {
       const sprint = await this.ticketsRepository.manager
-        .getRepository('sprints')
+        .getRepository(Sprint)
         .findOne({
           where:     { id: createTicketDto.sprint_id },
-          // Cargar el trimestre para ver su tipo
           relations: ['trimestre'],
         });
 
-      if (sprint?.trimestre?.tipo === TipoTrimestre.DOCUMENTAL) {
+      if (sprint?.trimestre_id) trimestre_id = sprint.trimestre_id;
+
+      if (!requiere_adjunto && sprint?.trimestre?.tipo === TipoTrimestre.DOCUMENTAL) {
         // ── REGLA: sprint en trimestre documental → adjunto obligatorio ──
         requiere_adjunto = true;
       }
@@ -79,43 +122,52 @@ export class TicketsService {
     const ticket = this.ticketsRepository.create({
       ...createTicketDto,
       requiere_adjunto,
+      trimestre_id,
     });
     const saved = await this.ticketsRepository.save(ticket as any) as any;
 
-    // Notificar al aprendiz asignado (si hay uno y no es quien la creó)
-    if (
-      saved.asignado_a_id &&
-      saved.asignado_a_id !== createTicketDto.creado_por_id
-    ) {
-      // Cargamos el ticket completo con relaciones para in-app + email
-      const full = await this.ticketsRepository.findOne({
-        where:     { id: saved.id },
-        relations: ['proyecto', 'creado_por', 'asignado_a', 'sprint'],
-      });
-      const creadorNombre = full?.creado_por?.nombre ?? 'Tu líder';
-
-      // In-app
-      await this.notificationsService.create({
-        usuario_id: saved.asignado_a_id,
-        titulo:     `Nueva tarea asignada: "${saved.titulo}"`,
-        mensaje:    `${creadorNombre} te asignó la tarea "${saved.titulo}" en el proyecto "${(full as any)?.proyecto?.nombre ?? ''}"`,
-        tipo:       'info' as any,
-      });
-
-      // Email
-      if ((full as any)?.asignado_a?.correo) {
-        await this.emailService.notificarTareaAsignada({
-          destinatario:   (full as any).asignado_a.correo,
-          aprendizNombre: (full as any).asignado_a.nombre,
-          tareaTitle:     saved.titulo,
-          descripcion:    saved.descripcion,
-          prioridad:      saved.prioridad,
-          fechaLimite:    saved.fecha_limite ?? undefined,
-          proyectoNombre: (full as any)?.proyecto?.nombre ?? '',
-          sprintNombre:   (full as any)?.sprint?.nombre,
-          asignadoPor:    creadorNombre,
+    // Notificar al aprendiz asignado (si hay uno y no es quien la creó).
+    // Envuelto en try/catch para que un fallo de SMTP o notificaciones
+    // no devuelva 500 al cliente — el ticket ya fue guardado correctamente.
+    try {
+      if (
+        saved.asignado_a_id &&
+        saved.asignado_a_id !== createTicketDto.creado_por_id
+      ) {
+        // Cargamos el ticket completo con relaciones para in-app + email
+        const full = await this.ticketsRepository.findOne({
+          where:     { id: saved.id },
+          relations: ['proyecto', 'creado_por', 'asignado_a', 'sprint'],
         });
+        const creadorNombre = full?.creado_por?.nombre ?? 'Tu líder';
+
+        // In-app
+        await this.notificationsService.create({
+          usuario_id: saved.asignado_a_id,
+          titulo:     `Nueva tarea asignada: "${saved.titulo}"`,
+          mensaje:    `${creadorNombre} te asignó la tarea "${saved.titulo}" en el proyecto "${(full as any)?.proyecto?.nombre ?? ''}"`,
+          tipo:       'info' as any,
+        });
+
+        // Email
+        if ((full as any)?.asignado_a?.correo) {
+          await this.emailService.notificarTareaAsignada({
+            destinatario:   (full as any).asignado_a.correo,
+            aprendizNombre: (full as any).asignado_a.nombre,
+            tareaTitle:     saved.titulo,
+            descripcion:    saved.descripcion,
+            prioridad:      saved.prioridad,
+            fechaLimite:    saved.fecha_limite ?? undefined,
+            proyectoNombre: (full as any)?.proyecto?.nombre ?? '',
+            sprintNombre:   (full as any)?.sprint?.nombre,
+            asignadoPor:    creadorNombre,
+          });
+        }
       }
+    } catch (err) {
+      // No relanzar: el ticket fue creado exitosamente.
+      // El fallo es solo en el canal de notificación/email.
+      console.error('[TicketsService.create] Error enviando notificación:', err?.message);
     }
 
     return saved;
@@ -133,7 +185,8 @@ export class TicketsService {
 
     return this.ticketsRepository.find({
       where,
-      relations: ['asignado_a', 'creado_por', 'subtareas'],
+      // 'adjuntos' se incluye para mostrar miniaturas en las tarjetas del tablero
+      relations: ['asignado_a', 'creado_por', 'subtareas', 'adjuntos'],
     });
   }
 
@@ -157,9 +210,10 @@ export class TicketsService {
   }
 
   // ── MODIFICADO: validación de adjunto obligatorio antes de marcar done ────
-  // Esta es la validación más importante de toda la funcionalidad:
-  // si el ticket requiere adjunto y no tiene ninguno, el sistema rechaza
-  // el cambio a 'done' con un error claro.
+  // También incluye validación de permisos por rol:
+  //   • aprendiz normal        → solo puede mover a to_do / in_progress
+  //   • aprendiz-líder técnico → puede mover hasta testing
+  //   • instructor / coordinador → puede mover a cualquier estado, incluido done
   // actor = req.user (del JWT) — identifica QUIÉN realizó el cambio de estado.
   // Si no se pasa (llamadas internas), se cae al creador del ticket como fallback.
   async updateStatus(id: number, statusDto: any, actor?: any): Promise<Ticket> {
@@ -169,6 +223,20 @@ export class TicketsService {
       relations: ['adjuntos'],
     });
     if (!ticket) throw new NotFoundException('Ticket no encontrado');
+
+    // ── Validación de permisos por rol ───────────────────────────────────
+    // Regla: aprendiz solo hasta in_progress; líder técnico hasta testing;
+    //        instructor/coordinador pueden mover a cualquier estado.
+    const rolActor = actor?.rol ?? null;
+    const esLiderActor = actor?.es_lider_tecnico === true;
+    if (rolActor === 'aprendiz') {
+      if (!esLiderActor && (statusDto.estado === TicketStatus.TESTING || statusDto.estado === TicketStatus.DONE)) {
+        throw new ForbiddenException('Los aprendices solo pueden mover tareas hasta "En desarrollo".');
+      }
+      if (esLiderActor && statusDto.estado === TicketStatus.DONE) {
+        throw new ForbiddenException('El líder técnico no puede marcar tareas como "Finalizado". Eso corresponde al instructor.');
+      }
+    }
 
     // ── Validación de adjunto obligatorio ────────────────────────────────
     if (
@@ -197,116 +265,156 @@ export class TicketsService {
     });
 
     // ── Notificaciones por cambio de estado ──────────────────────────────────
-    // Recargar con relaciones para obtener nombres
-    const updated = await this.ticketsRepository.findOne({
-      where: { id },
-      relations: ['asignado_a', 'creado_por', 'proyecto'],
-    });
+    // Envuelto en try/catch para que un fallo de notificación no devuelva 500.
+    try {
+      // Recargar con relaciones para obtener nombres
+      const updated = await this.ticketsRepository.findOne({
+        where: { id },
+        relations: ['asignado_a', 'creado_por', 'proyecto'],
+      });
 
-    if (updated) {
-      const estadoLabel = ESTADO_LABEL[statusDto.estado] ?? statusDto.estado;
-      const titulo      = updated.titulo;
-      const proyecto    = (updated as any).proyecto?.nombre ?? '';
+      if (updated) {
+        const estadoLabel = ESTADO_LABEL[statusDto.estado] ?? statusDto.estado;
+        const titulo      = updated.titulo;
+        const proyecto    = (updated as any).proyecto?.nombre ?? '';
 
-      // El actor es quien llamó al endpoint (req.user).
-      // Fallback: nombre del creador si no hay actor (llamada interna sin auth).
-      const actorId     = actor?.id ?? null;
-      const actorNombre = actor?.nombre ?? (updated as any).creado_por?.nombre ?? 'Alguien';
+        // El actor es quien llamó al endpoint (req.user).
+        // Fallback: nombre del creador si no hay actor (llamada interna sin auth).
+        const actorId     = actor?.id ?? null;
+        const actorNombre = actor?.nombre ?? (updated as any).creado_por?.nombre ?? 'Alguien';
 
-      // Tarea completada → notificar al creador/líder (si no fue él mismo quien la completó)
-      if (statusDto.estado === TicketStatus.DONE) {
-        if (updated.creado_por_id && updated.creado_por_id !== actorId) {
-          await this.notificationsService.create({
-            usuario_id: updated.creado_por_id,
-            titulo:     `Tarea completada: "${titulo}"`,
-            mensaje:    `${actorNombre} marcó como completada la tarea "${titulo}" en "${proyecto}".`,
-            tipo:       'success' as any,
-          });
+        // Tarea completada → notificar al creador/líder (si no fue él mismo quien la completó)
+        if (statusDto.estado === TicketStatus.DONE) {
+          if (updated.creado_por_id && updated.creado_por_id !== actorId) {
+            await this.notificationsService.create({
+              usuario_id: updated.creado_por_id,
+              titulo:     `Tarea completada: "${titulo}"`,
+              mensaje:    `${actorNombre} marcó como completada la tarea "${titulo}" en "${proyecto}".`,
+              tipo:       'success' as any,
+            });
+          }
+        }
+
+        // Tarea en testing → notificar al creador/líder para que revise
+        if (statusDto.estado === TicketStatus.TESTING) {
+          if (updated.creado_por_id && updated.creado_por_id !== actorId) {
+            await this.notificationsService.create({
+              usuario_id: updated.creado_por_id,
+              titulo:     `Tarea lista para revisión: "${titulo}"`,
+              mensaje:    `${actorNombre} movió "${titulo}" a Testing. Revísala en el tablero.`,
+              tipo:       'info' as any,
+            });
+          }
+        }
+
+        // Otros cambios de estado → notificar al asignado si el actor es alguien distinto
+        if (
+          statusDto.estado !== TicketStatus.DONE &&
+          statusDto.estado !== TicketStatus.TESTING &&
+          (updated as any).asignado_a?.id
+        ) {
+          if ((updated as any).asignado_a.id !== actorId) {
+            await this.notificationsService.create({
+              usuario_id: (updated as any).asignado_a.id,
+              titulo:     `Estado actualizado: "${titulo}"`,
+              mensaje:    `${actorNombre} cambió el estado de "${titulo}" a "${estadoLabel}".`,
+              tipo:       'info' as any,
+            });
+          }
         }
       }
-
-      // Tarea en testing → notificar al creador/líder para que revise
-      if (statusDto.estado === TicketStatus.TESTING) {
-        if (updated.creado_por_id && updated.creado_por_id !== actorId) {
-          await this.notificationsService.create({
-            usuario_id: updated.creado_por_id,
-            titulo:     `Tarea lista para revisión: "${titulo}"`,
-            mensaje:    `${actorNombre} movió "${titulo}" a Testing. Revísala en el tablero.`,
-            tipo:       'info' as any,
-          });
-        }
-      }
-
-      // Otros cambios de estado → notificar al asignado si el actor es alguien distinto
-      if (
-        statusDto.estado !== TicketStatus.DONE &&
-        statusDto.estado !== TicketStatus.TESTING &&
-        (updated as any).asignado_a?.id
-      ) {
-        if ((updated as any).asignado_a.id !== actorId) {
-          await this.notificationsService.create({
-            usuario_id: (updated as any).asignado_a.id,
-            titulo:     `Estado actualizado: "${titulo}"`,
-            mensaje:    `${actorNombre} cambió el estado de "${titulo}" a "${estadoLabel}".`,
-            tipo:       'info' as any,
-          });
-        }
-      }
+    } catch (err) {
+      console.error('[TicketsService.updateStatus] Error enviando notificación:', err?.message);
     }
 
-    return this.findOne(id);
+    const updated = await this.findOne(id);
+    // ── Real-time: broadcast al tablero del proyecto ──────────────────────
+    if ((updated as any).proyecto_id) {
+      this.gateway.broadcastTicketUpdated((updated as any).proyecto_id, updated);
+    }
+    return updated;
   }
 
-  async update(id: number, updateTicketDto: any): Promise<Ticket> {
+  async update(id: number, updateTicketDto: any, actor?: any): Promise<Ticket> {
     // Antes de actualizar, capturamos el asignado anterior
     const antes = await this.ticketsRepository.findOne({
       where:     { id },
       relations: ['creado_por', 'proyecto'],
     });
+    if (!antes) throw new NotFoundException('Tarea no encontrada');
+
+    // ── Validación: las tareas finalizadas no pueden modificarse ────────────
+    // Salvo que el actor sea instructor o coordinador (para correcciones).
+    if (antes.estado === TicketStatus.DONE && actor) {
+      const esAdmin = actor.rol === 'instructor' || actor.rol === 'coordinador';
+      if (!esAdmin) {
+        throw new ForbiddenException(
+          'No puedes editar una tarea finalizada. Pide al instructor que la reabra si necesitas corregirla.'
+        );
+      }
+    }
 
     await this.ticketsRepository.update(id, updateTicketDto);
 
-    // Si se está cambiando el asignado → notificar al nuevo responsable
-    if (
-      updateTicketDto.asignado_a_id !== undefined &&
-      updateTicketDto.asignado_a_id !== null &&
-      updateTicketDto.asignado_a_id !== (antes as any)?.asignado_a_id
-    ) {
-      const full = await this.ticketsRepository.findOne({
-        where:     { id },
-        relations: ['proyecto', 'creado_por', 'asignado_a', 'sprint'],
-      });
-      const asignadorNombre = full?.creado_por?.nombre ?? 'Tu líder técnico';
-
-      // In-app
-      await this.notificationsService.create({
-        usuario_id: updateTicketDto.asignado_a_id,
-        titulo:     `Nueva tarea asignada: "${antes?.titulo}"`,
-        mensaje:    `${asignadorNombre} te asignó la tarea "${antes?.titulo}" en el proyecto "${(full as any)?.proyecto?.nombre ?? ''}".`,
-        tipo:       'info' as any,
-      });
-
-      // Email
-      if ((full as any)?.asignado_a?.correo) {
-        await this.emailService.notificarTareaAsignada({
-          destinatario:   (full as any).asignado_a.correo,
-          aprendizNombre: (full as any).asignado_a.nombre,
-          tareaTitle:     antes?.titulo ?? '',
-          descripcion:    antes?.descripcion ?? undefined,
-          prioridad:      antes?.prioridad ?? 'media',
-          fechaLimite:    antes?.fecha_limite ?? undefined,
-          proyectoNombre: (full as any)?.proyecto?.nombre ?? '',
-          sprintNombre:   (full as any)?.sprint?.nombre,
-          asignadoPor:    asignadorNombre,
+    // Si se está cambiando el asignado → notificar al nuevo responsable.
+    // Envuelto en try/catch para que un fallo de SMTP no devuelva 500.
+    try {
+      if (
+        updateTicketDto.asignado_a_id !== undefined &&
+        updateTicketDto.asignado_a_id !== null &&
+        updateTicketDto.asignado_a_id !== (antes as any)?.asignado_a_id
+      ) {
+        const full = await this.ticketsRepository.findOne({
+          where:     { id },
+          relations: ['proyecto', 'creado_por', 'asignado_a', 'sprint'],
         });
+        // Usar el nombre del actor real (quien hizo la asignación), no el del creador
+        // original. Antes había bug: si A creaba y B reasignaba, la notificación
+        // decía "A te asignó" cuando fue B quien la reasignó.
+        const asignadorNombre = actor?.nombre ?? full?.creado_por?.nombre ?? 'Tu líder técnico';
+
+        // In-app
+        await this.notificationsService.create({
+          usuario_id: updateTicketDto.asignado_a_id,
+          titulo:     `Nueva tarea asignada: "${antes?.titulo}"`,
+          mensaje:    `${asignadorNombre} te asignó la tarea "${antes?.titulo}" en el proyecto "${(full as any)?.proyecto?.nombre ?? ''}".`,
+          tipo:       'info' as any,
+        });
+
+        // Email
+        if ((full as any)?.asignado_a?.correo) {
+          await this.emailService.notificarTareaAsignada({
+            destinatario:   (full as any).asignado_a.correo,
+            aprendizNombre: (full as any).asignado_a.nombre,
+            tareaTitle:     antes?.titulo ?? '',
+            descripcion:    antes?.descripcion ?? undefined,
+            prioridad:      antes?.prioridad ?? 'media',
+            fechaLimite:    antes?.fecha_limite ?? undefined,
+            proyectoNombre: (full as any)?.proyecto?.nombre ?? '',
+            sprintNombre:   (full as any)?.sprint?.nombre,
+            asignadoPor:    asignadorNombre,
+          });
+        }
       }
+    } catch (err) {
+      console.error('[TicketsService.update] Error enviando notificación:', err?.message);
     }
 
     return this.findOne(id);
   }
 
   async moveTask(ticketId: number, sprintId: number | null): Promise<Ticket> {
-    await this.ticketsRepository.update(ticketId, { sprint_id: sprintId });
+    // Al asignar la tarea a un módulo, sincronizamos su trimestre con el del
+    // módulo. Al moverla a la cola de trabajo (sprintId null) conservamos el
+    // trimestre que ya tenía, para que no se "escape" a todos los trimestres.
+    const patch: any = { sprint_id: sprintId };
+    if (sprintId) {
+      const sprint = await this.ticketsRepository.manager
+        .getRepository(Sprint)
+        .findOne({ where: { id: sprintId } });
+      if (sprint?.trimestre_id) patch.trimestre_id = sprint.trimestre_id;
+    }
+    await this.ticketsRepository.update(ticketId, patch);
     return this.findOne(ticketId);
   }
 
@@ -322,6 +430,12 @@ export class TicketsService {
   }
 
   async remove(id: number): Promise<void> {
+    // Cargar la tarea antes de borrarla para poder notificar al asignado.
+    const ticket = await this.ticketsRepository.findOne({
+      where:     { id },
+      relations: ['asignado_a', 'proyecto'],
+    });
+
     // Los adjuntos se borran en cascada por la FK en ticket_attachments,
     // pero también borramos los archivos físicos del disco.
     const adjuntos = await this.attachmentsRepo.find({ where: { ticket_id: id } });
@@ -329,6 +443,20 @@ export class TicketsService {
       this.eliminarArchivoDisco(adj.nombre_disco);
     }
     await this.ticketsRepository.delete(id);
+
+    // Notificar al asignado para mantener trazabilidad
+    try {
+      if (ticket?.asignado_a?.id) {
+        await this.notificationsService.create({
+          usuario_id: ticket.asignado_a.id,
+          titulo:     `Tarea eliminada: "${ticket.titulo}"`,
+          mensaje:    `La tarea "${ticket.titulo}" del proyecto "${(ticket as any)?.proyecto?.nombre ?? ''}" fue eliminada.`,
+          tipo:       'warning' as any,
+        });
+      }
+    } catch (err) {
+      console.error('[TicketsService.remove] Error enviando notificación:', err?.message);
+    }
   }
 
   // ══ NUEVOS MÉTODOS: gestión de adjuntos ═══════════════════════════════════
@@ -343,6 +471,16 @@ export class TicketsService {
   ): Promise<TicketAttachment> {
     const ticket = await this.ticketsRepository.findOne({ where: { id: ticketId } });
     if (!ticket) throw new NotFoundException('Ticket no encontrado');
+
+    // Auto-transición: si el ticket estaba en "Por hacer" y el uploader
+    // es el aprendiz asignado, pasarlo automáticamente a "En desarrollo".
+    if (
+      ticket.estado === TicketStatus.TODO &&
+      ticket.asignado_a_id &&
+      ticket.asignado_a_id === subido_por_id
+    ) {
+      await this.ticketsRepository.update(ticketId, { estado: TicketStatus.IN_PROGRESS });
+    }
 
     // La URL pública que el frontend usará para descargar el archivo.
     // Funciona gracias a useStaticAssets() en main.ts.
@@ -373,11 +511,23 @@ export class TicketsService {
 
   // Borra un adjunto: primero el archivo del disco, luego el registro en BD.
   // Solo el usuario que subió el archivo o un instructor/coordinador puede borrarlo.
-  async deleteAttachment(attachmentId: number): Promise<{ message: string }> {
+  async deleteAttachment(attachmentId: number, actor?: any): Promise<{ message: string }> {
     const attachment = await this.attachmentsRepo.findOne({
       where: { id: attachmentId },
     });
     if (!attachment) throw new NotFoundException('Adjunto no encontrado');
+
+    // ── Validación de permisos ─────────────────────────────────────────────
+    // Solo puede borrar el adjunto: el que lo subió, el líder técnico,
+    // el instructor o el coordinador.
+    if (actor) {
+      const esAdmin = actor.rol === 'coordinador' || actor.rol === 'instructor';
+      const esLider = actor.rol === 'aprendiz' && actor.es_lider_tecnico === true;
+      const esDueno = attachment.subido_por_id === actor.id;
+      if (!esAdmin && !esLider && !esDueno) {
+        throw new ForbiddenException('No tienes permisos para eliminar este adjunto.');
+      }
+    }
 
     // Borrar el archivo físico del disco
     this.eliminarArchivoDisco(attachment.nombre_disco);
@@ -410,141 +560,316 @@ export class TicketsService {
       estado:        TicketStatus.IN_PROGRESS,
     });
 
-    // Notificar al líder (creador) que alguien tomó la tarea
-    const full = await this.ticketsRepository.findOne({
-      where:     { id: ticketId },
-      relations: ['asignado_a', 'proyecto'],
-    });
-    if (ticket.creado_por_id && ticket.creado_por_id !== userId) {
-      await this.notificationsService.create({
-        usuario_id: ticket.creado_por_id,
-        titulo:  `Tarea tomada: "${ticket.titulo}"`,
-        mensaje: `${full?.asignado_a?.nombre ?? 'Un aprendiz'} tomó la tarea "${ticket.titulo}" en "${(full as any)?.proyecto?.nombre ?? ''}".`,
-        tipo:    'info' as any,
+    // Notificar al líder (creador) que alguien tomó la tarea. try/catch para SMTP.
+    try {
+      const full = await this.ticketsRepository.findOne({
+        where:     { id: ticketId },
+        relations: ['asignado_a', 'proyecto'],
       });
+      if (ticket.creado_por_id && ticket.creado_por_id !== userId) {
+        await this.notificationsService.create({
+          usuario_id: ticket.creado_por_id,
+          titulo:  `Tarea tomada: "${ticket.titulo}"`,
+          mensaje: `${full?.asignado_a?.nombre ?? 'Un aprendiz'} tomó la tarea "${ticket.titulo}" en "${(full as any)?.proyecto?.nombre ?? ''}".`,
+          tipo:    'info' as any,
+        });
+      }
+    } catch (err) {
+      console.error('[TicketsService.claimTicket] Error enviando notificación:', err?.message);
     }
 
     return this.findOne(ticketId);
   }
 
-  // Aprendiz indica que terminó su trabajo → activa la bandera de revisión.
-  // La tarea sigue en in_progress pero la tarjeta se vuelve verde en el tablero.
+  // Aprendiz finaliza su trabajo → la tarea pasa directamente a "En revisión"
+  // (estado testing) para que el líder la revise.
   async markCompleteByAprendiz(ticketId: number, userId: number): Promise<Ticket> {
     const ticket = await this.ticketsRepository.findOne({
       where:     { id: ticketId },
-      relations: ['creado_por', 'proyecto'],
+      relations: ['creado_por', 'proyecto', 'subtareas'],
     });
     if (!ticket) throw new NotFoundException('Ticket no encontrado');
     if (ticket.asignado_a_id !== userId) {
-      throw new ForbiddenException('Solo el aprendiz asignado puede marcar esta tarea como completada.');
+      throw new ForbiddenException('Solo el aprendiz asignado puede finalizar esta tarea.');
+    }
+    if (ticket.estado === TicketStatus.TESTING || ticket.estado === TicketStatus.DONE) {
+      throw new BadRequestException('La tarea ya está en revisión o finalizada.');
     }
 
-    await this.ticketsRepository.update(ticketId, { completado_por_aprendiz: true });
+    // ── Validación de subtareas ──────────────────────────────────────────────
+    // Si la tarea tiene subtareas, todas deben estar en 'done' antes de poder
+    // enviarla a revisión. Garantiza que el aprendiz no puede "saltar" trabajo.
+    const subtareas = (ticket as any).subtareas ?? [];
+    const incompletas = subtareas.filter((s: any) => s.estado !== TicketStatus.DONE);
+    if (incompletas.length > 0) {
+      throw new BadRequestException(
+        `No puedes finalizar esta tarea: tiene ${incompletas.length} subtarea(s) sin completar. ` +
+        `Completa todas las subtareas primero.`
+      );
+    }
 
-    // Notificar al líder para que revise
-    if (ticket.creado_por_id && ticket.creado_por_id !== userId) {
-      // Cargar datos extras para el email
-      const full = await this.ticketsRepository.findOne({
-        where:     { id: ticketId },
-        relations: ['asignado_a', 'proyecto', 'creado_por', 'sprint'],
-      });
+    // Pasar a "En revisión" (testing) para que el líder la revise.
+    await this.ticketsRepository.update(ticketId, {
+      estado:                  TicketStatus.TESTING,
+      completado_por_aprendiz: true,
+      // Si estaba bloqueada (rechazada previamente), limpiar el bloqueo al reenviar
+      esta_bloqueado:          false,
+      motivo_bloqueo:          null as any,
+    });
 
-      // In-app
-      await this.notificationsService.create({
-        usuario_id: ticket.creado_por_id,
-        titulo:  `Tarea lista para tu revisión: "${ticket.titulo}"`,
-        mensaje: `Un aprendiz completó el trabajo en "${ticket.titulo}". Revísala en el tablero y aprueba o devuelve.`,
-        tipo:    'success' as any,
-      });
-
-      // Email al líder
-      if ((full as any)?.creado_por?.correo) {
-        await this.emailService.notificarTareaCompletadaPorAprendiz({
-          destinatario:   (full as any).creado_por.correo,
-          liderNombre:    (full as any).creado_por.nombre,
-          aprendizNombre: (full as any)?.asignado_a?.nombre ?? 'Un aprendiz',
-          tareaTitle:     ticket.titulo,
-          proyectoNombre: (full as any)?.proyecto?.nombre ?? '',
-          sprintNombre:   (full as any)?.sprint?.nombre,
+    // Notificar al líder (creador) para que revise. try/catch para SMTP.
+    try {
+      if (ticket.creado_por_id && ticket.creado_por_id !== userId) {
+        const full = await this.ticketsRepository.findOne({
+          where:     { id: ticketId },
+          relations: ['asignado_a', 'proyecto', 'creado_por', 'sprint'],
         });
+
+        // In-app
+        await this.notificationsService.create({
+          usuario_id: ticket.creado_por_id,
+          titulo:  `Tarea enviada a revisión: "${ticket.titulo}"`,
+          mensaje: `${(full as any)?.asignado_a?.nombre ?? 'Un aprendiz'} finalizó la tarea "${ticket.titulo}". Revísala en el tablero.`,
+          tipo:    'success' as any,
+        });
+
+        // Email al líder
+        if ((full as any)?.creado_por?.correo) {
+          await this.emailService.notificarTareaCompletadaPorAprendiz({
+            destinatario:   (full as any).creado_por.correo,
+            liderNombre:    (full as any).creado_por.nombre,
+            aprendizNombre: (full as any)?.asignado_a?.nombre ?? 'Un aprendiz',
+            tareaTitle:     ticket.titulo,
+            proyectoNombre: (full as any)?.proyecto?.nombre ?? '',
+            sprintNombre:   (full as any)?.sprint?.nombre,
+          });
+        }
       }
+    } catch (err) {
+      console.error('[TicketsService.markCompleteByAprendiz] Error enviando notificación:', err?.message);
     }
 
     return this.findOne(ticketId);
   }
 
-  // Líder aprueba el trabajo → la tarea pasa a testing (visible para instructor).
+  // Líder aprueba la tarea enviada por el aprendiz → testing → done (Finalizado).
   async liderApprove(ticketId: number): Promise<Ticket> {
     const ticket = await this.ticketsRepository.findOne({
       where:     { id: ticketId },
       relations: ['asignado_a', 'proyecto'],
     });
     if (!ticket) throw new NotFoundException('Ticket no encontrado');
+    if (ticket.estado !== TicketStatus.TESTING) {
+      throw new BadRequestException('Solo se pueden aprobar tareas que estén "En revisión".');
+    }
+    if (ticket.requiere_adjunto) {
+      const count = await this.attachmentsRepo.count({ where: { ticket_id: ticketId } });
+      if (count === 0) {
+        throw new BadRequestException(
+          `"${ticket.titulo}" requiere al menos un adjunto antes de poder finalizarse.`
+        );
+      }
+    }
 
     await this.ticketsRepository.update(ticketId, {
       completado_por_aprendiz: false,
-      estado:                  TicketStatus.TESTING,
+      estado:                  TicketStatus.DONE,
     });
 
-    // Notificar al aprendiz que su trabajo fue aprobado
-    if (ticket.asignado_a_id) {
-      // In-app
-      await this.notificationsService.create({
-        usuario_id: ticket.asignado_a_id,
-        titulo:  `¡Trabajo aprobado! "${ticket.titulo}"`,
-        mensaje: `Tu líder aprobó tu trabajo en "${ticket.titulo}". La tarea pasó a revisión del instructor.`,
-        tipo:    'success' as any,
-      });
-
-      // Email al aprendiz
-      if ((ticket as any)?.asignado_a?.correo) {
-        await this.emailService.notificarTareaAprobada({
-          destinatario:   (ticket as any).asignado_a.correo,
-          aprendizNombre: (ticket as any).asignado_a.nombre,
-          tareaTitle:     ticket.titulo,
-          proyectoNombre: (ticket as any)?.proyecto?.nombre ?? '',
+    // Notificar al aprendiz que su trabajo fue aprobado. try/catch para SMTP.
+    try {
+      if (ticket.asignado_a_id) {
+        const proyectoNombre = (ticket as any).proyecto?.nombre ?? '';
+        // In-app
+        await this.notificationsService.create({
+          usuario_id: ticket.asignado_a_id,
+          titulo:  `¡Tarea aprobada! "${ticket.titulo}"`,
+          mensaje: `Tu líder aprobó tu trabajo en "${ticket.titulo}". La tarea quedó Finalizada. ¡Bien hecho!`,
+          tipo:    'success' as any,
         });
+
+        // Email al aprendiz
+        if ((ticket as any)?.asignado_a?.correo) {
+          await this.emailService.notificarTareaAprobada({
+            destinatario:   (ticket as any).asignado_a.correo,
+            aprendizNombre: (ticket as any).asignado_a.nombre,
+            tareaTitle:     ticket.titulo,
+            proyectoNombre,
+          });
+        }
       }
+    } catch (err) {
+      console.error('[TicketsService.liderApprove] Error enviando notificación:', err?.message);
     }
 
     return this.findOne(ticketId);
   }
 
-  // Líder rechaza el trabajo → devuelve la tarea al pool (to_do, sin asignar).
-  async liderReject(ticketId: number): Promise<Ticket> {
+  // Líder rechaza la revisión → la tarea vuelve a "En desarrollo" marcada en rojo.
+  // El aprendiz puede corregir y volver a enviar (markCompleteByAprendiz limpia el bloqueo).
+  async liderReject(ticketId: number, motivo?: string): Promise<Ticket> {
     const ticket = await this.ticketsRepository.findOne({
       where:     { id: ticketId },
       relations: ['asignado_a', 'proyecto'],
     });
     if (!ticket) throw new NotFoundException('Ticket no encontrado');
+    if (ticket.estado !== TicketStatus.TESTING) {
+      throw new BadRequestException('Solo se pueden rechazar tareas que estén "En revisión".');
+    }
 
-    const prevAsignado = ticket.asignado_a_id;
+    const motivo_bloqueo = motivo?.trim() || 'Devuelta por el líder. Revisa los comentarios y corrige.';
 
     await this.ticketsRepository.update(ticketId, {
       completado_por_aprendiz: false,
-      estado:                  TicketStatus.TODO,
-      asignado_a_id:           null as any,
+      estado:                  TicketStatus.IN_PROGRESS,
+      // Marcar en rojo: el aprendiz ve la tarjeta roja hasta que la reenvíe
+      esta_bloqueado:          true,
+      motivo_bloqueo,
     });
 
-    // Notificar al aprendiz que debe corregir
-    if (prevAsignado) {
-      // In-app
-      await this.notificationsService.create({
-        usuario_id: prevAsignado,
-        titulo:  `Trabajo devuelto: "${ticket.titulo}"`,
-        mensaje: `Tu líder necesita correcciones en "${ticket.titulo}". La tarea regresó al pool — revisa los comentarios.`,
-        tipo:    'warning' as any,
-      });
+    // Notificar al aprendiz que debe corregir. try/catch para SMTP.
+    try {
+      if (ticket.asignado_a_id) {
+        const proyectoNombre = (ticket as any).proyecto?.nombre ?? '';
+        // In-app
+        await this.notificationsService.create({
+          usuario_id: ticket.asignado_a_id,
+          titulo:  `Tarea devuelta con correcciones: "${ticket.titulo}"`,
+          mensaje: `Tu líder necesita correcciones en "${ticket.titulo}". Motivo: ${motivo_bloqueo}`,
+          tipo:    'warning' as any,
+        });
 
-      // Email al aprendiz
-      if ((ticket as any)?.asignado_a?.correo) {
-        await this.emailService.notificarTareaDevuelta({
-          destinatario:   (ticket as any).asignado_a.correo,
-          aprendizNombre: (ticket as any).asignado_a.nombre,
-          tareaTitle:     ticket.titulo,
-          proyectoNombre: (ticket as any)?.proyecto?.nombre ?? '',
+        // Email al aprendiz
+        if ((ticket as any)?.asignado_a?.correo) {
+          await this.emailService.notificarTareaDevuelta({
+            destinatario:   (ticket as any).asignado_a.correo,
+            aprendizNombre: (ticket as any).asignado_a.nombre,
+            tareaTitle:     ticket.titulo,
+            proyectoNombre,
+          });
+        }
+      }
+    } catch (err) {
+      console.error('[TicketsService.liderReject] Error enviando notificación:', err?.message);
+    }
+
+    return this.findOne(ticketId);
+  }
+
+  // ══ INSTRUCTOR: calificación final de la tarea ════════════════════════════
+
+  // Instructor aprueba → testing → done.
+  // Notifica al aprendiz asignado y al creador (líder).
+  async instructorApprove(ticketId: number): Promise<Ticket> {
+    const ticket = await this.ticketsRepository.findOne({
+      where:     { id: ticketId },
+      relations: ['asignado_a', 'creado_por', 'proyecto'],
+    });
+    if (!ticket) throw new NotFoundException('Ticket no encontrado');
+    if (ticket.estado !== TicketStatus.TESTING) {
+      throw new BadRequestException('Solo se pueden aprobar tareas que estén "En revisión".');
+    }
+    if (ticket.requiere_adjunto) {
+      const count = await this.attachmentsRepo.count({ where: { ticket_id: ticketId } });
+      if (count === 0) {
+        throw new BadRequestException(
+          `"${ticket.titulo}" requiere al menos un adjunto antes de poder finalizarse.`
+        );
+      }
+    }
+
+    await this.ticketsRepository.update(ticketId, {
+      estado:         TicketStatus.DONE,
+      actualizado_en: new Date(),
+    });
+
+    try {
+      const proyectoNombre = (ticket as any).proyecto?.nombre ?? '';
+      // Notificar al aprendiz
+      if (ticket.asignado_a_id) {
+        await this.notificationsService.create({
+          usuario_id: ticket.asignado_a_id,
+          titulo:  `¡Tarea finalizada! "${ticket.titulo}"`,
+          mensaje: `El instructor aprobó tu tarea "${ticket.titulo}" en "${proyectoNombre}". ¡Bien hecho!`,
+          tipo:    'success' as any,
+        });
+        if ((ticket as any)?.asignado_a?.correo) {
+          await this.emailService.notificarTareaAprobada({
+            destinatario:   (ticket as any).asignado_a.correo,
+            aprendizNombre: (ticket as any).asignado_a.nombre,
+            tareaTitle:     ticket.titulo,
+            proyectoNombre,
+          });
+        }
+      }
+      // Notificar al líder creador (si es diferente al aprendiz)
+      if (ticket.creado_por_id && ticket.creado_por_id !== ticket.asignado_a_id) {
+        await this.notificationsService.create({
+          usuario_id: ticket.creado_por_id,
+          titulo:  `Tarea aprobada por instructor: "${ticket.titulo}"`,
+          mensaje: `El instructor marcó como finalizada la tarea "${ticket.titulo}" en "${proyectoNombre}".`,
+          tipo:    'success' as any,
         });
       }
+    } catch (err) {
+      console.error('[TicketsService.instructorApprove] Error enviando notificación:', err?.message);
+    }
+
+    return this.findOne(ticketId);
+  }
+
+  // Instructor rechaza → testing → in_progress + bloqueado (se muestra en rojo).
+  // Permite agregar un motivo de rechazo que se guarda en motivo_bloqueo.
+  async instructorReject(ticketId: number, motivo?: string): Promise<Ticket> {
+    const ticket = await this.ticketsRepository.findOne({
+      where:     { id: ticketId },
+      relations: ['asignado_a', 'creado_por', 'proyecto'],
+    });
+    if (!ticket) throw new NotFoundException('Ticket no encontrado');
+    if (ticket.estado !== TicketStatus.TESTING) {
+      throw new BadRequestException('Solo se pueden rechazar tareas que estén "En revisión".');
+    }
+
+    const motivo_bloqueo = motivo?.trim() || 'Rechazado por el instructor. Revisa los comentarios y corrige.';
+
+    await this.ticketsRepository.update(ticketId, {
+      estado:                  TicketStatus.IN_PROGRESS,
+      esta_bloqueado:          true,
+      motivo_bloqueo,
+      completado_por_aprendiz: false,
+      actualizado_en:          new Date(),
+    });
+
+    try {
+      const proyectoNombre = (ticket as any).proyecto?.nombre ?? '';
+      // Notificar al aprendiz asignado
+      if (ticket.asignado_a_id) {
+        await this.notificationsService.create({
+          usuario_id: ticket.asignado_a_id,
+          titulo:  `Tarea devuelta por instructor: "${ticket.titulo}"`,
+          mensaje: `El instructor devolvió "${ticket.titulo}". Motivo: ${motivo_bloqueo}`,
+          tipo:    'warning' as any,
+        });
+        if ((ticket as any)?.asignado_a?.correo) {
+          await this.emailService.notificarTareaDevuelta({
+            destinatario:   (ticket as any).asignado_a.correo,
+            aprendizNombre: (ticket as any).asignado_a.nombre,
+            tareaTitle:     ticket.titulo,
+            proyectoNombre,
+          });
+        }
+      }
+      // Notificar al líder creador
+      if (ticket.creado_por_id && ticket.creado_por_id !== ticket.asignado_a_id) {
+        await this.notificationsService.create({
+          usuario_id: ticket.creado_por_id,
+          titulo:  `Tarea rechazada por instructor: "${ticket.titulo}"`,
+          mensaje: `El instructor rechazó "${ticket.titulo}" y la devolvió a desarrollo. Motivo: ${motivo_bloqueo}`,
+          tipo:    'warning' as any,
+        });
+      }
+    } catch (err) {
+      console.error('[TicketsService.instructorReject] Error enviando notificación:', err?.message);
     }
 
     return this.findOne(ticketId);

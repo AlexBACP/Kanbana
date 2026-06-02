@@ -17,11 +17,12 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Bell, CheckCheck, CheckCircle2, X, Check,
   Info, AlertTriangle, Trash2, Shield,
-  Clock, Zap, RefreshCw, GraduationCap,
+  Clock, Zap, RefreshCw, GraduationCap, ChevronDown, Layers,
 } from 'lucide-react';
 import { notificationService } from '../../services/notification.service';
 import { permisosService }     from '../../services/permisos.service';
 import { fichaService }        from '../../services/ficha.service';
+import { projectService }      from '../../services/project.service';
 import { useAuthStore }        from '../../store/auth.store';
 
 // ── Helpers de tiempo ─────────────────────────────────────────────────────────
@@ -61,8 +62,9 @@ const TYPE_CFG: Record<string, { icon: React.ElementType; color: string; bg: str
   info:    { icon: Info,          color: 'text-blue-400',   bg: 'bg-blue-500/12',   leftBorder: 'border-l-blue-500'   },
 };
 const ACTION_ICON: Record<string, React.ElementType> = {
-  permiso_solicitud:    Shield,
+  permiso_solicitud:     Shield,
   approve_ficha_request: GraduationCap,
+  solicitar_modulo:      Layers,
 };
 
 function getNotifCfg(n: any) {
@@ -71,11 +73,56 @@ function getNotifCfg(n: any) {
   return { ...base, icon };
 }
 
+// ── Smart clustering ──────────────────────────────────────────────────────────
+// Agrupa notificaciones consecutivas con el mismo tipo y título similar en un
+// solo "cluster" colapsable, evitando listas largas de eventos repetidos.
+// Las notificaciones con action_type (permisos, fichas) siempre se muestran sueltas.
+
+type NotifItem = any;
+type ClusteredItem =
+  | { kind: 'single'; notif: NotifItem; key: string }
+  | { kind: 'cluster'; notifs: NotifItem[]; key: string };
+
+function clusterGroup(items: NotifItem[]): ClusteredItem[] {
+  const result: ClusteredItem[] = [];
+  let i = 0;
+  while (i < items.length) {
+    const cur = items[i];
+    // Notificaciones con acción interactiva — siempre sueltas
+    if (cur.action_type) {
+      result.push({ kind: 'single', notif: cur, key: String(cur.id) });
+      i++;
+      continue;
+    }
+    // Clave de agrupación: tipo + primeros 40 chars del título
+    const key = `${cur.tipo ?? ''}|${(cur.titulo ?? '').slice(0, 40)}`;
+    let j = i + 1;
+    while (j < items.length && !items[j].action_type) {
+      const nk = `${items[j].tipo ?? ''}|${(items[j].titulo ?? '').slice(0, 40)}`;
+      if (nk === key) j++;
+      else break;
+    }
+    const run = items.slice(i, j);
+    if (run.length >= 2) {
+      result.push({ kind: 'cluster', notifs: run, key: `cluster-${cur.id}` });
+    } else {
+      result.push({ kind: 'single', notif: cur, key: String(cur.id) });
+    }
+    i = j;
+  }
+  return result;
+}
+
 // ── Componente principal ──────────────────────────────────────────────────────
 
 export const NotificationsPanel = () => {
   const qc       = useQueryClient();
   const { user } = useAuthStore();
+
+  // Clusters expandidos (key = "cluster-<firstId>")
+  const [expandedClusters, setExpandedClusters] = useState<Set<string>>(new Set());
+  const toggleCluster = (key: string) =>
+    setExpandedClusters(prev => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n; });
 
   // Estado para el formulario inline de permisos
   const [actionState, setActionState] = useState<{
@@ -93,6 +140,13 @@ export const NotificationsPanel = () => {
     mode:          'approve' | 'reject';
   } | null>(null);
   const [fichaMotivoInput, setFichaMotivoInput] = useState('');
+
+  // Estado para respuesta a solicitud de módulo (sprint)
+  const [sprintAction, setSprintAction] = useState<{
+    notifId: number;
+    mode:    'accept' | 'reject';
+  } | null>(null);
+  const [sprintMotivoInput, setSprintMotivoInput] = useState('');
 
   // ── Queries ────────────────────────────────────────────────────────────────
   const { data: notifications = [], isLoading, isFetching } = useQuery({
@@ -132,6 +186,27 @@ export const NotificationsPanel = () => {
       setFichaMotivoInput('');
     },
     onError: (e: any) => alert(e?.response?.data?.message ?? 'Error al responder la solicitud'),
+  });
+
+  const aceptarSprintMut = useMutation({
+    mutationFn: (notifId: number) => projectService.acceptSprintSolicitud(notifId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['notifications'] });
+      qc.invalidateQueries({ queryKey: ['projects'] });
+      setSprintAction(null);
+    },
+    onError: (e: any) => alert(e?.response?.data?.message ?? 'Error al aceptar la solicitud'),
+  });
+
+  const rechazarSprintMut = useMutation({
+    mutationFn: ({ notifId, motivo }: { notifId: number; motivo?: string }) =>
+      projectService.rejectSprintSolicitud(notifId, motivo),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['notifications'] });
+      setSprintAction(null);
+      setSprintMotivoInput('');
+    },
+    onError: (e: any) => alert(e?.response?.data?.message ?? 'Error al rechazar la solicitud'),
   });
 
   const markReadMut = useMutation({
@@ -194,6 +269,8 @@ export const NotificationsPanel = () => {
     const isPermiso        = n.action_type === 'permiso_solicitud'    && !n.leida;
     const isFichaRequest   = n.action_type === 'approve_ficha_request' && !n.leida;
     const isFichaExpanded  = fichaAction?.notifId === n.id;
+    const isSprintRequest  = n.action_type === 'solicitar_modulo'     && !n.leida;
+    const isSprintExpanded = sprintAction?.notifId === n.id;
 
     return (
       <motion.div
@@ -257,30 +334,122 @@ export const NotificationsPanel = () => {
           )}
 
           {/* Botones de acción — solicitud de creación de ficha */}
+          {/* `responderFichaMut.isPending` desactiva los botones mientras el
+              backend procesa la respuesta para evitar doble-click. El backend
+              además elimina TODAS las notifs de la solicitud al procesarse,
+              por lo que tras el éxito de la mutation los botones desaparecen
+              porque la notificación ya no existe en la lista. */}
           {isFichaRequest && !isFichaExpanded && (
             <div className="flex items-center gap-2 mt-3">
               <button
+                disabled={responderFichaMut.isPending}
                 onClick={() => {
                   const data = JSON.parse(n.action_data || '{}');
                   setFichaAction({ notifId: n.id, instructorId: data.instructorId, mode: 'approve' });
                   setFichaMotivoInput('');
                 }}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-violet-500/15 text-violet-300 border border-violet-500/25 text-xs font-bold hover:bg-violet-500/25 transition-all"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-500/15 text-blue-300 border border-blue-500/25 text-xs font-bold hover:bg-blue-500/25 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 <Check size={12} /> Aprobar solicitud
               </button>
               <button
+                disabled={responderFichaMut.isPending}
                 onClick={() => {
                   const data = JSON.parse(n.action_data || '{}');
                   setFichaAction({ notifId: n.id, instructorId: data.instructorId, mode: 'reject' });
                   setFichaMotivoInput('');
                 }}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-500/10 text-rose-400 border border-rose-500/20 text-xs font-bold hover:bg-rose-500/20 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                <X size={12} /> Rechazar
+              </button>
+            </div>
+          )}
+
+          {/* Botones de acción — solicitud de módulo (sprint) */}
+          {isSprintRequest && !isSprintExpanded && (
+            <div className="flex items-center gap-2 mt-3">
+              <button
+                onClick={() => { setSprintAction({ notifId: n.id, mode: 'accept' }); setSprintMotivoInput(''); }}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/15 text-emerald-300 border border-emerald-500/25 text-xs font-bold hover:bg-emerald-500/25 transition-all"
+              >
+                <Check size={12} /> Aceptar módulo
+              </button>
+              <button
+                onClick={() => { setSprintAction({ notifId: n.id, mode: 'reject' }); setSprintMotivoInput(''); }}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-500/10 text-rose-400 border border-rose-500/20 text-xs font-bold hover:bg-rose-500/20 transition-all"
               >
                 <X size={12} /> Rechazar
               </button>
             </div>
           )}
+
+          {/* Formulario inline — respuesta a solicitud de módulo */}
+          <AnimatePresence>
+            {isSprintExpanded && sprintAction && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                transition={{ duration: 0.2 }}
+                className="overflow-hidden mt-3"
+              >
+                {sprintAction.mode === 'accept' ? (
+                  <div className="p-3.5 bg-zinc-800/70 rounded-xl border border-emerald-500/20 space-y-3">
+                    <p className="text-[11px] font-black uppercase tracking-widest text-emerald-400">
+                      Confirmar creación del módulo
+                    </p>
+                    <p className="text-xs text-zinc-400">
+                      El módulo se creará automáticamente y el líder técnico recibirá una notificación.
+                    </p>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => aceptarSprintMut.mutate(sprintAction.notifId)}
+                        disabled={aceptarSprintMut.isPending}
+                        className="flex-1 py-2 bg-emerald-600/90 hover:bg-emerald-600 text-white text-xs font-black rounded-lg transition-all disabled:opacity-50"
+                      >
+                        {aceptarSprintMut.isPending ? 'Creando módulo…' : '✓ Aceptar y crear módulo'}
+                      </button>
+                      <button
+                        onClick={() => setSprintAction(null)}
+                        className="px-3 py-2 bg-zinc-700/80 hover:bg-zinc-700 text-zinc-400 text-xs rounded-lg transition-all"
+                      >
+                        Cancelar
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="p-3.5 bg-zinc-800/70 rounded-xl border border-rose-500/20 space-y-3">
+                    <p className="text-[11px] font-black uppercase tracking-widest text-rose-400">
+                      Motivo del rechazo
+                    </p>
+                    <textarea
+                      value={sprintMotivoInput}
+                      onChange={e => setSprintMotivoInput(e.target.value)}
+                      placeholder="Explica brevemente por qué rechazas el módulo (opcional)…"
+                      rows={2}
+                      className="w-full bg-zinc-700/80 border border-zinc-600 rounded-lg px-3 py-2 text-sm text-zinc-200 outline-none focus:border-rose-500/40 resize-none placeholder:text-zinc-600"
+                    />
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => rechazarSprintMut.mutate({ notifId: sprintAction.notifId, motivo: sprintMotivoInput || undefined })}
+                        disabled={rechazarSprintMut.isPending}
+                        className="flex-1 py-2 bg-rose-600/90 hover:bg-rose-600 text-white text-xs font-black rounded-lg transition-all disabled:opacity-50"
+                      >
+                        {rechazarSprintMut.isPending ? 'Enviando…' : '✗ Rechazar solicitud'}
+                      </button>
+                      <button
+                        onClick={() => setSprintAction(null)}
+                        className="px-3 py-2 bg-zinc-700/80 hover:bg-zinc-700 text-zinc-400 text-xs rounded-lg transition-all"
+                      >
+                        Cancelar
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           {/* Formulario inline — respuesta a solicitud de ficha */}
           <AnimatePresence>
@@ -293,8 +462,8 @@ export const NotificationsPanel = () => {
                 className="overflow-hidden mt-3"
               >
                 {fichaAction.mode === 'approve' ? (
-                  <div className="p-3.5 bg-zinc-800/70 rounded-xl border border-violet-500/20 space-y-3">
-                    <p className="text-[11px] font-black uppercase tracking-widest text-violet-400">
+                  <div className="p-3.5 bg-zinc-800/70 rounded-xl border border-blue-500/20 space-y-3">
+                    <p className="text-[11px] font-black uppercase tracking-widest text-blue-400">
                       Confirmar aprobación
                     </p>
                     <p className="text-xs text-zinc-400">
@@ -304,7 +473,7 @@ export const NotificationsPanel = () => {
                       <button
                         onClick={() => responderFichaMut.mutate({ instructorId: fichaAction.instructorId, aprobada: true })}
                         disabled={responderFichaMut.isPending}
-                        className="flex-1 py-2 bg-violet-600/90 hover:bg-violet-600 text-white text-xs font-black rounded-lg transition-all disabled:opacity-50"
+                        className="flex-1 py-2 bg-blue-600/90 hover:bg-blue-600 text-white text-xs font-black rounded-lg transition-all disabled:opacity-50"
                       >
                         {responderFichaMut.isPending ? 'Enviando…' : '✓ Aprobar y notificar'}
                       </button>
@@ -429,7 +598,7 @@ export const NotificationsPanel = () => {
 
         {/* Acciones al hover (top-right) */}
         <div className="absolute right-2.5 top-3.5 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-          {!n.leida && n.action_type !== 'permiso_solicitud' && (
+          {!n.leida && n.action_type !== 'permiso_solicitud' && n.action_type !== 'solicitar_modulo' && (
             <button
               onClick={() => markReadMut.mutate(n.id)}
               title="Marcar como leída"
@@ -447,6 +616,59 @@ export const NotificationsPanel = () => {
           </button>
         </div>
       </motion.div>
+    );
+  };
+
+  // ── Render: cluster colapsable ────────────────────────────────────────────
+  const renderCluster = (notifs: NotifItem[], key: string) => {
+    const first       = notifs[0];
+    const cfg         = getNotifCfg(first);
+    const Icon        = cfg.icon;
+    const isExpanded  = expandedClusters.has(key);
+    const unreadCount = notifs.filter((n: any) => !n.leida).length;
+
+    return (
+      <div key={key} className="border-b border-zinc-800/50 last:border-b-0">
+        {/* Cabecera colapsable del cluster */}
+        <button
+          onClick={() => toggleCluster(key)}
+          className={`w-full flex items-center gap-3.5 px-4 py-3.5 text-left border-l-[3px] transition-colors ${cfg.leftBorder} hover:bg-zinc-800/20`}
+        >
+          <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${cfg.bg}`}>
+            <Icon size={16} className={cfg.color} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-[11px] font-black uppercase tracking-widest text-zinc-400 mb-0.5 truncate">
+              {first.titulo}
+            </p>
+            <p className="text-[11px] text-zinc-500">
+              <span className="font-bold text-zinc-400">{notifs.length}</span> notificaciones similares
+              {unreadCount > 0 && (
+                <span className="ml-2 font-bold text-blue-400">· {unreadCount} sin leer</span>
+              )}
+            </p>
+          </div>
+          <ChevronDown
+            size={14}
+            className={`text-zinc-600 shrink-0 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`}
+          />
+        </button>
+
+        {/* Items expandidos */}
+        <AnimatePresence initial={false}>
+          {isExpanded && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className="overflow-hidden border-l-2 border-zinc-800 ml-4"
+            >
+              {notifs.map((n: any) => renderNotif(n))}
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
     );
   };
 
@@ -538,10 +760,14 @@ export const NotificationsPanel = () => {
                   )}
                 </div>
 
-                {/* Items animados */}
+                {/* Items (con clustering inteligente) */}
                 <div className="divide-y divide-zinc-800/50 relative">
                   <AnimatePresence initial={false}>
-                    {items.map((n: any) => renderNotif(n))}
+                    {clusterGroup(items).map(item =>
+                      item.kind === 'cluster'
+                        ? renderCluster(item.notifs, item.key)
+                        : renderNotif(item.notif)
+                    )}
                   </AnimatePresence>
                 </div>
               </div>

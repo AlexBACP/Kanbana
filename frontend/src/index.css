@@ -28,8 +28,8 @@
   --border-soft: #21262d;
   --text:        #e6edf3;
   --muted:       #8b949e;
-  --accent:      #4f46e5;
-  --accent-soft: rgba(79,70,229,0.12);
+  --accent:      #3b82f6;
+  --accent-soft: rgba(59,130,246,0.12);
   --success:     #3fb950;
   --warning:     #d29922;
   --danger:      #f85149;
@@ -62,6 +62,67 @@ body {
   .bg-accent-soft {
     background-color: var(--accent-soft);
   }
+}
+
+/* ── Date / Time inputs — tema oscuro global ────────────────────────── */
+
+/* color-scheme: dark hace que el calendario nativo use colores oscuros  */
+input[type="date"],
+input[type="time"],
+input[type="datetime-local"] {
+  color-scheme: dark;
+}
+
+/* Icono del calendario: visible e interactivo sobre fondo oscuro */
+input[type="date"]::-webkit-calendar-picker-indicator,
+input[type="time"]::-webkit-calendar-picker-indicator,
+input[type="datetime-local"]::-webkit-calendar-picker-indicator {
+  filter: invert(0.6);
+  opacity: 0.55;
+  cursor: pointer;
+  border-radius: 4px;
+  padding: 2px;
+  transition: opacity 0.15s, background 0.15s;
+}
+input[type="date"]::-webkit-calendar-picker-indicator:hover,
+input[type="time"]::-webkit-calendar-picker-indicator:hover,
+input[type="datetime-local"]::-webkit-calendar-picker-indicator:hover {
+  opacity: 1;
+  background: rgba(255,255,255,0.06);
+}
+
+/* Texto del campo fecha: colores zinc consistentes con el sistema */
+input[type="date"]::-webkit-datetime-edit-fields-wrapper,
+input[type="datetime-local"]::-webkit-datetime-edit-fields-wrapper {
+  padding: 0;
+}
+input[type="date"]::-webkit-datetime-edit-text,
+input[type="datetime-local"]::-webkit-datetime-edit-text {
+  color: #52525b; /* zinc-600 — separadores / */
+  padding: 0 1px;
+}
+input[type="date"]::-webkit-datetime-edit-month-field,
+input[type="date"]::-webkit-datetime-edit-day-field,
+input[type="date"]::-webkit-datetime-edit-year-field,
+input[type="time"]::-webkit-datetime-edit-hour-field,
+input[type="time"]::-webkit-datetime-edit-minute-field,
+input[type="datetime-local"]::-webkit-datetime-edit-month-field,
+input[type="datetime-local"]::-webkit-datetime-edit-day-field,
+input[type="datetime-local"]::-webkit-datetime-edit-year-field,
+input[type="datetime-local"]::-webkit-datetime-edit-hour-field,
+input[type="datetime-local"]::-webkit-datetime-edit-minute-field {
+  color: #d4d4d8; /* zinc-300 */
+  border-radius: 2px;
+}
+/* Campo activo (al hacer clic en día/mes/año) */
+input[type="date"]::-webkit-datetime-edit-month-field:focus,
+input[type="date"]::-webkit-datetime-edit-day-field:focus,
+input[type="date"]::-webkit-datetime-edit-year-field:focus,
+input[type="time"]::-webkit-datetime-edit-hour-field:focus,
+input[type="time"]::-webkit-datetime-edit-minute-field:focus {
+  background-color: #2563eb; /* blue-600 */
+  color: #ffffff;
+  outline: none;
 }
 
 /* ── Clases de utilidad ─────────────────────────────────────────────── */
@@ -416,3 +477,65 @@ html.light[data-theme="amber"] .nav-item.active            { background-color: r
 [data-theme="cyan"] .shadow-blue-600\/20                   { --tw-shadow-color: rgba(8,145,178,0.20) !important; }
 [data-theme="cyan"] .nav-item.active                       { background-color: rgba(8,145,178,0.12) !important; color: #22d3ee !important; }
 html.light[data-theme="cyan"] .nav-item.active             { background-color: rgba(8,145,178,0.10) !important; color: #0e7490 !important; }
+
+/* ═══════════════════════════════════════════════════════════════
+   SIDEBAR — sombra derecha en TODOS los temas para separarlo del
+   contenido. En cada modo se ajusta la intensidad/borde.
+   ═══════════════════════════════════════════════════════════════ */
+.kanbana-sidebar {
+  /* Sombra derecha base (modo oscuro) */
+  box-shadow: 4px 0 24px -8px rgba(0, 0, 0, 0.55), 1px 0 0 0 rgba(0,0,0,0.3);
+}
+
+/* Modo Dim: el sidebar debe distinguirse claramente del fondo atenuado.
+   Lo hacemos un poco más claro que las tarjetas + sombra marcada. */
+html.dark.dim .kanbana-sidebar {
+  background-color: #272832 !important;     /* más claro que page (#1c1d22) y cards (#22232a) */
+  border-right-color: #3a3c47 !important;
+  box-shadow: 4px 0 28px -6px rgba(0, 0, 0, 0.6), 1px 0 0 0 rgba(255,255,255,0.03);
+}
+
+/* Modo Claro: sombra suave azulada (no negra dura) */
+html.light .kanbana-sidebar {
+  background-color: #ffffff !important;
+  border-right-color: #d6e0ec !important;
+  box-shadow: 4px 0 24px -10px rgba(37, 99, 235, 0.18), 1px 0 0 0 rgba(15,23,42,0.04);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   ANIMACIONES OFF — clase no-animations en <html> (Configuración)
+   Desactiva transiciones y animaciones CSS en todo el árbol.
+   ═══════════════════════════════════════════════════════════════ */
+html.no-animations *,
+html.no-animations *::before,
+html.no-animations *::after {
+  animation-duration: 0s !important;
+  animation-delay: 0s !important;
+  transition-duration: 0s !important;
+  transition-delay: 0s !important;
+  scroll-behavior: auto !important;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   TEMA CLARO — refinamiento de profundidad
+   En lugar de depender solo de bordes, las tarjetas usan sombra suave
+   para verse limpias sobre el fondo azulado claro (blanco + azul).
+   ═══════════════════════════════════════════════════════════════ */
+html.light .bg-zinc-900 {
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04), 0 1px 2px rgba(15, 23, 42, 0.03);
+}
+/* Tarjetas con bordes redondeados grandes → sombra un poco más marcada */
+html.light .rounded-2xl.bg-zinc-900,
+html.light .rounded-xl.bg-zinc-900,
+html.light .rounded-lg.bg-zinc-900 {
+  box-shadow: 0 2px 8px -2px rgba(15, 23, 42, 0.08), 0 1px 3px rgba(15, 23, 42, 0.04);
+}
+/* Texto secundario suficientemente oscuro para legibilidad en claro */
+html.light .text-zinc-600 { color: #5b6b7d !important; }
+html.light .text-zinc-700 { color: #475569 !important; }
+/* Los badges/chips con bg de color translúcido se ven lavados en claro:
+   reforzamos opacidad para que el color se note sobre blanco. */
+html.light [class*="bg-emerald-500\/1"] { background-color: rgba(5,150,105,0.12)  !important; }
+html.light [class*="bg-amber-500\/1"]   { background-color: rgba(217,119,6,0.12)  !important; }
+html.light [class*="bg-rose-500\/1"]    { background-color: rgba(225,29,72,0.12)  !important; }
+html.light [class*="bg-blue-500\/1"]    { background-color: rgba(37,99,235,0.10)  !important; }

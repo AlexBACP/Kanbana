@@ -9,7 +9,6 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import api from './api';
-import { CreateTrimestreDto } from '../types/trimestre.types';
 
 export const projectService = {
   // ── Existentes sin cambios ────────────────────────────────────────────────
@@ -48,8 +47,14 @@ export const projectService = {
 
   getSprints: (id: number) => api.get(`/projects/${id}/sprints`).then(r => r.data),
 
-  solicitarSprint: (id: number, body: { nombre: string; justificacion?: string }) =>
+  solicitarSprint: (id: number, body: { nombre: string; justificacion?: string; fecha_inicio?: string; fecha_fin?: string }) =>
     api.post(`/projects/${id}/solicitar-sprint`, body).then(r => r.data),
+
+  acceptSprintSolicitud: (notifId: number) =>
+    api.post(`/projects/sprints/solicitud/${notifId}/accept`).then(r => r.data),
+
+  rejectSprintSolicitud: (notifId: number, motivo?: string) =>
+    api.post(`/projects/sprints/solicitud/${notifId}/reject`, { motivo }).then(r => r.data),
 
   getActiveSprint: (id: number) =>
     api.get(`/projects/${id}/sprints/active`).then(r => r.data),
@@ -71,6 +76,11 @@ export const projectService = {
   getBurnup: (id: number) => api.get(`/projects/${id}/burnup`).then(r => r.data),
 
   // ══ NUEVOS: gestión de trimestres ═════════════════════════════════════════
+  //
+  // NOTA: tres métodos previos (createTrimestre, createSprintEnTrimestre,
+  // closeTrimestre) fueron eliminados porque apuntaban a endpoints inexistentes
+  // en el backend y siempre devolvían 404. La forma correcta de crear un
+  // sprint dentro de un trimestre es usar createSprint() con trimestre_id en el body.
 
   // Devuelve los trimestres del proyecto ordenados (T1 → T2 → T3),
   // cada uno con sus sprints y los tickets de cada sprint.
@@ -78,21 +88,35 @@ export const projectService = {
   getTrimestres: (proyectoId: number) =>
     api.get(`/projects/${proyectoId}/trimestres`).then(r => r.data),
 
-  // Crea un trimestre adicional manualmente (casos especiales).
-  createTrimestre: (proyectoId: number, dto: CreateTrimestreDto) =>
-    api.post(`/projects/${proyectoId}/trimestres`, dto).then(r => r.data),
-
-  // Crea un sprint directamente dentro de un trimestre específico.
-  // Más semántico que createSprint() con trimestre_id en el body.
-  createSprintEnTrimestre: (proyectoId: number, trimestreId: number, dto: any) =>
-    api.post(`/projects/${proyectoId}/trimestres/${trimestreId}/sprints`, dto).then(r => r.data),
-
-  // Cierra un trimestre. Solo funciona si todos sus sprints están finalizados.
-  closeTrimestre: (trimestreId: number) =>
-    api.patch(`/projects/trimestres/${trimestreId}/close`).then(r => r.data),
   // Genera trimestres para proyectos existentes o reconfigura los actuales
   generateTrimestres: (proyectoId: number, dto: { num: number; trimestres?: any[] }) =>
     api.post(`/projects/${proyectoId}/trimestres/generate`, dto).then(r => r.data),
+
+  // Genera los módulos (sprints) de la plantilla SDLC para un proyecto existente
+  // que no tiene módulos. force=true regenera (borra los no finalizados).
+  generarModulos: (proyectoId: number, force = false) =>
+    api.post(`/projects/${proyectoId}/generar-modulos`, { force }).then(r => r.data),
+
+  // ══ SUGERENCIAS INTELIGENTES DE MÓDULOS (IA + catálogo SDLC) ═══════════════
+  // Lista las sugerencias activas agrupadas por trimestre.
+  getSugerencias: (proyectoId: number) =>
+    api.get(`/projects/${proyectoId}/sugerencias`).then(r => r.data),
+
+  // Genera sugerencias (si no hay) analizando el contexto del proyecto.
+  generarSugerencias: (proyectoId: number) =>
+    api.post(`/projects/${proyectoId}/sugerencias/generar`).then(r => r.data),
+
+  // Fuerza un nuevo análisis (descarta las pendientes y vuelve a sugerir).
+  regenerarSugerencias: (proyectoId: number) =>
+    api.post(`/projects/${proyectoId}/sugerencias/regenerar`).then(r => r.data),
+
+  // Convierte una sugerencia en un módulo (sprint) editable con un clic.
+  crearModuloSugerencia: (sugId: number) =>
+    api.post(`/projects/sugerencias/${sugId}/crear-modulo`).then(r => r.data),
+
+  // Descarta una sugerencia.
+  descartarSugerencia: (sugId: number) =>
+    api.post(`/projects/sugerencias/${sugId}/descartar`).then(r => r.data),
 
   // Genera trimestres para múltiples proyectos a la vez
   bulkGenerateTrimestres: (dto: { projectIds: number[]; num: number; trimestres?: any[] }) =>
@@ -101,6 +125,10 @@ export const projectService = {
   // Edita un trimestre existente (nombre, fechas, tipo)
   updateTrimestre: (trimestreId: number, dto: any) =>
     api.patch(`/projects/trimestres/${trimestreId}`, dto).then(r => r.data),
+
+  // Cierra un trimestre (marca como finalizado)
+  closeTrimestre: (trimestreId: number) =>
+    api.patch(`/projects/trimestres/${trimestreId}/close`).then(r => r.data),
 
   // Vincula o desvincula un sprint de un trimestre
   assignSprintToTrimestre: (sprintId: number, trimestreId: number | null) =>

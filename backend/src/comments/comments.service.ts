@@ -1,18 +1,44 @@
-import { Injectable, ForbiddenException } from '@nestjs/common';
+import { Injectable, ForbiddenException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Comment } from './entities/comment.entity';
+import { Ticket, TicketStatus } from '../tickets/entities/ticket.entity';
 import { NotificationsService } from '../notifications/notifications.service';
+import { KanbanGateway }        from '../notifications/kanban.gateway';
 
 @Injectable()
 export class CommentsService {
+  private readonly logger = new Logger(CommentsService.name);
+
   constructor(
     @InjectRepository(Comment)
     private commentsRepository: Repository<Comment>,
+    @InjectRepository(Ticket)
+    private ticketsRepository: Repository<Ticket>,
     private readonly notificationsService: NotificationsService,
+    private readonly gateway: KanbanGateway,
   ) {}
 
   async create(ticketId: number, createCommentDto: any): Promise<Comment> {
+    // ── Auto-transición a "En desarrollo" ────────────────────────────────────
+    // Si el ticket estaba en "Por hacer" y quien comenta es el aprendiz asignado,
+    // pasarlo automáticamente a "En desarrollo". Esto elimina la fricción de que el
+    // aprendiz tenga que cambiar el estado manualmente al empezar a trabajar.
+    try {
+      const ticket = await this.ticketsRepository.findOne({ where: { id: ticketId } });
+      if (
+        ticket &&
+        ticket.estado === TicketStatus.TODO &&
+        ticket.asignado_a_id &&
+        Number(ticket.asignado_a_id) === Number(createCommentDto.usuario_id)
+      ) {
+        await this.ticketsRepository.update(ticketId, { estado: TicketStatus.IN_PROGRESS });
+        this.logger.log(`Ticket #${ticketId} movido a IN_PROGRESS por comentario del usuario ${createCommentDto.usuario_id}`);
+      }
+    } catch (err: any) {
+      this.logger.warn(`Auto-transición fallida para ticket #${ticketId}: ${err?.message}`);
+    }
+
     const comment = this.commentsRepository.create({
       ...createCommentDto,
       ticket_id: ticketId,
@@ -48,6 +74,9 @@ export class CommentsService {
         });
       }
     }
+
+    // ── Real-time: emitir comentario en vivo a todos viendo esta tarea ───────
+    this.gateway.broadcastCommentNew(ticketId, full ?? saved);
 
     return saved;
   }

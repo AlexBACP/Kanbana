@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Kanbana — Presentación de proyecto · SENA</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800;900&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="css/main.css"/>
+</head>
+<body>
+
+<!-- NAV -->
+<div id="counter">01 / 16</div>
+<div id="progress-bar" style="width:0%"></div>
+<div id="nav-dots"></div>
+<div id="nav-arrows">
+  <button class="arrow-btn" id="btn-prev" title="Anterior (←)">↑</button>
+  <button class="arrow-btn" id="btn-next" title="Siguiente (→)">↓</button>
+</div>
+
+<div id="pres">
+
+  <!-- 1 · INTRO -->
+  <section class="slide slide-dark" id="s-intro">
+    <div class="blob blob-green" style="width:460px;height:460px;top:-120px;right:-80px;opacity:.22;"></div>
+    <div class="blob blob-purple" style="width:300px;height:300px;bottom:-90px;left:-60px;opacity:.18;"></div>
+    <div class="slide-inner" style="display:flex;flex-direction:column;align-items:flex-start;gap:8px;">
+      <div class="klogo fade-up d1" id="logoIntro">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 46" fill="none"><path fill="#863bff" d="M25.946 44.938c-.664.845-2.021.375-2.021-.698V33.937a2.26 2.26 0 0 0-2.262-2.262H10.287c-.92 0-1.456-1.04-.92-1.788l7.48-10.471c1.07-1.497 0-3.578-1.842-3.578H1.237c-.92 0-1.456-1.04-.92-1.788L10.013.474c.214-.297.556-.474.92-.474h28.894c.92 0 1.456 1.04.92 1.788l-7.48 10.471c-1.07 1.498 0 3.579 1.842 3.579h11.377c.943 0 1.473 1.088.89 1.83L25.947 44.94z"/></svg>
+      </div>
+      <span class="eyebrow fade-up d2"><span class="dot-i"></span> SENA · Proyecto formativo de software</span>
+      <h1 class="title fade-up d3">Kanbana</h1>
+      <p class="lead fade-up d4" style="font-size:22px;max-width:680px;">Sistema de gestión ágil de proyectos formativos — del caos a un tablero visual con roles, automatización e inteligencia.</p>
+      <p class="fade-up d5" style="margin-top:18px;color:var(--text-on-dark-mute);font-size:14px;">Equipo de desarrollo · Ficha [N.º] · 2026</p>
+      <p class="fade-up d6" style="margin-top:28px;color:var(--sena-l);font-size:12px;font-weight:700;letter-spacing:1px;">Usa → o la barra espaciadora para avanzar</p>
+    </div>
+  </section>
+
+  <!-- 2 · ABSTRACT (EN) -->
+  <section class="slide slide-paper2" id="s-abstract">
+    <div class="grid-tex"></div>
+    <div class="slide-inner">
+      <span class="eyebrow fade-up d1"><span class="dot-i"></span> Abstract</span>
+      <h2 class="section-title fade-up d2">Project <span class="accent">overview</span></h2>
+      <p class="lead fade-up d3" style="margin-bottom:26px;">Kanbana is a web platform for agile project management, built for SENA software-training teams and ready for real-world development. It turns scattered coordination —tasks in WhatsApp, progress in spreadsheets, proof in email— into a single visual board with clear roles and an automated approval flow from task creation to final validation.</p>
+      <div class="stats fade-up d4">
+        <div class="stat"><div class="num">87</div><div class="lbl">quality tests executed</div></div>
+        <div class="stat"><div class="num">93%</div><div class="lbl">test effectiveness</div></div>
+        <div class="stat"><div class="num">4</div><div class="lbl">system roles</div></div>
+        <div class="stat"><div class="num">v1.3</div><div class="lbl">active development</div></div>
+      </div>
+    </div>
+    <div class="sena-foot">SENA · ADSO</div>
+  </section>
+
+  <!-- 3 · CONTEXTO -->
+  <section class="slide slide-paper" id="s-contexto">
+    <div class="slide-inner split">
+      <div>
+        <span class="eyebrow fade-up d1"><span class="dot-i"></span> Contexto del proyecto</span>
+        <h2 class="section-title fade-up d2">Formación que <span class="accent">simula la industria</span></h2>
+        <p class="lead fade-up d3">En las fichas de formación del SENA, los aprendices desarrollan proyectos reales en equipo. Pero la coordinación se hace de forma manual y dispersa, lejos de cómo trabajan los equipos profesionales de software.</p>
+        <p class="lead fade-up d4" style="margin-top:14px;">Kanbana lleva la metodología <b style="color:var(--sena-d)">Kanban</b> y un flujo de trabajo profesional al aula, organizando cada proyecto en trimestres y módulos.</p>
+      </div>
+      <div class="fade-up d4">
+        <div class="card"><div class="ic">🎓</div><h4>Entorno educativo</h4><p>Equipos de aprendices que aprenden desarrollando software real bajo la guía de un instructor.</p></div>
+        <div class="card" style="margin-top:14px;"><div class="ic">🏢</div><h4>Listo para la industria</h4><p>Arquitectura y flujos equivalentes a los de una empresa de desarrollo profesional.</p></div>
+      </div>
+    </div>
+    <div class="sena-foot">SENA · ADSO</div>
+  </section>
+
+  <!-- 4 · PROBLEMA -->
+  <section class="slide slide-dark" id="s-problema">
+    <div class="blob blob-green" style="width:380px;height:380px;top:-100px;left:-60px;opacity:.16;"></div>
+    <div class="slide-inner split">
+      <div>
+        <span class="eyebrow fade-up d1"><span class="dot-i"></span> Planteamiento del problema</span>
+        <h2 class="section-title fade-up d2">La coordinación <span class="accent">manual no escala</span></h2>
+        <ul class="checklist fade-up d3" style="margin-top:18px;">
+          <li>Tareas dispersas en WhatsApp, avances en hojas de cálculo, evidencias en correo.</li>
+          <li>Nadie sabe qué está listo ni quién es responsable de qué.</li>
+          <li>Sin visibilidad del progreso ni aprobación estructurada.</li>
+          <li>Reuniones de sincronización que consumen horas cada semana.</li>
+        </ul>
+        <p class="lead fade-up d4" style="margin-top:18px;font-style:italic;color:#fff;">¿Cómo centralizar y automatizar la gestión de un equipo de desarrollo formativo, con trazabilidad y aprobación por roles?</p>
+      </div>
+      <div class="fade-up d4">
+        <div class="win">
+          <div class="win-bar"><span class="wdot r"></span><span class="wdot y"></span><span class="wdot g"></span><span class="wt">Sin Kanbana — antes</span></div>
+          <div style="padding:14px;display:flex;flex-direction:column;gap:8px;background:#fff;">
+            <div style="font-size:12px;color:#c0392b;background:rgba(192,57,43,.08);border-left:3px solid #c0392b;border-radius:5px;padding:7px 9px;">📋 Tarea sin asignar desde hace 3 días</div>
+            <div style="font-size:12px;color:#b9791a;background:rgba(255,176,31,.1);border-left:3px solid #ffb01f;border-radius:5px;padding:7px 9px;">⚠️ ¿Quién hace el login? — WhatsApp 11:45 p.m.</div>
+            <div style="font-size:12px;color:#7a5b1a;background:rgba(200,150,42,.08);border-left:3px solid #c8962a;border-radius:5px;padding:7px 9px;">🔀 merge conflict en main sin resolver</div>
+            <div style="font-size:12px;color:#c0392b;background:rgba(192,57,43,.08);border-left:3px solid #c0392b;border-radius:5px;padding:7px 9px;">🚫 nadie sabe cuándo se entrega</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 5 · OBJETIVOS -->
+  <section class="slide slide-paper" id="s-objetivos">
+    <div class="slide-inner">
+      <span class="eyebrow fade-up d1"><span class="dot-i"></span> Objetivos</span>
+      <h2 class="section-title fade-up d2">Qué <span class="accent">resuelve</span> Kanbana</h2>
+      <div class="split" style="margin-top:22px;align-items:start;">
+        <div class="card fade-up d3" style="border-left:4px solid var(--sena);">
+          <div class="ic">🎯</div>
+          <h4>Objetivo general</h4>
+          <p style="font-size:14px;">Centralizar y automatizar la gestión de tareas de un equipo de desarrollo en una única plataforma web, desde la creación hasta la validación.</p>
+        </div>
+        <div class="fade-up d4">
+          <p style="font-size:12px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:var(--sena-d);margin-bottom:12px;">Objetivos específicos</p>
+          <ul class="checklist">
+            <li>Automatizar la asignación, seguimiento y aprobación de tareas.</li>
+            <li>Dar visibilidad del progreso en tiempo real a todos los roles.</li>
+            <li>Estructurar la jerarquía de revisión: aprendiz → líder → instructor.</li>
+            <li>Notificar a los responsables en cada cambio relevante.</li>
+            <li>Mantener trazabilidad completa de cada acción.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+    <div class="sena-foot">SENA · ADSO</div>
+  </section>
+
+  <!-- 6 · JUSTIFICACIÓN -->
+  <section class="slide slide-paper2" id="s-justificacion">
+    <div class="slide-inner">
+      <span class="eyebrow fade-up d1"><span class="dot-i"></span> Justificación</span>
+      <h2 class="section-title fade-up d2">Por qué <span class="accent">vale la pena</span></h2>
+      <div class="grid g3 fade-up d3" style="margin-top:24px;">
+        <div class="card"><div class="ic">⚙️</div><h4>Operativa</h4><p>Elimina el error humano de la coordinación manual y reduce las reuniones de sincronización.</p></div>
+        <div class="card"><div class="ic">💻</div><h4>Técnica</h4><p>Aplica buenas prácticas reales: control de versiones, roles, revisión por pares y trazabilidad.</p></div>
+        <div class="card"><div class="ic">🎓</div><h4>Formativa</h4><p>Prepara al aprendiz para entornos profesionales replicando el ciclo de vida del software.</p></div>
+      </div>
+    </div>
+    <div class="sena-foot">SENA · ADSO</div>
+  </section>
+
+  <!-- 7 · INNOVACIÓN -->
+  <section class="slide slide-dark" id="s-innovacion">
+    <div class="blob blob-purple" style="width:360px;height:360px;top:-80px;right:-50px;opacity:.2;"></div>
+    <div class="slide-inner">
+      <span class="eyebrow fade-up d1"><span class="dot-i"></span> Innovación</span>
+      <h2 class="section-title fade-up d2">Más que un <span class="accent">tablero</span></h2>
+      <div class="grid g2 fade-up d3" style="margin-top:22px;">
+        <div class="card"><div class="ic">✨</div><h4>Sugerencias con IA</h4><p>El sistema analiza cada proyecto y propone módulos a la medida del MVP; se crean con un clic.</p></div>
+        <div class="card"><div class="ic">🔗</div><h4>Integración con GitHub</h4><p>Commits, ramas y pull requests mueven las tareas automáticamente (to-do → en progreso → testing → hecho).</p></div>
+        <div class="card"><div class="ic">🧩</div><h4>Módulos SDLC automáticos</h4><p>Al crear un proyecto, los módulos del ciclo de vida se generan solos por trimestre.</p></div>
+        <div class="card"><div class="ic">🛡️</div><h4>Roles jerárquicos</h4><p>Coordinador, instructor, líder técnico y aprendiz, cada uno con permisos y flujo propio.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 8 · METODOLOGÍA / FASES -->
+  <section class="slide slide-paper" id="s-metodologia">
+    <div class="slide-inner">
+      <span class="eyebrow fade-up d1"><span class="dot-i"></span> Metodología</span>
+      <h2 class="section-title fade-up d2">Ciclo de vida del <span class="accent">software (SDLC)</span></h2>
+      <p class="lead fade-up d3" style="margin-bottom:22px;">El desarrollo siguió cuatro fases, reflejadas también en cómo Kanbana organiza los proyectos.</p>
+      <div class="phases fade-up d4">
+        <div class="phase"><div class="pn">FASE 1</div><h4>Análisis</h4><p>Entrevistas con el stakeholder, levantamiento y especificación de requerimientos.</p></div>
+        <div class="phase"><div class="pn">FASE 2</div><h4>Diseño</h4><p>Modelo entidad-relación, arquitectura del sistema y prototipos de interfaz.</p></div>
+        <div class="phase"><div class="pn">FASE 3</div><h4>Desarrollo</h4><p>Construcción modular del backend y el frontend con control de versiones.</p></div>
+        <div class="phase"><div class="pn">FASE 4</div><h4>Pruebas y despliegue</h4><p>Pruebas funcionales, corrección de errores y puesta en producción.</p></div>
+      </div>
+    </div>
+    <div class="sena-foot">SENA · ADSO</div>
+  </section>
+
+  <!-- 9 · ARQUITECTURA -->
+  <section class="slide slide-paper2" id="s-arquitectura">
+    <div class="slide-inner">
+      <span class="eyebrow fade-up d1"><span class="dot-i"></span> Arquitectura y stack</span>
+      <h2 class="section-title fade-up d2">Tecnología de <span class="accent">nivel empresarial</span></h2>
+      <div class="grid g3 fade-up d3" style="margin-top:24px;">
+        <div class="card">
+          <div class="ic">🖥️</div><h4>Frontend</h4>
+          <p>React 18 · TypeScript · Vite · Tailwind CSS · TanStack Query · Zustand · React Router · dnd-kit.</p>
+        </div>
+        <div class="card">
+          <div class="ic">⚙️</div><h4>Backend</h4>
+          <p>NestJS · TypeScript · TypeORM · Passport JWT (refresh tokens) · Multer · bcrypt · class-validator.</p>
+        </div>
+        <div class="card">
+          <div class="ic">🗄️</div><h4>Base de datos</h4>
+          <p>MySQL 8.0 con TypeORM. Relaciones ORM y sincronización automática en desarrollo.</p>
+        </div>
+      </div>
+      <p class="fade-up d4 muted" style="margin-top:18px;font-size:13px;">Arquitectura modular MVC · API REST · autenticación JWT con refresh · SPA con estado global y caché inteligente.</p>
+    </div>
+    <div class="sena-foot">SENA · ADSO</div>
+  </section>
+
+  <!-- 10 · REQUERIMIENTOS -->
+  <section class="slide slide-paper" id="s-requerimientos">
+    <div class="slide-inner">
+      <span class="eyebrow fade-up d1"><span class="dot-i"></span> Requerimientos funcionales</span>
+      <h2 class="section-title fade-up d2">Qué <span class="accent">hace</span> el sistema</h2>
+      <div class="grid g3 fade-up d3" style="margin-top:22px;">
+        <div class="card">
+          <h4 style="display:flex;align-items:center;gap:8px;">📋 Gestión</h4>
+          <div class="row"><div><h4>Tableros y tareas <span class="chip chip-alta">Alta</span></h4><p>Crear, asignar y mover tareas en el tablero Kanban.</p></div></div>
+          <div class="row"><div><h4>Módulos y trimestres <span class="chip chip-alta">Alta</span></h4><p>Organizar el proyecto en sprints por trimestre.</p></div></div>
+          <div class="row"><div><h4>Cola de trabajo (pool) <span class="chip chip-media">Media</span></h4><p>Tareas disponibles para que el aprendiz las tome.</p></div></div>
+        </div>
+        <div class="card">
+          <h4 style="display:flex;align-items:center;gap:8px;">🔐 Seguridad</h4>
+          <div class="row"><div><h4>Autenticación <span class="chip chip-alta">Alta</span></h4><p>Inicio de sesión seguro con JWT y refresh tokens.</p></div></div>
+          <div class="row"><div><h4>Roles y permisos <span class="chip chip-alta">Alta</span></h4><p>Control de acceso jerárquico por rol.</p></div></div>
+          <div class="row"><div><h4>2FA <span class="chip chip-media">Media</span></h4><p>Doble factor con Google Authenticator.</p></div></div>
+        </div>
+        <div class="card">
+          <h4 style="display:flex;align-items:center;gap:8px;">📊 Reportes</h4>
+          <div class="row"><div><h4>Notificaciones <span class="chip chip-alta">Alta</span></h4><p>Avisos in-app y por correo en cada cambio.</p></div></div>
+          <div class="row"><div><h4>Métricas <span class="chip chip-media">Media</span></h4><p>Velocity, burnup y actividad por desarrollador.</p></div></div>
+          <div class="row"><div><h4>Adjuntos <span class="chip chip-media">Media</span></h4><p>Evidencias obligatorias para cerrar tareas.</p></div></div>
+        </div>
+      </div>
+    </div>
+    <div class="sena-foot">SENA · ADSO</div>
+  </section>
+
+  <!-- 11 · UML / FLUJO -->
+  <section class="slide slide-dark" id="s-uml">
+    <div class="blob blob-green" style="width:340px;height:340px;bottom:-90px;right:-40px;opacity:.16;"></div>
+    <div class="slide-inner">
+      <span class="eyebrow fade-up d1"><span class="dot-i"></span> Modelado del sistema (UML)</span>
+      <h2 class="section-title fade-up d2">Ciclo de vida de una <span class="accent">tarea</span></h2>
+      <p class="lead fade-up d3" style="margin-bottom:30px;">Cada tarea avanza por estados controlados; los permisos cambian según el rol.</p>
+      <div class="flow fade-up d4">
+        <div class="node">Por hacer<small>to_do</small></div>
+        <span class="arr">→</span>
+        <div class="node">En desarrollo<small>in_progress</small></div>
+        <span class="arr">→</span>
+        <div class="node">Testing<small>revisión del líder</small></div>
+        <span class="arr">→</span>
+        <div class="node">Hecho<small>aprobado por instructor</small></div>
+      </div>
+      <p class="fade-up d5" style="margin-top:28px;font-size:13px;color:var(--text-on-dark-mute);">Aprendiz: hasta «en desarrollo» · Líder técnico: hasta «testing» · Instructor: aprueba y marca «hecho».</p>
+    </div>
+  </section>
+
+  <!-- 12 · BASE DE DATOS -->
+  <section class="slide slide-paper2" id="s-bd">
+    <div class="slide-inner">
+      <span class="eyebrow fade-up d1"><span class="dot-i"></span> Diseño de base de datos</span>
+      <h2 class="section-title fade-up d2">Modelo de <span class="accent">entidades</span></h2>
+      <div class="erd fade-up d3" style="margin-top:22px;">
+        <div class="ent"><div class="ent-h">Usuario</div><ul><li><b>rol</b> · es_lider</li><li>nombre · correo</li><li>ficha</li></ul></div>
+        <div class="ent"><div class="ent-h">Proyecto</div><ul><li><b>nombre</b></li><li>ficha · líder</li><li>fechas</li></ul></div>
+        <div class="ent"><div class="ent-h">Sprint (módulo)</div><ul><li><b>nombre</b></li><li>trimestre</li><li>estado</li></ul></div>
+        <div class="ent"><div class="ent-h">Ticket (tarea)</div><ul><li><b>título</b> · estado</li><li>prioridad</li><li>asignado_a</li></ul></div>
+        <div class="ent"><div class="ent-h">Comentario</div><ul><li>contenido</li><li>autor · ticket</li></ul></div>
+        <div class="ent"><div class="ent-h">Notificación</div><ul><li>tipo · mensaje</li><li>usuario</li></ul></div>
+        <div class="ent"><div class="ent-h">Adjunto</div><ul><li>archivo</li><li>ticket</li></ul></div>
+        <div class="ent"><div class="ent-h">Ficha · Trimestre</div><ul><li>programa</li><li>fechas</li></ul></div>
+      </div>
+      <p class="fade-up d4 muted" style="margin-top:16px;font-size:13px;">Modelo relacional normalizado, con integridad referencial gestionada por TypeORM.</p>
+    </div>
+    <div class="sena-foot">SENA · ADSO</div>
+  </section>
+
+  <!-- 13 · PRODUCTO (mockup) -->
+  <section class="slide slide-paper" id="s-producto">
+    <div class="slide-inner">
+      <span class="eyebrow fade-up d1"><span class="dot-i"></span> El producto</span>
+      <h2 class="section-title fade-up d2">El tablero <span class="accent">en acción</span></h2>
+      <div class="win fade-up d3" style="margin-top:18px;max-width:960px;">
+        <div class="win-bar"><span class="wdot r"></span><span class="wdot y"></span><span class="wdot g"></span><span class="wt">Kanbana — Tablero del proyecto</span></div>
+        <div class="kb">
+          <div class="kb-col todo"><h5>Por hacer</h5>
+            <div class="kb-card" style="animation-delay:.1s">Diseñar modelo E-R<div class="mini">⚑ Alta · sin asignar</div></div>
+            <div class="kb-card" style="animation-delay:.2s">Wireframes del tablero<div class="mini">Media · Daniela</div></div>
+          </div>
+          <div class="kb-col prog"><h5>En desarrollo</h5>
+            <div class="kb-card b" style="animation-delay:.3s">API de autenticación<div class="mini">Alta · Sebastián</div></div>
+            <div class="kb-card b" style="animation-delay:.4s">Componente Kanban<div class="mini">Media · Andrés</div></div>
+          </div>
+          <div class="kb-col test"><h5>Testing</h5>
+            <div class="kb-card a" style="animation-delay:.5s">Notificaciones<div class="mini">🧪 revisión del líder</div></div>
+          </div>
+          <div class="kb-col done"><h5>Hecho</h5>
+            <div class="kb-card d" style="animation-delay:.6s">Login + roles<div class="mini">✓ aprobado</div></div>
+            <div class="kb-card d" style="animation-delay:.7s">Estructura del proyecto<div class="mini">✓ aprobado</div></div>
+          </div>
+        </div>
+      </div>
+      <p class="fade-up d4 muted" style="margin-top:14px;font-size:13px;">Arrastra y suelta · cada tarjeta es una tarea con responsable, prioridad y evidencias.</p>
+    </div>
+    <div class="sena-foot">SENA · ADSO</div>
+  </section>
+
+  <!-- 14 · ALCANCE E IMPACTO -->
+  <section class="slide slide-green" id="s-alcance">
+    <div class="slide-inner">
+      <span class="eyebrow fade-up d1"><span class="dot-i"></span> Alcance e impacto</span>
+      <h2 class="section-title fade-up d2" style="color:#fff;">Una versión <span style="text-decoration:underline;text-decoration-color:rgba(255,255,255,.5);">funcional y probada</span></h2>
+      <div class="stats fade-up d3" style="margin:26px 0;">
+        <div class="stat"><div class="num">87</div><div class="lbl">pruebas de calidad ejecutadas</div></div>
+        <div class="stat"><div class="num">93%</div><div class="lbl">efectividad de las pruebas</div></div>
+        <div class="stat"><div class="num">4</div><div class="lbl">roles implementados</div></div>
+        <div class="stat"><div class="num">v1.3.0</div><div class="lbl">en desarrollo activo</div></div>
+      </div>
+      <div class="roles fade-up d4" style="max-width:760px;">
+        <div class="role" style="background:rgba(255,255,255,.12);border-color:rgba(255,255,255,.2);"><span class="lvl" style="background:#fff;color:var(--sena-d);">1</span><div><div class="rn" style="color:#fff;">Coordinador</div><div class="rd" style="color:rgba(255,255,255,.8);">Administra fichas, usuarios y toda la plataforma.</div></div></div>
+        <div class="role" style="background:rgba(255,255,255,.12);border-color:rgba(255,255,255,.2);"><span class="lvl" style="background:#fff;color:var(--sena-d);">2</span><div><div class="rn" style="color:#fff;">Instructor</div><div class="rd" style="color:rgba(255,255,255,.8);">Gestiona sus fichas y proyectos; aprueba módulos.</div></div></div>
+        <div class="role" style="background:rgba(255,255,255,.12);border-color:rgba(255,255,255,.2);"><span class="lvl" style="background:#fff;color:var(--sena-d);">3</span><div><div class="rn" style="color:#fff;">Líder técnico</div><div class="rd" style="color:rgba(255,255,255,.8);">Aprendiz-líder: organiza al equipo y revisa el trabajo.</div></div></div>
+        <div class="role" style="background:rgba(255,255,255,.12);border-color:rgba(255,255,255,.2);"><span class="lvl" style="background:#fff;color:var(--sena-d);">4</span><div><div class="rn" style="color:#fff;">Aprendiz</div><div class="rd" style="color:rgba(255,255,255,.8);">Toma tareas, trabaja y entrega evidencias.</div></div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 15 · CONCLUSIÓN -->
+  <section class="slide slide-dark" id="s-conclusion">
+    <div class="blob blob-green" style="width:420px;height:420px;top:-110px;right:-70px;opacity:.18;"></div>
+    <div class="slide-inner">
+      <span class="eyebrow fade-up d1"><span class="dot-i"></span> Conclusión</span>
+      <h2 class="section-title fade-up d2">Más que una mejora <span class="accent">técnica</span></h2>
+      <p class="lead fade-up d3" style="font-size:20px;color:#fff;max-width:860px;">Kanbana demuestra que un equipo de formación puede trabajar con los mismos estándares de la industria: roles claros, flujo automatizado, trazabilidad y evidencia real del trabajo.</p>
+      <ul class="checklist fade-up d4" style="margin-top:22px;max-width:780px;">
+        <li>Centraliza la gestión y elimina la coordinación dispersa.</li>
+        <li>Automatiza el flujo de aprobación por roles de principio a fin.</li>
+        <li>Suma IA e integración con GitHub como diferenciadores.</li>
+        <li>Base escalable, lista para crecer hacia entornos empresariales.</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- 16 · CIERRE -->
+  <section class="slide slide-green" id="s-cierre">
+    <div class="blob blob-lime" style="width:420px;height:420px;top:-120px;left:-70px;opacity:.25;"></div>
+    <div class="slide-inner" style="display:flex;flex-direction:column;align-items:center;text-align:center;gap:14px;">
+      <div class="klogo fade-up d1" style="filter:drop-shadow(0 10px 26px rgba(0,0,0,.25));">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 46" fill="none"><path fill="#ffffff" d="M25.946 44.938c-.664.845-2.021.375-2.021-.698V33.937a2.26 2.26 0 0 0-2.262-2.262H10.287c-.92 0-1.456-1.04-.92-1.788l7.48-10.471c1.07-1.497 0-3.578-1.842-3.578H1.237c-.92 0-1.456-1.04-.92-1.788L10.013.474c.214-.297.556-.474.92-.474h28.894c.92 0 1.456 1.04.92 1.788l-7.48 10.471c-1.07 1.498 0 3.579 1.842 3.579h11.377c.943 0 1.473 1.088.89 1.83L25.947 44.94z"/></svg>
+      </div>
+      <h1 class="title fade-up d2" style="color:#fff;font-size:clamp(36px,6vw,72px);">Gracias</h1>
+      <p class="lead fade-up d3" style="color:rgba(255,255,255,.95);font-size:20px;">Kanbana — del caos al control, con un solo tablero.</p>
+      <p class="fade-up d4" style="color:rgba(255,255,255,.8);font-size:13px;letter-spacing:1px;margin-top:6px;">SENA · Análisis y Desarrollo de Software · 2026</p>
+    </div>
+  </section>
+
+</div>
+
+<script src="js/presentation.js"></script>
+</body>
+</html>

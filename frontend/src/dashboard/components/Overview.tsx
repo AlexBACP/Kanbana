@@ -35,11 +35,11 @@ export const Overview = () => {
 
   // Reloj en tiempo real
   const [time, setTime] = useState(() =>
-    new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+    new Date().toLocaleTimeString('es-CO', { hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: true }).toLowerCase()
   );
   useEffect(() => {
     const id = setInterval(() => {
-      setTime(new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+      setTime(new Date().toLocaleTimeString('es-CO', { hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: true }).toLowerCase());
     }, 1000);
     return () => clearInterval(id);
   }, []);
@@ -75,7 +75,7 @@ export const Overview = () => {
     <div className="space-y-6">
 
       {/* ── Banner ───────────────────────────────────────────────────────── */}
-      <div className="relative overflow-hidden m-6 rounded-md p-8 text-white shadow-lg bg-gradient-to-br from-emerald-700 via-teal-800 to-teal-950">
+      <div className="relative overflow-hidden m-6 rounded-md p-8 text-white shadow-lg" style={{ background: 'linear-gradient(135deg, #1e293b 0%, #1e3a5f 50%, #0f172a 100%)' }}>
         <div className="absolute top-0 right-0 w-2/5 h-full opacity-15 pointer-events-none">
           <svg viewBox="0 0 220 200" xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
             <polygon points="110,18 140,36 140,72 110,90 80,72 80,36" fill="none" stroke="currentColor" strokeWidth="1.8" opacity="0.7"/>
@@ -104,7 +104,7 @@ export const Overview = () => {
             <h1 className="text-3xl font-bold tracking-tight">
               Hola, {user?.nombre?.split(' ')[0]} {user?.nombre?.split(' ')[1] || ''}
             </h1>
-            <p className="text-emerald-200 font-medium text-sm">
+            <p className="text-blue-200 font-medium text-sm">
               {stats
                 ? `${stats.proyectos_activos} proyecto${stats.proyectos_activos !== 1 ? 's' : ''} activo${stats.proyectos_activos !== 1 ? 's' : ''} · avance global ${stats.avance_porcentual}%`
                 : 'Resumen global del centro de formación'}
@@ -114,9 +114,19 @@ export const Overview = () => {
               <p className="text-xs text-white/90 leading-relaxed">{suggestion}</p>
             </div>
           </div>
-          <div className="hidden sm:flex flex-col items-center gap-1 bg-white/10 backdrop-blur-md px-5 py-3 rounded-md border border-white/20 min-w-[120px]">
-            <span className="text-3xl font-black">{isLoading ? '—' : `${stats?.avance_porcentual ?? 0}%`}</span>
-            <span className="text-xs font-semibold uppercase tracking-wider opacity-80">Avance global</span>
+          <div className="hidden sm:flex flex-col items-center gap-3">
+            <div className="flex flex-col items-center gap-1 bg-white/10 backdrop-blur-md px-5 py-3 rounded-md border border-white/20 min-w-[120px]">
+              <span className="text-3xl font-black">{isLoading ? '—' : `${stats?.avance_porcentual ?? 0}%`}</span>
+              <span className="text-xs font-semibold uppercase tracking-wider opacity-80">Avance global</span>
+            </div>
+            {!isLoading && (stats?.tickets_bloqueados ?? 0) > 0 && (
+              <div className="flex items-center gap-1.5 bg-rose-500/20 border border-rose-400/30 rounded-md px-3 py-1.5">
+                <AlertTriangle size={11} className="text-rose-300" />
+                <span className="text-xs font-bold text-rose-200">
+                  {stats!.tickets_bloqueados} bloqueada{stats!.tickets_bloqueados !== 1 ? 's' : ''}
+                </span>
+              </div>
+            )}
           </div>
         </div>
       </div>

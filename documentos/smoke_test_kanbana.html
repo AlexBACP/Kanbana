@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Smoke Test — Kanbana</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  :root {
+    --bg-dark: #141414;
+    --bg-mid:  #1e1e1e;
+    --bg-card: #282828;
+    --text-main: #f5f5f5;
+    --text-dim: #9a9a9a;
+    --text-soft: #d4d4d4;
+    --accent-red: #ff5f5f;
+    --accent-blue: #4d9fff;
+    --accent-green: #2ecc71;
+    --accent-gold: #f5c518;
+    --accent-purple: #b06fe4;
+    --border: rgba(255, 255, 255, 0.09);
+  }
+  html { scroll-behavior: smooth; }
+  body {
+    font-family: 'Inter', system-ui, sans-serif;
+    background: var(--bg-dark);
+    color: var(--text-main);
+    line-height: 1.55;
+    font-size: 15px;
+    padding-bottom: 80px;
+  }
+
+  /* ── Cabecera ── */
+  header {
+    padding: 48px 32px 32px;
+    max-width: 1100px;
+    margin: 0 auto;
+  }
+  .tag {
+    display: inline-flex; align-items: center; gap: 9px;
+    padding: 6px 14px;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid var(--border);
+    border-radius: 100px;
+    font-size: 11px; font-weight: 700; letter-spacing: 2.5px;
+    text-transform: uppercase; color: var(--text-dim);
+    margin-bottom: 18px;
+  }
+  .tag .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent-green); box-shadow: 0 0 12px var(--accent-green); animation: pulse 2s ease-in-out infinite; }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .4; } }
+  h1 { font-size: 40px; font-weight: 900; letter-spacing: -1px; margin-bottom: 10px; }
+  h1 span { color: var(--accent-green); }
+  .subtitle { color: var(--text-dim); font-size: 15px; max-width: 720px; }
+  .meta { margin-top: 16px; font-size: 12px; color: var(--text-dim); display: flex; gap: 18px; flex-wrap: wrap; }
+  .meta b { color: var(--text-soft); }
+
+  /* ── Barra de resumen (sticky) ── */
+  .summary {
+    position: sticky; top: 0; z-index: 50;
+    background: rgba(20,20,20,0.92); backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border);
+    padding: 14px 32px;
+  }
+  .summary-inner { max-width: 1100px; margin: 0 auto; display: flex; align-items: center; gap: 22px; flex-wrap: wrap; }
+  .counts { display: flex; gap: 16px; font-size: 13px; font-weight: 700; }
+  .counts .c { display: flex; align-items: center; gap: 7px; }
+  .pill-dot { width: 10px; height: 10px; border-radius: 50%; }
+  .d-ok { background: var(--accent-green); } .d-fail { background: var(--accent-red); } .d-pend { background: var(--text-dim); }
+  .progress-wrap { flex: 1; min-width: 180px; height: 9px; background: var(--bg-card); border-radius: 100px; overflow: hidden; }
+  .progress-bar { height: 100%; width: 0%; background: linear-gradient(90deg, var(--accent-green), var(--accent-blue)); transition: width .35s ease; }
+  .btn-reset { background: var(--bg-card); border: 1px solid var(--border); color: var(--text-dim); font-size: 12px; font-weight: 700; padding: 7px 14px; border-radius: 8px; cursor: pointer; }
+  .btn-reset:hover { color: var(--text-main); border-color: var(--accent-red); }
+
+  /* ── Contenido ── */
+  main { max-width: 1100px; margin: 0 auto; padding: 28px 32px; }
+  .note {
+    background: rgba(77,159,255,0.07); border: 1px solid rgba(77,159,255,0.22);
+    border-radius: 12px; padding: 16px 18px; margin-bottom: 26px; font-size: 13.5px; color: var(--text-soft);
+  }
+  .note.warn { background: rgba(245,197,24,0.07); border-color: rgba(245,197,24,0.25); }
+  .note b { color: var(--text-main); }
+  .note code { background: rgba(255,255,255,.08); padding: 1px 6px; border-radius: 5px; font-size: 12px; }
+
+  section { margin-bottom: 34px; }
+  .sec-head { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+  .sec-num { font-size: 13px; font-weight: 900; color: var(--bg-dark); background: var(--accent-blue); width: 30px; height: 30px; border-radius: 8px; display: flex; align-items: center; justify-content: center; }
+  .sec-title { font-size: 19px; font-weight: 800; }
+  .sec-prio { margin-left: auto; font-size: 10px; font-weight: 800; letter-spacing: 1.5px; text-transform: uppercase; padding: 4px 10px; border-radius: 100px; }
+  .prio-crit { background: rgba(255,95,95,0.13); color: var(--accent-red); }
+  .prio-imp  { background: rgba(245,197,24,0.13); color: var(--accent-gold); }
+  .prio-opt  { background: rgba(154,154,154,0.13); color: var(--text-dim); }
+
+  .test {
+    background: var(--bg-mid); border: 1px solid var(--border); border-radius: 12px;
+    padding: 16px 18px; margin-bottom: 10px; transition: border-color .2s;
+  }
+  .test[data-status="ok"]   { border-color: rgba(46,204,113,0.4); }
+  .test[data-status="fail"] { border-color: rgba(255,95,95,0.45); }
+  .test-top { display: flex; align-items: flex-start; gap: 14px; }
+  .test-id { font-size: 11px; font-weight: 800; color: var(--text-dim); background: var(--bg-card); padding: 3px 8px; border-radius: 6px; white-space: nowrap; margin-top: 1px; }
+  .test-body { flex: 1; min-width: 0; }
+  .test-title { font-size: 15px; font-weight: 700; margin-bottom: 5px; }
+  .verified { font-size: 9px; font-weight: 800; letter-spacing: 1px; text-transform: uppercase; color: var(--accent-green); border: 1px solid rgba(46,204,113,.3); padding: 2px 7px; border-radius: 100px; margin-left: 8px; vertical-align: middle; }
+  .steps { font-size: 13px; color: var(--text-soft); margin: 4px 0; padding-left: 18px; }
+  .steps li { margin-bottom: 2px; }
+  .expected { font-size: 12.5px; color: var(--text-dim); margin-top: 6px; }
+  .expected b { color: var(--accent-green); }
+  .status-btns { display: flex; gap: 6px; }
+  .sbtn { width: 30px; height: 30px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg-card); cursor: pointer; font-size: 14px; display: flex; align-items: center; justify-content: center; opacity: .5; transition: all .15s; }
+  .sbtn:hover { opacity: 1; }
+  .test[data-status="ok"]   .sbtn-ok   { opacity: 1; background: rgba(46,204,113,0.2); border-color: var(--accent-green); }
+  .test[data-status="fail"] .sbtn-fail { opacity: 1; background: rgba(255,95,95,0.2); border-color: var(--accent-red); }
+  code.k { background: rgba(77,159,255,0.13); color: var(--accent-blue); padding: 1px 6px; border-radius: 5px; font-size: 12px; font-weight: 600; }
+
+  footer { max-width: 1100px; margin: 20px auto 0; padding: 24px 32px; border-top: 1px solid var(--border); color: var(--text-dim); font-size: 12px; }
+
+  @media print {
+    .summary { position: static; } .status-btns { display: none; } .btn-reset { display: none; }
+    body { background: #fff; color: #111; } .test, .note, section { break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="tag"><span class="dot"></span> Verificación previa a la demo</div>
+  <h1>Smoke Test — <span>Kanbana</span></h1>
+  <p class="subtitle">Recorrido de los caminos críticos del sistema antes de la presentación. Marca cada prueba como <b style="color:var(--accent-green)">OK</b> o <b style="color:var(--accent-red)">Falla</b>; el progreso se guarda en este navegador.</p>
+  <div class="meta">
+    <span>Proyecto: <b>Kanbana — Gestión de proyectos formativos SENA</b></span>
+    <span>Frontend: <b>http://localhost:5173</b></span>
+    <span>Backend: <b>http://localhost:3000</b></span>
+  </div>
+</header>
+
+<div class="summary">
+  <div class="summary-inner">
+    <div class="counts">
+      <span class="c"><span class="pill-dot d-ok"></span><span id="n-ok">0</span> OK</span>
+      <span class="c"><span class="pill-dot d-fail"></span><span id="n-fail">0</span> Falla</span>
+      <span class="c"><span class="pill-dot d-pend"></span><span id="n-pend">0</span> Pendiente</span>
+    </div>
+    <div class="progress-wrap"><div class="progress-bar" id="bar"></div></div>
+    <span id="pct" style="font-size:13px;font-weight:800;color:var(--text-soft)">0%</span>
+    <button class="btn-reset" onclick="resetAll()">Reiniciar</button>
+  </div>
+</div>
+
+<main>
+  <div class="note">
+    <b>Datos de prueba (entorno actual):</b> Coordinador (1) · Instructor <b>oscar rojas</b> (<code>alexpbrandon@gmail.com</code>) · 38 aprendices.
+    Proyectos útiles: <b>#46</b> "Agendamiento" (5 miembros, sin líder — ideal para asignar líder) ·
+    <b>#44</b> "Gestión Académica" (con sugerencias IA listas) · <b>#45</b> (para generar sugerencias desde cero) ·
+    <b>#49</b> "PROYECTO 1" (7 trimestres, 21 módulos). Plantilla de import: <code>Desktop\plantilla_aprendices_2203Alex.xlsx</code>.
+  </div>
+  <div class="note warn">
+    <b>Limitación conocida:</b> el flujo OAuth de GitHub requiere configurar <code>GITHUB_CLIENT_ID</code>/<code>GITHUB_CLIENT_SECRET</code>
+    (OAuth App) y un túnel (ngrok) para webhooks. Sin eso, la sección 6 solo se valida a nivel de interfaz.
+  </div>
+
+  <!-- contenedor de pruebas generadas por JS -->
+  <div id="tests"></div>
+</main>
+
+<footer>
+  Smoke test generado para la presentación de Kanbana · Marca el estado de cada caso y exporta con <b>Ctrl+P</b> (imprimir / PDF) para dejar evidencia.
+</footer>
+
+<script>
+const DATA = [
+  {
+    num: 1, title: 'Autenticación y roles', prio: 'crit',
+    tests: [
+      { id:'ST-01', t:'Login por cada rol', steps:['Inicia sesión como coordinador, luego instructor, luego aprendiz (en sesiones/ventanas separadas).'], exp:'Cada rol entra a su dashboard correcto (coordinador / instructor / aprendiz).' },
+      { id:'ST-02', t:'Sesión persistente (refresh token)', steps:['Permanece logueado y navega tras varios minutos / recarga.'], exp:'No te expulsa: el access token se renueva de forma transparente.' },
+      { id:'ST-03', t:'2FA (doble factor)', steps:['Configuración → Seguridad → Activar 2FA y completa el código.'], exp:'La cuenta queda con 2FA activo; al re-loguear pide el código.' },
+      { id:'ST-04', t:'Cierre de sesión', steps:['Cerrar sesión.'], exp:'Limpia la sesión y redirige al login.' },
+    ]
+  },
+  {
+    num: 2, title: 'Fichas y aprendices', prio: 'crit',
+    tests: [
+      { id:'ST-05', t:'Crear ficha con trimestres automáticos', steps:['Como instructor, crea una ficha eligiendo tipo de formación (tecnólogo o técnico).'], exp:'Se generan los trimestres SDLC automáticamente (7 tecnólogo / 3 técnico).' },
+      { id:'ST-06', t:'Importar aprendices masivo (Excel)', steps:['En la ficha → "Agregar aprendices masivo" → sube la plantilla .xlsx.'], exp:'Se crean/vinculan los aprendices y llega correo de confirmación.' },
+      { id:'ST-07', t:'Invitar aprendiz individual', steps:['Ficha → invitar aprendiz (nombre, correo, documento).'], exp:'Se crea la cuenta y recibe correo para confirmar.' },
+      { id:'ST-08', t:'Promover aprendiz a Líder Técnico', steps:['En la ficha, promueve un aprendiz a Líder Técnico.'], exp:'El aprendiz queda con sub-rol líder (es_lider_tecnico).' },
+    ]
+  },
+  {
+    num: 3, title: 'Proyectos y módulos', prio: 'crit',
+    tests: [
+      { id:'ST-09', t:'Crear proyecto → módulos automáticos', v:true, steps:['Como instructor, crea un proyecto dentro de una ficha.'], exp:'El proyecto nace con los módulos de la plantilla SDLC repartidos por trimestre.' },
+      { id:'ST-10', t:'Generar módulos en proyecto existente', steps:['Abre un proyecto con ficha pero sin módulos → botón "Generar módulos".'], exp:'Se crean los módulos base. (Nota: hoy todos los proyectos ya tienen módulos por el seed.)' },
+      { id:'ST-11', t:'Asignar Líder Técnico + interfaz de líder', v:true, steps:['Dashboard instructor → tarjeta del proyecto #46 → selector de líder → elige un miembro.','Entra como ese aprendiz (o recarga).'], exp:'Aparece la corona con su nombre y el aprendiz pasa a ver el LiderDashboard.' },
+      { id:'ST-12', t:'Activar y cerrar módulo', steps:['Activa un módulo del proyecto; al terminar, ciérralo.'], exp:'El módulo cambia de estado; no cierra si quedan tareas sin completar.' },
+      { id:'ST-13', t:'Flujo de revisión de módulo', steps:['Líder envía el módulo a revisión → instructor aprueba o pide correcciones.'], exp:'Notificaciones a ambos lados; el estado del módulo refleja la decisión.' },
+    ]
+  },
+  {
+    num: 4, title: 'Tablero Kanban y tareas', prio: 'crit',
+    tests: [
+      { id:'ST-14', t:'Crear tarea', steps:['En un módulo, crea una tarea con título, prioridad y asignado.'], exp:'La tarjeta aparece en la columna "Por hacer".' },
+      { id:'ST-15', t:'Mover estados con permisos por rol', steps:['Mueve una tarea to_do → in_progress → testing → done.'], exp:'Aprendiz solo hasta "en desarrollo"; líder hasta testing; instructor hasta done.' },
+      { id:'ST-16', t:'Pool / tomar tarea (claim)', steps:['Como aprendiz, toma una tarea del pool.'], exp:'La tarea queda asignada al aprendiz que la tomó.' },
+      { id:'ST-17', t:'Adjunto obligatorio', steps:['Intenta marcar como "done" una tarea documental sin adjunto.'], exp:'Se bloquea hasta subir el archivo requerido.' },
+      { id:'ST-18', t:'Bloquear / desbloquear tarea', steps:['Marca una tarea como bloqueada con motivo y luego desbloquéala.'], exp:'La tarjeta muestra el impedimento; no puede completarse bloqueada.' },
+      { id:'ST-19', t:'Comentarios y subtareas', steps:['Comenta una tarea (con retroalimentación oficial si eres admin) y crea una subtarea.'], exp:'Comentario y subtarea se guardan y se muestran.' },
+    ]
+  },
+  {
+    num: 5, title: 'Inteligencia artificial', prio: 'imp',
+    tests: [
+      { id:'ST-20', t:'Asistente KanbanaAI', steps:['Abre el chat IA y pregunta por el estado de tu proyecto/tareas.'], exp:'Responde con datos reales del usuario (no inventa).' },
+      { id:'ST-21', t:'Generar sugerencias inteligentes', v:true, steps:['Abre /projects/45 → tarjeta "Sugerencias inteligentes" → "Generar sugerencias".'], exp:'En ~7-10s aparecen tarjetas IA por trimestre (categoría, descripción, justificación).' },
+      { id:'ST-22', t:'Crear módulo desde una sugerencia (1 clic)', v:true, steps:['En una sugerencia pulsa "Crear módulo" (o usa /projects/44 que ya tiene sugerencias).'], exp:'Se crea un módulo editable en el trimestre y la tarjeta queda "Módulo creado".' },
+      { id:'ST-23', t:'Descartar / Regenerar', steps:['Descarta una sugerencia y usa "Regenerar".'], exp:'La descartada desaparece; regenerar produce un nuevo análisis.' },
+      { id:'ST-24', t:'Fallback a catálogo', steps:['(Opcional) Con la IA caída, generar sugerencias.'], exp:'Cae al catálogo SDLC sin romperse (fuente = catálogo).' },
+    ]
+  },
+  {
+    num: 6, title: 'Integración GitHub', prio: 'imp',
+    tests: [
+      { id:'ST-25', t:'Estado de conexión (UI)', steps:['Configuración → Integraciones.'], exp:'Muestra estado de GitHub; sin OAuth App, "No configurado" y botón deshabilitado.' },
+      { id:'ST-26', t:'Pestaña GitHub del ticket', steps:['Abre cualquier ticket → pestaña "GitHub".'], exp:'Muestra el estado vacío con la pista de referencia KAN-<id>.' },
+      { id:'ST-27', t:'Conectar cuenta (requiere OAuth App)', steps:['Configura GITHUB_CLIENT_ID/SECRET → "Conectar GitHub" → autoriza.'], exp:'La cuenta queda vinculada (@usuario) en Integraciones.' },
+      { id:'ST-28', t:'Vincular repo + webhook (requiere ngrok)', steps:['En el proyecto → "Vincular repositorio" → elige uno.'], exp:'Repo vinculado; webhook registrado (badge "Webhook ✓").' },
+      { id:'ST-29', t:'Automatización por eventos', steps:['Push con "KAN-<id>", abre un PR, mergéalo.'], exp:'Commit → in_progress · PR abierto → testing · PR merge → done. Actividad visible en el ticket.' },
+    ]
+  },
+  {
+    num: 7, title: 'Notificaciones, métricas y perfil', prio: 'opt',
+    tests: [
+      { id:'ST-30', t:'Notificación in-app', steps:['Asigna una tarea / cambia un estado.'], exp:'El destinatario recibe la notificación en la campana.' },
+      { id:'ST-31', t:'Correo de notificación', steps:['Dispara un evento con correo (asignar líder, importación).'], exp:'Llega el correo correspondiente.' },
+      { id:'ST-32', t:'Métricas del proyecto', steps:['Abre velocity / burnup y, si hay repo, métricas GitHub.'], exp:'Las gráficas/contadores cargan sin error.' },
+      { id:'ST-33', t:'Perfil y tema', steps:['Edita avatar/banner/bio y cambia el tema/acento.'], exp:'Los cambios se guardan y se reflejan en la UI.' },
+    ]
+  },
+];
+
+const PRIO_LABEL = { crit: 'Crítico', imp: 'Importante', opt: 'Opcional' };
+const KEY = 'kanbana_smoke_v1';
+let state = JSON.parse(localStorage.getItem(KEY) || '{}');
+
+function render() {
+  const root = document.getElementById('tests');
+  root.innerHTML = DATA.map(sec => `
+    <section>
+      <div class="sec-head">
+        <span class="sec-num">${sec.num}</span>
+        <span class="sec-title">${sec.title}</span>
+        <span class="sec-prio prio-${sec.prio}">${PRIO_LABEL[sec.prio]}</span>
+      </div>
+      ${sec.tests.map(t => {
+        const st = state[t.id] || 'pend';
+        return `<div class="test" data-status="${st}" id="row-${t.id}">
+          <div class="test-top">
+            <span class="test-id">${t.id}</span>
+            <div class="test-body">
+              <div class="test-title">${t.t}${t.v ? '<span class="verified">✓ verificado</span>' : ''}</div>
+              <ol class="steps">${t.steps.map(s => `<li>${s}</li>`).join('')}</ol>
+              <div class="expected"><b>Esperado:</b> ${t.exp}</div>
+            </div>
+            <div class="status-btns">
+              <button class="sbtn sbtn-ok"   title="OK"        onclick="setStatus('${t.id}','ok')">✓</button>
+              <button class="sbtn sbtn-fail" title="Falla"     onclick="setStatus('${t.id}','fail')">✕</button>
+            </div>
+          </div>
+        </div>`;
+      }).join('')}
+    </section>
+  `).join('');
+  updateSummary();
+}
+
+function setStatus(id, val) {
+  state[id] = (state[id] === val) ? 'pend' : val;
+  localStorage.setItem(KEY, JSON.stringify(state));
+  const row = document.getElementById('row-' + id);
+  if (row) row.setAttribute('data-status', state[id]);
+  updateSummary();
+}
+
+function allIds() { return DATA.flatMap(s => s.tests.map(t => t.id)); }
+
+function updateSummary() {
+  const ids = allIds();
+  const ok   = ids.filter(i => state[i] === 'ok').length;
+  const fail = ids.filter(i => state[i] === 'fail').length;
+  const pend = ids.length - ok - fail;
+  document.getElementById('n-ok').textContent = ok;
+  document.getElementById('n-fail').textContent = fail;
+  document.getElementById('n-pend').textContent = pend;
+  const pct = Math.round(((ok + fail) / ids.length) * 100);
+  document.getElementById('bar').style.width = pct + '%';
+  document.getElementById('pct').textContent = pct + '%';
+}
+
+function resetAll() {
+  if (!confirm('¿Reiniciar todos los estados del smoke test?')) return;
+  state = {}; localStorage.removeItem(KEY); render();
+}
+
+render();
+</script>
+</body>
+</html>

@@ -4,6 +4,7 @@
  * zinc/dark consistente con el resto de la app.
  */
 import { useState, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/auth.store';
 import {
   User as UserIcon, Mail, Shield, Key, Save, CheckCircle2,
@@ -26,8 +27,8 @@ const ROL_LABELS: Record<string, string> = {
 };
 
 const ROL_COLORS: Record<string, string> = {
-  coordinador:   'bg-violet-500/10 text-violet-400 border-violet-500/20',
-  instructor:    'bg-blue-500/10 text-blue-400 border-blue-500/20',
+  coordinador:   'bg-blue-500/10 text-blue-400 border-blue-500/20',
+  instructor:    'bg-cyan-500/10 text-cyan-400 border-cyan-500/20',
   lider_tecnico: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
   aprendiz:      'bg-amber-500/10 text-amber-400 border-amber-500/20',
 };
@@ -62,6 +63,7 @@ const inputIconCls = "w-full bg-zinc-800/60 border border-zinc-700 rounded-xl pl
 
 export const ProfilePage = () => {
   const { user, updateUser } = useAuthStore();
+  const navigate = useNavigate();
   const [activeTab,  setActiveTab]  = useState<Tab>('general');
   const [saved,      setSaved]      = useState(false);
   const [pwdMsg,     setPwdMsg]     = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
@@ -113,6 +115,20 @@ export const ProfilePage = () => {
     },
   });
 
+  // Crear contraseña por primera vez (usuarios Google/GitHub sin contraseña propia)
+  const setPwdMutation = useMutation({
+    mutationFn: (data: { nueva: string }) => userService.setInitialPassword(data.nueva),
+    onSuccess: () => {
+      setPwdMsg({ type: 'ok', text: 'Contraseña creada. Ya puedes iniciar sesión con tu correo desde la landing.' });
+      resetPwd();
+      updateUser({ password_set: true } as any);
+      setTimeout(() => setPwdMsg(null), 5000);
+    },
+    onError: (err: any) => {
+      setPwdMsg({ type: 'err', text: err?.response?.data?.message || 'Error al crear la contraseña' });
+    },
+  });
+
   const bannerMutation = useMutation({
     mutationFn: (file: File) => userService.uploadBanner(user!.id, file),
     onSuccess: (data: any) => {
@@ -123,6 +139,9 @@ export const ProfilePage = () => {
   });
 
   if (!user) return null;
+
+  // Usuario de Google/GitHub que aún no ha creado su contraseña propia
+  const needsCreatePwd = user.password_set === false;
 
   const nueva = watchPwd('nueva');
   const rolEfectivo = user.rol === 'aprendiz' && (user as any).es_lider_tecnico ? 'lider_tecnico' : user.rol;
@@ -447,12 +466,12 @@ export const ProfilePage = () => {
                       <p className="text-[13px] font-bold text-zinc-200 truncate">{p.nombre}</p>
                       <p className="text-[11px] text-zinc-500 capitalize">{p.estado} · {p.ficha?.codigo || '—'}</p>
                     </div>
-                    <a
-                      href={`/projects/${p.id}/kanban`}
+                    <button
+                      onClick={() => navigate(`/projects/${p.id}/kanban`)}
                       className="p-2 text-zinc-600 hover:text-blue-400 hover:bg-blue-500/10 rounded-lg transition-all"
                     >
                       <ExternalLink size={13} />
-                    </a>
+                    </button>
                   </div>
                 ))}
               </div>
@@ -540,18 +559,52 @@ export const ProfilePage = () => {
                   setPwdMsg({ type: 'err', text: 'Las contraseñas no coinciden' });
                   return;
                 }
+                if (needsCreatePwd) {
+                  // Crear contraseña por primera vez (sin "actual")
+                  setPwdMutation.mutate({ nueva: data.nueva });
+                  return;
+                }
+                if (data.nueva === data.actual) {
+                  setPwdMsg({ type: 'err', text: 'La nueva contraseña es igual a la actual. Elige una diferente.' });
+                  return;
+                }
                 pwdMutation.mutate({ actual: data.actual, nueva: data.nueva });
               })}
               className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 space-y-5 shadow-md shadow-black/20"
             >
               <div className="flex items-center gap-2 pb-2 border-b border-zinc-800">
                 <Key size={15} className="text-zinc-500" />
-                <h3 className="text-[12px] font-black text-zinc-400 uppercase tracking-widest">Cambiar contraseña</h3>
+                <h3 className="text-[12px] font-black text-zinc-400 uppercase tracking-widest">
+                  {needsCreatePwd ? 'Crear contraseña' : 'Cambiar contraseña'}
+                </h3>
               </div>
 
+              {/* Aviso para usuarios de Google/GitHub */}
+              {needsCreatePwd && (
+                <div className="flex items-start gap-2 px-3 py-2.5 bg-blue-500/8 border border-blue-500/20 rounded-xl">
+                  <AlertCircle size={14} className="text-blue-400 shrink-0 mt-0.5" />
+                  <p className="text-[12px] text-blue-300/90 leading-relaxed">
+                    Entraste con Google/GitHub. Crea una contraseña para también poder
+                    iniciar sesión con tu correo desde la página de inicio de Kanbana.
+                  </p>
+                </div>
+              )}
+
               {[
-                { label: 'Contraseña actual',    name: 'actual',    rules: { required: 'Campo obligatorio' } },
-                { label: 'Nueva contraseña',     name: 'nueva',     rules: { required: 'Campo obligatorio', minLength: { value: 6, message: 'Mínimo 6 caracteres' } } },
+                ...(needsCreatePwd ? [] : [{ label: 'Contraseña actual', name: 'actual', rules: { required: 'Campo obligatorio' } }]),
+                { label: 'Nueva contraseña',     name: 'nueva',     rules: {
+                  required: 'Campo obligatorio',
+                  validate: (v: string, formValues: any) => {
+                    if (v.length < 7)     return 'Mínimo 7 caracteres';
+                    if (!/[A-Z]/.test(v)) return 'Incluye al menos una letra mayúscula';
+                    if (!/[0-9]/.test(v)) return 'Incluye al menos un número';
+                    // Check inmediato: nueva igual a actual
+                    if (formValues?.actual && v === formValues.actual) {
+                      return 'La nueva contraseña es igual a la actual. Elige una diferente.';
+                    }
+                    return true;
+                  },
+                }},
                 { label: 'Confirmar contraseña', name: 'confirmar', rules: {
                   required: 'Campo obligatorio',
                   validate: (v: string) => v === nueva || 'Las contraseñas no coinciden',
@@ -568,12 +621,14 @@ export const ProfilePage = () => {
                       className={inputIconCls}
                     />
                   </div>
-                  {pwdErrors[name as keyof typeof pwdErrors] && (
+                  {pwdErrors[name as keyof typeof pwdErrors] ? (
                     <p className="text-[11px] text-rose-400 ml-1 flex items-center gap-1">
                       <AlertCircle size={11} />
                       {(pwdErrors[name as keyof typeof pwdErrors] as any)?.message}
                     </p>
-                  )}
+                  ) : name === 'nueva' ? (
+                    <p className="text-[11px] text-zinc-600 ml-1">Mínimo 7 caracteres, una mayúscula y un número.</p>
+                  ) : null}
                 </div>
               ))}
 
@@ -597,12 +652,12 @@ export const ProfilePage = () => {
 
               <button
                 type="submit"
-                disabled={pwdMutation.isPending}
+                disabled={pwdMutation.isPending || setPwdMutation.isPending}
                 className="w-full py-3 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-black uppercase tracking-widest rounded-xl text-[12px] transition-all shadow-lg shadow-blue-600/20 flex items-center justify-center gap-2"
               >
-                {pwdMutation.isPending
-                  ? <><Loader2 size={14} className="animate-spin" /> Actualizando…</>
-                  : <><Key size={14} /> Actualizar contraseña</>
+                {(pwdMutation.isPending || setPwdMutation.isPending)
+                  ? <><Loader2 size={14} className="animate-spin" /> {needsCreatePwd ? 'Creando…' : 'Actualizando…'}</>
+                  : <><Key size={14} /> {needsCreatePwd ? 'Crear contraseña' : 'Actualizar contraseña'}</>
                 }
               </button>
             </form>

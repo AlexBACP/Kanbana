@@ -27,16 +27,18 @@ export const Modal = ({ isOpen, onClose, title, children, size = 'md' }: ModalPr
       
       {/* Contenido del Modal */}
       <div className={`
-        relative bg-dark-card w-full ${sizes[size]} 
-        rounded-[3rem] shadow-2xl border border-dark-border
+        relative bg-zinc-900 w-full ${sizes[size]}
+        rounded-[3rem] shadow-2xl border border-zinc-800
         transform transition-all duration-500 overflow-hidden
       `}>
         {/* Header con gradiente sutil */}
-        <div className="px-10 py-8 border-b border-dark-border bg-dark-bg/20 flex items-center justify-between">
-          <h3 className="text-2xl font-black text-dark-text tracking-tight">{title}</h3>
-          <button 
+        <div className="px-10 py-8 border-b border-zinc-800 bg-zinc-950/40 flex items-center justify-between">
+          <h3 className="text-2xl font-black text-zinc-100 tracking-tight">{title}</h3>
+          <button
             onClick={onClose}
-            className="p-3 text-dark-muted hover:text-rose-400 hover:bg-rose-500/10 rounded-2xl transition-all active:scale-90"
+            title="Cerrar"
+            aria-label="Cerrar"
+            className="p-3 text-zinc-500 hover:text-rose-400 hover:bg-rose-500/10 rounded-2xl transition-all active:scale-90"
           >
             <X size={24} />
           </button>

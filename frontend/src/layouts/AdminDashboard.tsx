@@ -1,8 +1,10 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useSearchParams } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { useAuthStore } from '../store/auth.store';
 import { useAuth } from '../hooks/useAuth';
+import { projectService } from '../services/project.service';
 import { Sidebar } from '../components/Sidebar';
 import { TopBar } from '../components/TopBar';
 import { Overview } from '../dashboard/components/Overview';
@@ -19,6 +21,7 @@ import { TareasPanel } from '../dashboard/panels/TareasPanel';
 import { NotificationsPanel } from '../dashboard/panels/NotificationsPanel';
 import { SettingsPanel } from '../dashboard/panels/SettingsPanel';
 import { ProfilePage } from '../pages/ProfilePage';
+import { RecursosPanel } from '../components/RecursosPanel';
 
 export type Section =
   | 'overview' | 'projects' | 'fichas' | 'users' | 'leaders' | 'equipo' | 'tareas' | 'tickets'
@@ -59,6 +62,15 @@ export const AdminDashboard = () => {
     return s || 'overview';
   });
 
+  // ── Sincroniza la sección cuando la URL cambia (p.ej. botón "atrás" del browser
+  //    después de navegar a /tickets/:id, /projects/:id, etc.)
+  useEffect(() => {
+    const s = searchParams.get('s') as Section | null;
+    if (s && s !== section) {
+      setSection(s);
+    }
+  }, [searchParams]);
+
   const esLider      = user?.rol === 'aprendiz' && (user as any)?.es_lider_tecnico;
   const esInstructor = user?.rol === 'instructor';
 
@@ -82,11 +94,20 @@ export const AdminDashboard = () => {
       return ['overview','projects','fichas','notifications','settings','profile'];
     }
     if (esLider) {
-      return ['overview','projects','notifications','settings','profile'];
+      return ['overview','projects','recursos','notifications','settings','profile'];
     }
     // Aprendiz sin sub-rol de líder
     return ['overview','tareas','notifications','settings','profile'];
   }, [user, esLider]);
+
+  // ── Proyecto del líder (solo se carga cuando es líder técnico) ───────────────
+  const { data: liderProyectos = [] } = useQuery({
+    queryKey: ['projects', 'for-me'],
+    queryFn:  () => projectService.getForMe(),
+    enabled:  !!esLider,
+    staleTime: 60_000,
+  });
+  const miProyectoId = esLider ? ((liderProyectos as any[])[0]?.id ?? null) : null;
 
   if (!user) return null;
 
@@ -108,11 +129,11 @@ export const AdminDashboard = () => {
           onNotifications={() => changeSection('notifications')}
           onProfile={() => changeSection('profile')}
           onSettings={() => changeSection('settings')}
-          onNavigate={changeSection}
+          onNavigate={(s) => changeSection(s as Section)}
           onLogout={logout}
         />
 
-        <main className="flex-1 overflow-y-auto p-0">
+        <main className="flex-1 overflow-hidden">
           <AnimatePresence mode="wait">
             <motion.div
               key={section}
@@ -121,6 +142,7 @@ export const AdminDashboard = () => {
               animate="animate"
               exit="exit"
               transition={{ duration: 0.15 }}
+              className="h-full overflow-y-auto"
             >
               {/* Overview por rol */}
               {section === 'overview' && (
@@ -137,6 +159,15 @@ export const AdminDashboard = () => {
               {section === 'equipo'        && allowedSections.includes('equipo')   && <MiEquipoPanel />}
               {/* Mis Tareas — solo el aprendiz normal */}
               {section === 'tareas'        && allowedSections.includes('tareas')   && <TareasPanel />}
+              {/* Recursos del proyecto — líder técnico */}
+              {section === 'recursos' && allowedSections.includes('recursos') && (
+                miProyectoId
+                  ? <div className="p-6"><RecursosPanel proyectoId={miProyectoId} canManage={true} /></div>
+                  : <div className="flex flex-col items-center justify-center py-24 text-zinc-500">
+                      <p className="text-sm font-bold">Sin proyecto asignado</p>
+                      <p className="text-xs mt-1">El instructor debe asignarte como líder de un proyecto</p>
+                    </div>
+              )}
               {section === 'notifications' && <NotificationsPanel />}
               {section === 'settings'      && <SettingsPanel />}
               {section === 'profile'       && <ProfilePage />}

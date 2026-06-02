@@ -97,7 +97,7 @@ export const ModuleDetailModal = ({
 
   // ── Urgency chip ─────────────────────────────────────────────────────────
   const urgencyChip = sprint.pendiente_revision
-    ? { bg: 'bg-violet-500/15 border-violet-500/25 text-violet-400', label: 'En revisión instructor' }
+    ? { bg: 'bg-blue-500/15 border-blue-500/25 text-blue-400', label: 'En revisión instructor' }
     : sprint.esta_finalizado
     ? { bg: 'bg-zinc-500/15 border-zinc-500/25 text-zinc-400', label: 'Finalizado' }
     : daysLeft < 0

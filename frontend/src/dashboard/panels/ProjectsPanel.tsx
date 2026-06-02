@@ -14,10 +14,9 @@ import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Search, Plus, Trash2, FolderKanban, LayoutGrid,
-  AlertCircle, AlertTriangle, Hash, ChevronRight, Layers,
+  AlertCircle, AlertTriangle, Hash, ChevronRight,
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { useForm, useFieldArray } from 'react-hook-form';
 
 // Configuración de estados mapeada a los badges premium del prototipo HTML
 const STATUS_CONFIG = {
@@ -34,7 +33,11 @@ const FormField = ({ label, children }: { label: string; children: React.ReactNo
 );
 
 // ── Fila de proyecto ──────────────────────────────────────────────────────────
-const ProjectRow = ({ proj, canCreate, isCoordinador, onDelete, updateStatusMutation, navigate, leaders = [], queryClient }: any) => {
+const ProjectRow = ({ proj, canCreate, isCoordinador, onDelete, updateStatusMutation, navigate, leaders = [], queryClient, currentUserId, currentUserRol }: any) => {
+  const canDelete = isCoordinador || (
+    currentUserRol === 'instructor' &&
+    (proj.instructorId === currentUserId || proj.instructor?.id === currentUserId)
+  );
   const sc = STATUS_CONFIG[proj.estado as keyof typeof STATUS_CONFIG] || STATUS_CONFIG.activo;
   return (
     <tr className="hover:bg-zinc-800/30 transition-colors group border-b border-zinc-600/40">
@@ -89,8 +92,10 @@ const ProjectRow = ({ proj, canCreate, isCoordinador, onDelete, updateStatusMuta
           </select>
         ) : proj.lider ? (
           <div className="flex items-center gap-1.5">
-            <div className="w-5 h-5 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center">
-              <span className="text-[8px] font-bold text-emerald-400">{proj.lider.nombre?.slice(0, 2).toUpperCase()}</span>
+            <div className="w-5 h-5 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center overflow-hidden shrink-0">
+              {userService.getAvatarUrl(proj.lider.avatar_url)
+                ? <img src={userService.getAvatarUrl(proj.lider.avatar_url)!} alt="" className="w-full h-full object-cover" />
+                : <span className="text-[8px] font-bold text-emerald-400">{proj.lider.nombre?.slice(0, 2).toUpperCase()}</span>}
             </div>
             <span className="text-[12px] font-semibold text-zinc-300">{proj.lider.nombre}</span>
           </div>
@@ -105,14 +110,16 @@ const ProjectRow = ({ proj, canCreate, isCoordinador, onDelete, updateStatusMuta
         <div className="flex items-center justify-end gap-1.5">
           <button
             onClick={() => navigate(`/projects/${proj.id}`)}
+            title="Abrir el proyecto (trimestres, equipo y tablero)"
             className="inline-flex items-center justify-center gap-1.5 px-2.5 py-1.5 bg-zinc-950 hover:bg-zinc-800 text-zinc-400 hover:text-white rounded-md text-[12px] font-bold border border-zinc-600 transition-all active:scale-95"
           >
-            <LayoutGrid size={12} /> Tablero
+            <ChevronRight size={12} /> Abrir
           </button>
-          {isCoordinador && (
+          {canDelete && (
             <button
               onClick={() => onDelete(proj)}
               className="p-1.5 hover:bg-zinc-800 text-zinc-400 hover:text-rose-400 rounded-md transition-colors"
+              title="Eliminar proyecto"
             >
               <Trash2 size={13} />
             </button>
@@ -124,7 +131,7 @@ const ProjectRow = ({ proj, canCreate, isCoordinador, onDelete, updateStatusMuta
 };
 
 // ── Bloque de ficha con sus proyectos ─────────────────────────────────────────
-const FichaProjectBlock = ({ ficha, projects, canCreate, isCoordinador, search, onDelete, updateStatusMutation, navigate, queryClient }: any) => {
+const FichaProjectBlock = ({ ficha, projects, canCreate, isCoordinador, search, onDelete, updateStatusMutation, navigate, queryClient, currentUserId, currentUserRol }: any) => {
   const [open, setOpen] = useState(true);
 
   // Solo los líderes técnicos de ESTA ficha — nunca de otras fichas
@@ -204,6 +211,7 @@ const FichaProjectBlock = ({ ficha, projects, canCreate, isCoordinador, search, 
                         isCoordinador={isCoordinador} onDelete={onDelete}
                         updateStatusMutation={updateStatusMutation} navigate={navigate}
                         leaders={fichaLeaders} queryClient={queryClient}
+                        currentUserId={currentUserId} currentUserRol={currentUserRol}
                       />
                     ))}
                   </tbody>
@@ -221,11 +229,11 @@ const FichaProjectBlock = ({ ficha, projects, canCreate, isCoordinador, search, 
 export const ProjectsPanel = () => {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
-  const [isModalOpen, setIsModalOpen] = useState(false); // Controla la visibilidad inline del formulario
-  const [numTrimestresNew, setNumTrimestresNew] = useState(3);
-  // ficha seleccionada en el formulario "Nuevo proyecto" — para escopar el dropdown de líder
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  // ficha seleccionada en el formulario "Nuevo proyecto" — para escopar el dropdown de líder y auto-llenar fechas
   const [formFichaId, setFormFichaId] = useState<number | null>(null);
-  const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
+  const [formFechaInicio, setFormFechaInicio] = useState('');
+  const [formFechaFin, setFormFechaFin] = useState('');
   const [deleteTarget, setDeleteTarget] = useState<{ id: number; nombre: string } | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const queryClient = useQueryClient();
@@ -241,70 +249,8 @@ export const ProjectsPanel = () => {
     enabled: !!user?.id,
   });
 
-  const { register: regBulk, handleSubmit: hBulk, control: controlBulk, watch: watchBulk } = useForm({
-    defaultValues: { num: 3, trimestres: [] as any[] }
-  });
-
-  const { fields: fieldsBulk, replace: replaceBulk } = useFieldArray({
-    control: controlBulk,
-    name: "trimestres"
-  });
-
-  const numTrimestres = watchBulk('num');
-
-  useMemo(() => {
-    if (!isBulkModalOpen) return;
-
-    const start = new Date();
-    const end = new Date();
-    end.setMonth(end.getMonth() + 12);
-
-    const duration = (end.getTime() - start.getTime()) / numTrimestres;
-
-    const newTrims = Array.from({ length: numTrimestres }, (_, i) => {
-      const s = new Date(start.getTime() + i * duration);
-      const e = new Date(start.getTime() + (i + 1) * duration - 1);
-      return {
-        nombre: `Trimestre ${i + 1}`,
-        fecha_inicio: s.toISOString().slice(0, 10),
-        fecha_fin: e.toISOString().slice(0, 10),
-        tipo: i === 0 ? 'documental' : 'desarrollo'
-      };
-    });
-    replaceBulk(newTrims);
-  }, [numTrimestres, isBulkModalOpen]);
-
-  const bulkMutation = useMutation({
-    mutationFn: (data: any) => projectService.bulkGenerateTrimestres({
-      projectIds: (projects as any[]).map(p => p.id),
-      ...data
-    }),
-    onSuccess: async (res: any) => {
-      let migrados = 0;
-      for (const proj of (projects as any[])) {
-        try {
-          const huerfanos = await projectService.getSprintsSinTrimestre(proj.id);
-          if ((huerfanos as any[]).length > 0) {
-            const trims = await projectService.getTrimestres(proj.id);
-            const primero = (trims as any[])[0];
-            if (primero) {
-              for (const sp of (huerfanos as any[])) {
-                await projectService.assignSprintToTrimestre(sp.id, primero.id);
-                migrados++;
-              }
-            }
-          }
-        } catch { /* continuar */ }
-      }
-      const msg = migrados > 0
-        ? `Completado: ${res.success} proyectos configurados, ${migrados} módulo(s) migrado(s) al primer trimestre.`
-        : `Completado: ${res.success} proyectos configurados.`;
-      alert(msg);
-      queryClient.invalidateQueries({ queryKey: ['projects'] });
-      setIsBulkModalOpen(false);
-    },
-    onError: (err: any) => alert(err?.response?.data?.message || 'Error en configuración masiva'),
-  });
+  // (Flujo de bulk-trimestres eliminado — los trimestres ahora son de la Ficha y
+  //  se generan automáticamente al crearla. No se requiere configuración manual.)
 
   const { data: users = [] } = useQuery({ queryKey: ['users'], queryFn: () => userService.getAll() });
   const { data: fichas = [] } = useQuery({ queryKey: ['fichas'], queryFn: () => fichaService.getAll() });
@@ -333,15 +279,14 @@ export const ProjectsPanel = () => {
 
   const createMutation = useMutation({
     mutationFn: projectService.create,
-    onSuccess: async (proyecto: any) => {
-      try {
-        await projectService.generateTrimestres(proyecto.id, { num: numTrimestresNew });
-      } catch { /* No bloquear flujo */ }
+    onSuccess: async () => {
       queryClient.invalidateQueries({ queryKey: ['projects'] });
-      setIsModalOpen(true);
-      setNumTrimestresNew(3);
+      setIsModalOpen(false);
       setFormFichaId(null);
+      setFormFechaInicio('');
+      setFormFechaFin('');
     },
+    onError: (err: any) => alert(err?.response?.data?.message || 'No se pudo crear el proyecto'),
   });
 
   const updateStatusMutation = useMutation({
@@ -352,17 +297,35 @@ export const ProjectsPanel = () => {
   const handleCreate = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const f = new FormData(e.currentTarget);
+    const competencia = f.get('competencia') as string;
     createMutation.mutate({
-      nombre: f.get('nombre') as string,
-      descripcion: f.get('descripcion') as string,
-      liderId: Number(f.get('liderId')) || undefined,
-      fichaId: Number(f.get('fichaId')) || undefined,
-      instructorId: user?.id,
-      competencia: f.get('competencia') as string,
+      nombre:                f.get('nombre') as string,
+      // descripcion = competencia como fallback (el campo es NOT NULL en la BD)
+      descripcion:           competencia || '',
+      competencia:           competencia,
       resultado_aprendizaje: f.get('resultado_aprendizaje') as string,
+      liderId:               Number(f.get('liderId')) || undefined,
+      fichaId:               Number(f.get('fichaId')) || undefined,
+      instructorId:          user?.id,
+      // Fechas: tomadas del form (pre-llenadas desde la ficha seleccionada)
       fecha_inicio: f.get('fecha_inicio') as string,
-      fecha_fin: f.get('fecha_fin') as string,
+      fecha_fin:    f.get('fecha_fin') as string,
     } as any);
+  };
+
+  // Cuando se elige una ficha, auto-llenar las fechas con las de la ficha
+  const handleFichaChange = (fichaId: number | null) => {
+    setFormFichaId(fichaId);
+    if (fichaId) {
+      const ficha = fichasArr.find((f: any) => f.id === fichaId);
+      if (ficha) {
+        setFormFechaInicio((ficha as any).fecha_inicio?.slice(0, 10) ?? '');
+        setFormFechaFin((ficha as any).fecha_fin?.slice(0, 10) ?? '');
+      }
+    } else {
+      setFormFechaInicio('');
+      setFormFechaFin('');
+    }
   };
 
   const p = projects as any[];
@@ -405,11 +368,8 @@ export const ProjectsPanel = () => {
         <div className="flex items-center gap-5 flex-wrap">
           {/* Botón: Todos los proyectos (Activo si no hay modales abiertos) */}
           <button
-            onClick={() => {
-              setIsModalOpen(false);
-              setIsBulkModalOpen(false);
-            }}
-            className={`inline-flex items-center justify-center gap-2 py-3 text-xl font-black border-b transition-all duration-200 ${!isModalOpen && !isBulkModalOpen
+            onClick={() => setIsModalOpen(false)}
+            className={`inline-flex items-center justify-center gap-2 py-3 text-xl font-black border-b transition-all duration-200 ${!isModalOpen
                 ? 'text-blue-400 border-white'
                 : 'text-zinc-400 border-transparent hover:text-blue-400 hover:border-white'
               }`}
@@ -417,31 +377,10 @@ export const ProjectsPanel = () => {
             Todos los proyectos
           </button>
 
-          {/* Botón: Configurar trimestres (Activo si el modal masivo está abierto) */}
-          {(isCoordinador || user?.rol === 'instructor') && (
-            <button
-              onClick={() => {
-                setIsBulkModalOpen(true);
-                setIsModalOpen(false);
-              }}
-              className={`inline-flex items-center justify-center gap-2 py-3 text-xl font-black border-b transition-all duration-200 ${isBulkModalOpen
-                  ? 'text-blue-400 border-white'
-                  : 'text-zinc-400 border-transparent hover:text-blue-400 hover:border-white'
-                }`}
-              title="Generar trimestres para todos los proyectos y migrar módulos existentes"
-            >
-              <Layers size={0} className={isBulkModalOpen ? 'text-blue-400' : 'text-[#3b82f6]'} />
-              Configurar trimestres
-            </button>
-          )}
-
           {/* Botón: Nuevo proyecto (Activo si el modal de creación está abierto) */}
           {canCreate && (
             <button
-              onClick={() => {
-                setIsModalOpen(true);
-                setIsBulkModalOpen(false);
-              }}
+              onClick={() => setIsModalOpen(true)}
               className={`inline-flex items-center justify-center gap-2 py-3 text-xl font-black border-b transition-all duration-200 ${isModalOpen
                   ? 'text-blue-400 border-white'
                   : 'text-zinc-400 border-transparent hover:text-blue-400 hover:border-white'
@@ -455,7 +394,7 @@ export const ProjectsPanel = () => {
       </div>
 
 
-      {/* ── SECCIÓN CAMBIANTE DEL PANEL (DE AHÍ PARA ABAJO) ────────────────────── */}
+      {/* ── SECCIÓN CAMBIANTE DEL PANEL ─────────────────────────────────────────── */}
       {isModalOpen ? (
         /* Formulario Integrado: Ocupa todo el apartado de forma independiente */
         <div className="px-6 py-6 bg-zinc-900 flex flex-col gap-6 animate-[fadeIn_0.2s_ease-out]">
@@ -484,54 +423,54 @@ export const ProjectsPanel = () => {
                 <select
                   name="fichaId"
                   required
-                  onChange={e => setFormFichaId(Number(e.target.value) || null)}
+                  onChange={e => handleFichaChange(Number(e.target.value) || null)}
                   className="w-full bg-zinc-900 border border-zinc-600 rounded-md px-3 py-2 text-[13px] text-zinc-300 outline-none hover:bg-zinc-800 focus:bg-zinc-800 focus:border-blue-600 transition-colors cursor-pointer"
                 >
                   <option value="" className="text-zinc-500">Selecciona una ficha</option>
                   {fichasArr.map((f: any) => (
                     <option key={f.id} value={f.id} className="bg-zinc-900 text-zinc-300 hover:bg-zinc-800 focus:bg-zinc-800">
-                      Ficha {f.codigo} - {f.programa}
+                      Ficha {f.codigo} — {f.programa}
                     </option>
                   ))}
                 </select>
               </FormField>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-[13px]">
-              <FormField label={formFichaId ? 'Líder técnico (de esta ficha)' : 'Líder técnico (Opcional)'}>
-                <select
-                  name="liderId"
-                  className="w-full bg-zinc-900 border border-zinc-600 hover:bg-zinc-800 focus:bg-zinc-800 rounded-md px-3 py-2 text-[13px] text-zinc-300 outline-none focus:border-blue-600 transition-colors cursor-pointer"
-                >
-                  <option value="" className="text-zinc-500">
-                    {formFichaId ? (formLeaders.length === 0 ? 'Sin líderes en esta ficha' : 'Asignar después') : 'Selecciona una ficha primero'}
-                  </option>
-                  {formLeaders.map((l: any) => (
-                    <option key={l.id} value={l.id} className="bg-zinc-900 text-zinc-300">{l.nombre}</option>
-                  ))}
-                </select>
+            <FormField label={formFichaId ? 'Líder técnico (de esta ficha)' : 'Líder técnico (Opcional)'}>
+              <select
+                name="liderId"
+                className="w-full bg-zinc-900 border border-zinc-600 hover:bg-zinc-800 focus:bg-zinc-800 rounded-md px-3 py-2 text-[13px] text-zinc-300 outline-none focus:border-blue-600 transition-colors cursor-pointer"
+              >
+                <option value="" className="text-zinc-500">
+                  {formFichaId ? (formLeaders.length === 0 ? 'Sin líderes en esta ficha' : 'Asignar después') : 'Selecciona una ficha primero'}
+                </option>
+                {formLeaders.map((l: any) => (
+                  <option key={l.id} value={l.id} className="bg-zinc-900 text-zinc-300">{l.nombre}</option>
+                ))}
+              </select>
+            </FormField>
+
+            {/* Fechas del proyecto — se auto-llenan desde la ficha seleccionada */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <FormField label="Fecha inicio">
+                <input
+                  type="date"
+                  name="fecha_inicio"
+                  required
+                  value={formFechaInicio}
+                  onChange={e => setFormFechaInicio(e.target.value)}
+                  className="w-full bg-zinc-900 border border-zinc-600 rounded-md px-3 py-2 text-[13px] text-zinc-300 outline-none hover:bg-zinc-800 focus:bg-zinc-800 focus:border-blue-600 transition-colors"
+                />
               </FormField>
-              <FormField label="Estructura inicial temporal">
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setNumTrimestresNew(n => Math.max(1, n - 1))}
-                    className="w-8 h-8 rounded-lg hover:bg-zinc-800 bg-zinc-950 border border-zinc-600 text-zinc-400 hover:text-white flex items-center justify-center font-bold text-[13px] select-none transition-colors active:scale-95"
-                  >
-                    -
-                  </button>
-                  <span className="w-12 text-[13px] font-black text-zinc-200 text-center tabular-nums">{numTrimestresNew}</span>
-                  <button
-                    type="button"
-                    onClick={() => setNumTrimestresNew(n => Math.min(8, n + 1))}
-                    className="w-8 h-8 rounded-lg hover:bg-zinc-800 bg-zinc-950 border border-zinc-600 text-zinc-400 hover:text-white flex items-center justify-center font-bold text-[13px] select-none transition-colors active:scale-95"
-                  >
-                    +
-                  </button>
-                </div>
-                <p className="text-[13px] text-zinc-400 mt-1 italic leading-tight">
-                  Cada bloque de trimestre se autogenerará con una duración estándar de 3 meses correlativos.
-                </p>
+              <FormField label="Fecha fin">
+                <input
+                  type="date"
+                  name="fecha_fin"
+                  required
+                  value={formFechaFin}
+                  onChange={e => setFormFechaFin(e.target.value)}
+                  className="w-full bg-zinc-900 border border-zinc-600 rounded-md px-3 py-2 text-[13px] text-zinc-300 outline-none hover:bg-zinc-800 focus:bg-zinc-800 focus:border-blue-600 transition-colors"
+                />
               </FormField>
             </div>
 
@@ -556,32 +495,14 @@ export const ProjectsPanel = () => {
               </FormField>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <FormField label="Fecha de inicio de fase">
-                <input
-                  name="fecha_inicio"
-                  type="date"
-                  required
-                  className="w-full bg-zinc-900 border border-zinc-600 rounded-md px-3 py-2 text-[13px] text-zinc-300 outline-none focus:border-blue-600 transition-colors"
-                />
-              </FormField>
-              <FormField label="Fecha de finalización">
-                <input
-                  name="fecha_fin"
-                  type="date"
-                  required
-                  className="w-full bg-zinc-900 border border-zinc-600 rounded-md px-3 py-2 text-[13px] text-zinc-300 outline-none focus:border-blue-600 transition-colors"
-                />
-              </FormField>
-            </div>
-
             <div className="flex justify-end gap-3 pt-3 border-t border-zinc-600/60">
               <button
                 type="button"
                 onClick={() => {
                   setIsModalOpen(false);
-                  setNumTrimestresNew(3);
                   setFormFichaId(null);
+                  setFormFechaInicio('');
+                  setFormFechaFin('');
                 }}
                 className="px-4 py-2 text-[14px] font-bold text-zinc-400 hover:text-white transition-colors bg-transparent hover:bg-zinc-800 rounded-lg"
               >
@@ -596,68 +517,6 @@ export const ProjectsPanel = () => {
               </button>
             </div>
           </form>
-        </div>
-      ) : isBulkModalOpen ? (
-        <div className="bg-zinc-900 flex flex-col gap-6 animate-[fadeIn_0.2s_ease-out]">
-                    <div className="max-w-full bg-zinc-900 border border-zinc-600/80 p-6  shadow-xl">
-            <div className="p-3.5 bg-amber-500/10 border border-amber-500/20 rounded-md text-amber-300 flex gap-3 items-start mb-4">
-              <AlertTriangle size={18} className="text-amber-400 shrink-0 mt-0.5" />
-              <div>
-                <p className="text-lg font-bold text-white">Propagación estructural masiva</p>
-                <p className="text-[13px] text-zinc-400 mt-0.5 leading-relaxed">
-                  Esta acción generará nuevos trimestres para TODOS los {projects.length} proyectos activos en el sistema. Los módulos que no pertenezcan a ningún trimestre serán migrados automáticamente al primer trimestre creado.
-                </p>
-              </div>
-            </div>
-            <form onSubmit={hBulk(data => bulkMutation.mutate(data))} className="space-y-4">
-              <FormField label="Cantidad de Trimestres:">
-                <select
-                  {...regBulk('num', { valueAsNumber: true })}
-                  className="ml-5 bg-zinc-900 border border-zinc-600 rounded-md px-3 py-2 text-[13px] text-zinc-300 outline-none focus:border-blue-600 transition-colors cursor-pointer"
-                >
-                  {[1, 2, 3, 4, 5, 6, 7, 8].map(n => <option key={n} value={n}>{n} Trimestres</option>)}
-                </select>
-              </FormField>
-              <div className="space-y-3 max-h-[980px] overflow-y-auto pr-2 custom-scrollbar">
-                {fieldsBulk.map((field, index) => (
-                  <div key={field.id} className="bg-zinc-950 border border-zinc-600/80 rounded-md p-4 space-y-3 shadow-sm">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[12px] font-black text-blue-400 uppercase tracking-wider">Trimestre {index + 1}</span>
-                      <select
-                        {...regBulk(`trimestres.${index}.tipo` as const)}
-                        className="bg-zinc-900 border border-zinc-600 rounded-md px-2 py-1 text-[10px] font-bold text-zinc-400 outline-none cursor-pointer"
-                      >
-                        <option value="documental">Fase Documental</option>
-                        <option value="desarrollo">Fase Desarrollo</option>
-                      </select>
-                    </div>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="space-y-1">
-                        <label className="text-[13px] font-black text-zinc-500 uppercase tracking-tight">Fecha Inicio</label>
-                        <input type="date" {...regBulk(`trimestres.${index}.fecha_inicio` as const)}
-                          className="w-full bg-zinc-900 border border-zinc-600 rounded-md px-3 py-2 text-[12px] text-zinc-300 outline-none focus:border-blue-600 transition-colors" />
-                      </div>
-                      <div className="space-y-1">
-                        <label className="text-[13px] font-black text-zinc-500 uppercase tracking-tight">Fecha Cierre</label>
-                        <input type="date" {...regBulk(`trimestres.${index}.fecha_fin` as const)}
-                          className="w-full bg-zinc-900 border border-zinc-600 rounded-md px-3 py-2 text-[12px] text-zinc-300 outline-none focus:border-blue-600 transition-colors" />
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-              <div className="flex justify-end gap-3 pt-2 border-t border-zinc-600/60">
-                <button type="button" onClick={() => setIsBulkModalOpen(false)}
-                  className="px-4 py-2 text-[12px] font-bold text-zinc-400 hover:text-white transition-colors rounded-lg hover:bg-zinc-800">
-                  Cancelar
-                </button>
-                <button type="submit" disabled={bulkMutation.isPending}
-                  className="px-5 py-2 bg-[#3b82f6] hover:bg-[#2563eb] text-white text-[12px] font-black rounded-lg transition-all shadow-md active:scale-95">
-                  {bulkMutation.isPending ? 'Propagando estructura...' : `Aplicar a ${projects.length} proyectos activos`}
-                </button>
-              </div>
-            </form>
-          </div>
         </div>
       ) : (
         /* Vista de Listado Tradicional: Buscador, Filtros y Fichas */
@@ -730,6 +589,8 @@ export const ProjectsPanel = () => {
                         updateStatusMutation={updateStatusMutation}
                         navigate={navigate}
                         queryClient={queryClient}
+                        currentUserId={user?.id}
+                        currentUserRol={user?.rol}
                       />
                     ))}
 
@@ -763,6 +624,8 @@ export const ProjectsPanel = () => {
                                     navigate={navigate}
                                     leaders={leaders}
                                     queryClient={queryClient}
+                                    currentUserId={user?.id}
+                                    currentUserRol={user?.rol}
                                   />
                                 ))}
                             </tbody>
@@ -848,9 +711,10 @@ export const ProjectsPanel = () => {
                                   <div className="flex items-center justify-end gap-1.5">
                                     <button
                                       onClick={() => navigate(`/projects/${proj.id}`)}
+                                      title="Abrir el proyecto"
                                       className="inline-flex items-center justify-center gap-1.5 px-2.5 py-1.5 bg-zinc-950 hover:bg-zinc-800 text-zinc-400 hover:text-white rounded-md text-[12px] font-bold border border-zinc-600 transition-all active:scale-95"
                                     >
-                                      <LayoutGrid size={16} /> Tablero
+                                      <ChevronRight size={16} /> Abrir
                                     </button>
                                   </div>
                                 </td>

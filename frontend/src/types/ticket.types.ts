@@ -16,6 +16,8 @@ export interface Ticket {
   id: number;
   proyecto_id: number;
   sprint_id?: number;
+  // Trimestre al que pertenece la tarea (acota la cola de trabajo por trimestre)
+  trimestre_id?: number | null;
   titulo: string;
   descripcion: string;
   prioridad: TicketPriority;
@@ -75,6 +77,8 @@ export interface CreateTicketDto {
   parent_id?: number;
   // ── NUEVO: permite forzar el requisito de adjunto al crear ──────────────
   requiere_adjunto?: boolean;
+  // Acotar la tarea a un trimestre aunque no tenga módulo asignado
+  trimestre_id?: number | null;
 }
 
 export interface UpdateTicketStatusDto {

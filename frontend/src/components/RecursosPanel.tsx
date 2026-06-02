@@ -25,7 +25,7 @@ import { GitHubWidget } from './GitHubWidget';
 type TipoRecurso = 'github' | 'drive' | 'figma' | 'notion' | 'trello' | 'jira' | 'link';
 
 const TIPO_CONFIG: Record<TipoRecurso, {
-  icon: React.ComponentType<{ size?: number; className?: string }>;
+  icon: React.ComponentType<{ size?: number | string; className?: string }>;
   color: string;
   bg: string;
   border: string;

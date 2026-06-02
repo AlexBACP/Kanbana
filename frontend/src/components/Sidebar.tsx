@@ -62,11 +62,17 @@ type Props = {
 const COLLAPSE_BREAKPOINT = 900;
 
 export const Sidebar = ({ setSection, activeSection, allowedSections }: Props) => {
-  const { user } = useAuthStore();
+  const { user, settings, updateSettings } = useAuthStore();
   const { logout } = useAuth();
 
   // ── Colapso retráctil ─────────────────────────────────────────
-  const [collapsed, setCollapsed] = useState(false);
+  // Estado inicial tomado de la preferencia "Sidebar compacto" de ajustes.
+  const [collapsed, setCollapsed] = useState(!!settings.sidebarCompact);
+
+  // Sincronizar cuando el usuario cambia la preferencia desde Configuración
+  useEffect(() => {
+    setCollapsed(!!settings.sidebarCompact);
+  }, [settings.sidebarCompact]);
   // Auto-hidden: sidebar totalmente oculto en pantalla pequeña
   const [autoHidden, setAutoHidden] = useState(false);
   // Drawer abierto manualmente en mobile (encima del contenido)
@@ -302,13 +308,13 @@ export const Sidebar = ({ setSection, activeSection, allowedSections }: Props) =
   return (
     <aside
       style={{ width: effectiveWidth }}
-      className="relative bg-zinc-900 border-r border-zinc-800 flex flex-col h-full shrink-0 transition-[width] duration-200 ease-in-out overflow-hidden"
+      className="kanbana-sidebar relative bg-zinc-900 border-r border-zinc-800 flex flex-col h-full shrink-0 transition-[width] duration-200 ease-in-out overflow-hidden z-20"
     >
       <SidebarContent />
 
-      {/* Botón colapsar/expandir */}
+      {/* Botón colapsar/expandir — persiste la preferencia en ajustes */}
       <button
-        onClick={() => setCollapsed(prev => !prev)}
+        onClick={() => { const next = !collapsed; setCollapsed(next); updateSettings({ sidebarCompact: next }); }}
         title={collapsed ? 'Expandir sidebar' : 'Colapsar sidebar'}
         className="absolute top-4 right-2 z-20 p-1 rounded-lg text-zinc-500 hover:text-zinc-100 hover:bg-zinc-800 transition-all"
       >

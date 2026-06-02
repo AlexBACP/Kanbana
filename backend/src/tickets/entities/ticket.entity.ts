@@ -74,6 +74,14 @@ export class Ticket {
   @JoinColumn({ name: 'sprint_id' })
   sprint: Sprint;
 
+  // ── Trimestre ───────────────────────────────────────────────────────────────
+  // A qué trimestre pertenece la tarea. Permite que las tareas SIN módulo
+  // (cola de trabajo) sigan acotadas a un trimestre concreto, en vez de aparecer
+  // en todos. Cuando la tarea tiene módulo, se sincroniza con el trimestre de ese
+  // módulo.
+  @Column({ nullable: true })
+  trimestre_id: number;
+
   // ── Info principal ────────────────────────────────────────────────────────
   @Column()
   titulo: string;
@@ -141,6 +149,11 @@ export class Ticket {
   // ── Fechas ────────────────────────────────────────────────────────────────
   @Column({ type: 'date', nullable: true })
   fecha_limite: Date;
+
+  // Hora límite opcional — formato "HH:MM", ej "14:30"
+  // Permite que el instructor fije hora de entrega en clase (misma fecha)
+  @Column({ type: 'varchar', length: 5, nullable: true })
+  hora_limite: string | null;
 
   @CreateDateColumn()
   creado_en: Date;

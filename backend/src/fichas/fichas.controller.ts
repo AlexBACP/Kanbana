@@ -1,8 +1,7 @@
 import {
   Controller, Get, Post, Body, Patch, Param, Delete,
   UseGuards, Request, UseInterceptors, UploadedFile,
-  BadRequestException, Res, ParseIntPipe,
-
+  BadRequestException, ForbiddenException, Res, ParseIntPipe, Query,
 } from '@nestjs/common';
 import type { Response } from 'express';
 import { FileInterceptor } from '@nestjs/platform-express';
@@ -19,8 +18,13 @@ export class FichasController {
   constructor(private readonly fichasService: FichasService) {}
 
   @Post()
-  create(@Body() createFichaDto: any) {
-    return this.fichasService.create(createFichaDto);
+  create(@Body() createFichaDto: any, @Request() req: any) {
+    // Solo coordinador o instructor (con permiso vigente) pueden crear fichas.
+    const rol = req.user?.rol;
+    if (rol !== 'coordinador' && rol !== 'instructor') {
+      throw new ForbiddenException('Solo coordinadores e instructores pueden crear fichas.');
+    }
+    return this.fichasService.create(createFichaDto, req.user);
   }
 
   @Get()
@@ -92,33 +96,76 @@ export class FichasController {
     res.send(buffer);
   }
 
-  @Post('solicitar-crear')
-  @ApiOperation({ summary: 'Instructor solicita permiso al coordinador para crear una ficha' })
-  solicitarCrear(@Request() req: any) {
-    // NOTA: req.user es el objeto DB completo devuelto por JwtStrategy.validate(),
-    // por lo tanto tiene .id (no .sub — eso es del payload JWT sin transformar).
-    return this.fichasService.solicitarCrearFicha(req.user.id).then(() => ({
-      message: 'Tu solicitud fue enviada al coordinador. Te notificaremos cuando sea aprobada.',
-    }));
+  // ══════════════════════════════════════════════════════════════════════════
+  // PLANTILLA SDLC — preview y sugerencias de módulos
+  // ══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * GET /fichas/plantilla?tipo=tecnologo|tecnico
+   * Devuelve la plantilla SDLC con los trimestres y módulos predeterminados
+   * que se generarán al crear una ficha de ese tipo. El frontend usa esto
+   * para mostrar un preview antes de guardar.
+   */
+  @Get('plantilla')
+  @ApiOperation({ summary: 'Preview de la plantilla SDLC según el tipo de formación' })
+  getPlantilla(@Query('tipo') tipo: string) {
+    return this.fichasService.getPlantilla(tipo);
   }
 
   /**
-   * POST /fichas/responder-solicitud
-   * El coordinador aprueba o rechaza la solicitud de un instructor para crear una ficha.
-   * Envía notificación in-app + email al instructor con el resultado.
-   * Body: { instructorId: number; aprobada: boolean; motivo?: string }
+   * GET /fichas/sugerencias-modulos?trimestre=N&categoria=Documentación
+   * Devuelve sugerencias de módulos adicionales (fuera de la plantilla base)
+   * relevantes para un trimestre dado. Filtro opcional por categoría.
    */
+  @Get('sugerencias-modulos')
+  @ApiOperation({ summary: 'Sugerencias de módulos adicionales según trimestre y categoría' })
+  getSugerenciasModulos(
+    @Query('trimestre') trimestre: string,
+    @Query('categoria') categoria?: string,
+  ) {
+    const num = Number(trimestre);
+    if (!num || num < 1) {
+      throw new BadRequestException('Parámetro "trimestre" requerido (1..N).');
+    }
+    return this.fichasService.getSugerenciasModulos(num, categoria);
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // FLUJO ANTIGUO DE SOLICITUD DE PERMISO — DEPRECADO
+  // El instructor ahora crea fichas directamente sin pedir permiso.
+  // Estos endpoints se mantienen como no-op para no romper notificaciones
+  // antiguas en BD ni clientes desactualizados. Pueden eliminarse en una
+  // siguiente iteración tras limpiar las notificaciones legacy.
+  // ══════════════════════════════════════════════════════════════════════════
+
+  @Post('solicitar-crear')
+  @ApiOperation({ summary: '[DEPRECADO] Solicitud de permiso (ya no requerido)' })
+  solicitarCrear() {
+    return { message: 'El instructor ya puede crear fichas directamente. Este endpoint ya no es necesario.' };
+  }
+
+  @Get('permiso-crear')
+  @ApiOperation({ summary: '[DEPRECADO] El permiso ya no es necesario; siempre retorna puede_crear:true' })
+  getPermisoCrear() {
+    return { puede_crear: true, solicitud_pendiente: false };
+  }
+
   @Post('responder-solicitud')
-  @ApiOperation({ summary: 'Coordinador responde la solicitud de creación de ficha de un instructor' })
-  responderSolicitud(@Body() body: { instructorId: number; aprobada: boolean; motivo?: string }) {
+  @ApiOperation({ summary: '[DEPRECADO] Aprobación coordinador (flujo eliminado)' })
+  responderSolicitud(
+    @Body() body: { instructorId: number; aprobada: boolean; motivo?: string },
+    @Request() req: any,
+  ) {
+    if (req.user?.rol !== 'coordinador') {
+      throw new ForbiddenException('Solo el coordinador puede responder solicitudes.');
+    }
+    // Limpiar notificaciones legacy y avisar al instructor
     return this.fichasService.notificarRespuestaFicha(
       body.instructorId,
       body.aprobada,
       body.motivo,
     ).then(() => ({
-      message: body.aprobada
-        ? 'Solicitud aprobada. El instructor fue notificado.'
-        : 'Solicitud rechazada. El instructor fue notificado.',
+      message: 'Solicitud procesada (flujo legacy).',
     }));
   }
 
@@ -158,6 +205,7 @@ export class FichasController {
   async importFromExcel(
     @Param('id') id: string,
     @UploadedFile() file: Express.Multer.File,
+    @Request() req: any,
   ) {
     if (!file) throw new BadRequestException('No se recibió ningún archivo');
     const allowed = [
@@ -170,7 +218,17 @@ export class FichasController {
     if (!allowed.includes(file.mimetype) && !file.originalname.match(/\.(xlsx|xls|csv)$/i)) {
       throw new BadRequestException('Solo se aceptan archivos .xlsx, .xls o .csv');
     }
-    return this.fichasService.importFromExcel(+id, file.buffer, file.originalname);
+    return this.fichasService.importFromExcel(+id, file.buffer, file.originalname, req.user?.id);
+  }
+
+  // ── POST /fichas/validar-correos ──────────────────────────────────────────
+  // Valida formato + existencia de MX del dominio de una lista de correos.
+  // Lo usa el preview del frontend para avisar qué correos NO podrán recibir
+  // el email de confirmación (dominio inexistente o mal escrito) ANTES de importar.
+  @Post('validar-correos')
+  @ApiOperation({ summary: 'Valida formato y MX de dominio de una lista de correos' })
+  validarCorreos(@Body('correos') correos: string[]) {
+    return this.fichasService.validarCorreos(correos ?? []);
   }
 
   @Delete(':id/members')

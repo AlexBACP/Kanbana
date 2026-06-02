@@ -2,7 +2,7 @@
  * LandingPage — ruta pública "/"
  */
 import { useEffect, useState, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuthStore } from '../store/auth.store';
 import { LoginAside } from '../components/LoginAside';
 import { KanbanaLogo } from '../components/KanbanaLogo';
@@ -99,7 +99,14 @@ const poolSlot5 = [
 
 export const LandingPage = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { isAuthenticated, isLoading, user } = useAuthStore();
+
+  // Parámetros que abren el panel de acceso automáticamente:
+  //   ?redirect=… → la ruta protegida a la que volver tras iniciar sesión
+  //   ?error=…    → un error a mostrar (p. ej. fallo del login con Google)
+  const redirectAfter = searchParams.get('redirect') ?? undefined;
+  const initialError  = searchParams.get('error');
 
   useEffect(() => {
     if (!isLoading && isAuthenticated && user) {
@@ -107,7 +114,21 @@ export const LandingPage = () => {
     }
   }, [isAuthenticated, isLoading, user, navigate]);
 
+  // La landing siempre se muestra en azul sin importar el tema del usuario
+  useEffect(() => {
+    const html = document.documentElement;
+    const prev = html.getAttribute('data-theme') ?? 'blue';
+    html.setAttribute('data-theme', 'blue');
+    return () => { html.setAttribute('data-theme', prev); };
+  }, []);
+
   const [loginOpen,     setLoginOpen]     = useState(false);
+
+  // Abrir el panel de acceso automáticamente si llegamos con redirect/error
+  useEffect(() => {
+    if (redirectAfter || initialError) setLoginOpen(true);
+  }, [redirectAfter, initialError]);
+
   const [currentSlide,  setCurrentSlide]  = useState(0);
   const [slideVisible,  setSlideVisible]  = useState(true);  // para fade del contenido
   const [featureOffset, setFeatureOffset] = useState(0);
@@ -558,7 +579,12 @@ export const LandingPage = () => {
         </div>
       </footer>
 
-      <LoginAside isOpen={loginOpen} onClose={() => setLoginOpen(false)} />
+      <LoginAside
+        isOpen={loginOpen}
+        onClose={() => setLoginOpen(false)}
+        redirectAfter={redirectAfter}
+        initialError={initialError}
+      />
     </div>
   );
 };

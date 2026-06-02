@@ -21,7 +21,7 @@ import {
   Eye, Shield, GraduationCap, BookOpen,
   X, UserCheck, UserX, Crown,
   AlertTriangle, Hash, FolderOpen, ChevronRight,
-  Plus, Mail, Lock, Send, CheckCircle2,
+  Plus, Mail, Lock, Send, CheckCircle2, Check,
 } from 'lucide-react';
 import { userService }  from '../../services/user.service';
 import { fichaService } from '../../services/ficha.service';
@@ -39,7 +39,7 @@ const ROL_CONFIG: Record<string, {
   label: string; color: string; bg: string; border: string; icon: any;
 }> = {
   coordinador: { label: 'Coordinador', color: 'text-blue-400',   bg: 'bg-blue-500/10',   border: 'border-blue-500/20',   icon: Shield        },
-  instructor:  { label: 'Instructor',  color: 'text-violet-400', bg: 'bg-violet-500/10', border: 'border-violet-500/20', icon: GraduationCap },
+  instructor:  { label: 'Instructor',  color: 'text-cyan-400', bg: 'bg-cyan-500/10', border: 'border-cyan-500/20', icon: GraduationCap },
   aprendiz:    { label: 'Aprendiz',    color: 'text-amber-400',  bg: 'bg-amber-500/10',  border: 'border-amber-500/20',  icon: BookOpen      },
 };
 
@@ -100,14 +100,32 @@ const RoleChangeConfirmModal = ({
 
 // ── Fila de usuario ───────────────────────────────────────────────────────────
 const UserRow = ({
-  u, isAdmin, canViewProfiles, onViewProfile, onRoleChange,
-  toggleMutation, deleteMutation, liderMutation,
+  u, isAdmin, canConfirm, canViewProfiles, onViewProfile, onRoleChange,
+  toggleMutation, deleteMutation, liderMutation, confirmMutation,
+  selected, onSelect, isMe,
 }: any) => {
   const cfg = ROL_CONFIG[u.rol] ?? ROL_CONFIG.aprendiz;
   const isAprendiz = u.rol === 'aprendiz';
 
   return (
-    <tr className="group hover:bg-zinc-800/30 transition-colors border-b border-zinc-600/40 last:border-0">
+    <tr className={`group hover:bg-zinc-800/30 transition-colors border-b border-zinc-600/40 last:border-0 ${selected ? 'bg-blue-500/5' : ''}`}>
+      {/* Checkbox */}
+      <td className="pl-4 pr-1 py-3.5 w-10">
+        {!isMe ? (
+          <button
+            onClick={onSelect}
+            className={`w-5 h-5 rounded border flex items-center justify-center transition-all ${
+              selected
+                ? 'bg-blue-600 border-blue-600 text-white'
+                : 'border-zinc-600 bg-zinc-800/80 text-transparent hover:border-blue-500'
+            }`}
+          >
+            <Check size={11} />
+          </button>
+        ) : (
+          <div className="w-5 h-5" />
+        )}
+      </td>
       {/* Usuario */}
       <td className="px-6 py-3.5">
         <div className="flex items-center gap-2.5">
@@ -189,6 +207,21 @@ const UserRow = ({
               <Eye size={12} /> Ver
             </button>
           )}
+          {/* Confirmar cuenta — coordinador puede hacerlo con cualquiera; instructor solo con los de su ficha */}
+          {canConfirm && u.cuenta_confirmada === false && (
+            <button
+              onClick={() => {
+                if (confirm(`¿Confirmar manualmente la cuenta de ${u.nombre}?\nEsto le permitirá iniciar sesión sin pasar por el correo de activación.`)) {
+                  confirmMutation.mutate(u.id);
+                }
+              }}
+              disabled={confirmMutation.isPending}
+              className="flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-bold rounded-md transition-all border border-amber-500/20 text-amber-400 hover:text-white hover:bg-amber-500/10 hover:border-amber-500/40 disabled:opacity-50"
+              title="Confirmar cuenta manualmente (sin correo)"
+            >
+              <UserCheck size={12} /> Confirmar
+            </button>
+          )}
           {isAdmin && (
             <>
               <button
@@ -203,6 +236,8 @@ const UserRow = ({
               </button>
               <button
                 onClick={() => { if (confirm(`¿Eliminar a ${u.nombre}?`)) deleteMutation.mutate(u.id); }}
+                title={`Eliminar a ${u.nombre}`}
+                aria-label={`Eliminar a ${u.nombre}`}
                 className="p-1.5 text-zinc-500 hover:text-rose-400 hover:bg-rose-500/5 rounded-md transition-all"
               ><Trash2 size={13} /></button>
             </>
@@ -215,8 +250,9 @@ const UserRow = ({
 
 // ── Tabla de usuarios ─────────────────────────────────────────────────────────
 const UsersTable = ({
-  users, isAdmin, canViewProfiles, onViewProfile, onRoleChange,
-  toggleMutation, deleteMutation, liderMutation,
+  users, isAdmin, canConfirm, canViewProfiles, onViewProfile, onRoleChange,
+  toggleMutation, deleteMutation, liderMutation, confirmMutation,
+  selectedIds, onSelect, onSelectGroup, onDeselectGroup, meId,
 }: any) => {
   if (users.length === 0) {
     return (
@@ -226,10 +262,35 @@ const UsersTable = ({
       </div>
     );
   }
+  const selectableIds: number[] = users.filter((u: any) => u.id !== meId).map((u: any) => u.id);
+  const allSelected  = selectableIds.length > 0 && selectableIds.every((id: number) => selectedIds.has(id));
+  const someSelected = !allSelected && selectableIds.some((id: number) => selectedIds.has(id));
+
   return (
     <table className="w-full text-left border-collapse">
       <thead>
         <tr className="border-b border-zinc-600 bg-zinc-950/40">
+          {/* Checkbox select-all */}
+          <th className="pl-4 pr-1 py-3 w-10">
+            {selectableIds.length > 0 && (
+              <button
+                onClick={() => allSelected ? onDeselectGroup(selectableIds) : onSelectGroup(selectableIds)}
+                className={`w-5 h-5 rounded border flex items-center justify-center transition-all ${
+                  allSelected
+                    ? 'bg-blue-600 border-blue-600 text-white'
+                    : someSelected
+                      ? 'bg-blue-600/40 border-blue-500/60 text-blue-300'
+                      : 'border-zinc-600 bg-zinc-800/80 text-transparent hover:border-blue-500'
+                }`}
+              >
+                {allSelected
+                  ? <Check size={11} />
+                  : someSelected
+                    ? <span className="w-2 h-0.5 bg-current rounded-full block" />
+                    : null}
+              </button>
+            )}
+          </th>
           <th className="px-6 py-3 text-[10px] uppercase tracking-[0.15em] font-black text-zinc-400">Usuario</th>
           <th className="px-6 py-3 text-[10px] uppercase tracking-[0.15em] font-black text-zinc-400">Rol</th>
           <th className="px-6 py-3 text-[10px] uppercase tracking-[0.15em] font-black text-zinc-400">Estado</th>
@@ -238,9 +299,13 @@ const UsersTable = ({
       </thead>
       <tbody className="divide-y divide-zinc-800/40 font-medium text-[12px]">
         {users.map((u: any) => (
-          <UserRow key={u.id} u={u} isAdmin={isAdmin} canViewProfiles={canViewProfiles}
+          <UserRow key={u.id} u={u} isAdmin={isAdmin} canConfirm={canConfirm} canViewProfiles={canViewProfiles}
             onViewProfile={onViewProfile} onRoleChange={onRoleChange}
-            toggleMutation={toggleMutation} deleteMutation={deleteMutation} liderMutation={liderMutation}
+            toggleMutation={toggleMutation} deleteMutation={deleteMutation}
+            liderMutation={liderMutation} confirmMutation={confirmMutation}
+            selected={selectedIds.has(u.id)}
+            onSelect={() => onSelect(u.id)}
+            isMe={u.id === meId}
           />
         ))}
       </tbody>
@@ -250,8 +315,9 @@ const UsersTable = ({
 
 // ── Bloque colapsable por ficha ───────────────────────────────────────────────
 const FichaBlock = ({
-  ficha, users, isAdmin, canViewProfiles, search,
-  onViewProfile, onRoleChange, toggleMutation, deleteMutation, liderMutation,
+  ficha, users, isAdmin, canConfirm, canViewProfiles, search,
+  onViewProfile, onRoleChange, toggleMutation, deleteMutation, liderMutation, confirmMutation,
+  selectedIds, onSelect, onSelectGroup, onDeselectGroup, meId,
 }: any) => {
   const [open, setOpen] = useState(true);
   const filtered = useMemo(() => {
@@ -297,9 +363,12 @@ const FichaBlock = ({
             className="overflow-hidden bg-zinc-900/40"
           >
             <div className="overflow-x-auto">
-              <UsersTable users={filtered} isAdmin={isAdmin} canViewProfiles={canViewProfiles}
+              <UsersTable users={filtered} isAdmin={isAdmin} canConfirm={canConfirm} canViewProfiles={canViewProfiles}
                 onViewProfile={onViewProfile} onRoleChange={onRoleChange}
-                toggleMutation={toggleMutation} deleteMutation={deleteMutation} liderMutation={liderMutation}
+                toggleMutation={toggleMutation} deleteMutation={deleteMutation}
+                liderMutation={liderMutation} confirmMutation={confirmMutation}
+                selectedIds={selectedIds} onSelect={onSelect}
+                onSelectGroup={onSelectGroup} onDeselectGroup={onDeselectGroup} meId={meId}
               />
             </div>
           </motion.div>
@@ -510,13 +579,14 @@ export const UsersPanel = () => {
   const { user: me } = useAuthStore();
   const qc = useQueryClient();
 
-  const [tab,          setTab]          = useState<'todos' | 'nuevo'>('todos');
-  const [profileUserId, setProfileUserId] = useState<number | null>(null);
-  const [search,       setSearch]       = useState('');
-  const [viewMode,     setViewMode]     = useState<'fichas' | 'roles'>('fichas');
-  const [activeRolTab, setActiveRolTab] = useState<'all' | typeof ROLES[number]>('all');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'activo' | 'inactivo'>('all');
-  const [roleConfirm,  setRoleConfirm]  = useState<{ userId: number; nombre: string; newRole: string } | null>(null);
+  const [tab,            setTab]            = useState<'todos' | 'nuevo'>('todos');
+  const [profileUserId,  setProfileUserId]  = useState<number | null>(null);
+  const [search,         setSearch]         = useState('');
+  const [viewMode,       setViewMode]       = useState<'fichas' | 'roles'>('fichas');
+  const [activeRolTab,   setActiveRolTab]   = useState<'all' | typeof ROLES[number]>('all');
+  const [statusFilter,   setStatusFilter]   = useState<'all' | 'activo' | 'inactivo'>('all');
+  const [roleConfirm,    setRoleConfirm]    = useState<{ userId: number; nombre: string; newRole: string } | null>(null);
+  const [selectedUserIds, setSelectedUserIds] = useState<Set<number>>(new Set());
 
   const { data: users = [],  isLoading: loadingUsers  } = useQuery({
     queryKey: ['users'],
@@ -557,6 +627,24 @@ export const UsersPanel = () => {
     mutationFn: (id: number) => userService.toggleLiderTecnico(id),
     onSuccess:  () => qc.invalidateQueries({ queryKey: ['users'] }),
   });
+  const confirmMutation = useMutation({
+    mutationFn: (id: number) => userService.confirmAccountManual(id),
+    onSuccess:  () => qc.invalidateQueries({ queryKey: ['users'] }),
+  });
+
+  // ─── Mutaciones masivas ──────────────────────────────────────────────────────
+  const bulkConfirmMutation = useMutation({
+    mutationFn: (ids: number[]) => userService.confirmBulk(ids),
+    onSuccess:  () => { qc.invalidateQueries({ queryKey: ['users'] }); setSelectedUserIds(new Set()); },
+  });
+  const bulkDeleteMutation = useMutation({
+    mutationFn: async (ids: number[]) => { await Promise.all(ids.map(id => userService.delete(id))); },
+    onSuccess:  () => { qc.invalidateQueries({ queryKey: ['users'] }); setSelectedUserIds(new Set()); },
+  });
+  const bulkToggleMutation = useMutation({
+    mutationFn: async (ids: number[]) => { await Promise.all(ids.map(id => userService.toggleStatus(id))); },
+    onSuccess:  () => { qc.invalidateQueries({ queryKey: ['users'] }); setSelectedUserIds(new Set()); },
+  });
 
   // Helpers ────────────────────────────────────────────────────────────────────
   const handleRoleChange = (userId: number, nombre: string, newRole: string) => {
@@ -564,8 +652,42 @@ export const UsersPanel = () => {
     else roleMutation.mutate({ id: userId, rol: newRole });
   };
 
+  // Selección masiva ────────────────────────────────────────────────────────────
+  const toggleSelect = (id: number) =>
+    setSelectedUserIds(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s; });
+  const selectGroup = (ids: number[]) =>
+    setSelectedUserIds(prev => { const s = new Set(prev); ids.forEach(id => s.add(id)); return s; });
+  const deselectGroup = (ids: number[]) =>
+    setSelectedUserIds(prev => { const s = new Set(prev); ids.forEach(id => s.delete(id)); return s; });
+  const clearSelection = () => setSelectedUserIds(new Set());
+
+  // ── Permisos derivados del usuario actual ────────────────────────────────
+  // IMPORTANTE: estos derivados se calculan ANTES de `selectedUsers` porque
+  // `visibleUsers` depende de `isInstructor` y `selectedUsers` depende de
+  // `visibleUsers`. Si se invierte el orden, se produce un ReferenceError
+  // por temporal dead zone (acceder a una `const` antes de su declaración).
   const isAdmin         = me?.rol === 'coordinador';
-  const canViewProfiles = me?.rol === 'coordinador' || me?.rol === 'instructor';
+  const isInstructor    = me?.rol === 'instructor';
+  const canConfirm      = isAdmin || isInstructor;
+  const canViewProfiles = isAdmin || isInstructor;
+
+  // Instructores solo ven usuarios de sus propias fichas
+  const instructorFichaIds = useMemo(
+    () => isInstructor ? new Set(fichasArr.map((f: any) => f.id)) : null,
+    [isInstructor, fichasArr],
+  );
+  const visibleUsers = useMemo(
+    () => isInstructor && instructorFichaIds
+      ? usersArr.filter((u: any) => instructorFichaIds.has(u.ficha?.id ?? u.fichaId))
+      : usersArr,
+    [isInstructor, instructorFichaIds, usersArr],
+  );
+
+  const selectedUsers = useMemo(() => visibleUsers.filter((u: any) => selectedUserIds.has(u.id)), [visibleUsers, selectedUserIds]);
+  const hasPending    = selectedUsers.some(u => u.cuenta_confirmada === false);
+  const hasInactive   = selectedUsers.some(u => !u.activo);
+  const hasActive     = selectedUsers.some(u => u.activo);
+  const bulkPending   = bulkConfirmMutation.isPending || bulkDeleteMutation.isPending || bulkToggleMutation.isPending;
 
   const applyFilters = (list: any[]) => list.filter(u =>
     (activeRolTab === 'all' || u.rol === activeRolTab) &&
@@ -573,27 +695,28 @@ export const UsersPanel = () => {
   );
 
   const fichaGroups = useMemo(() => {
-    const filtered = applyFilters(usersArr);
-    const byFicha  = fichasArr.map(f => ({
+    const filtered = applyFilters(visibleUsers);
+    const byFicha  = fichasArr.map((f: any) => ({
       ficha: f,
-      users: filtered.filter(u => u.ficha?.id === f.id || u.fichaId === f.id),
-    })).filter(g => g.users.length > 0);
-    const sinFicha = filtered.filter(u => !u.ficha && !u.fichaId);
+      users: filtered.filter((u: any) => u.ficha?.id === f.id || u.fichaId === f.id),
+    })).filter((g: any) => g.users.length > 0);
+    // Instructores no ven el grupo "Sin ficha" — no es de su competencia
+    const sinFicha = isInstructor ? [] : filtered.filter((u: any) => !u.ficha && !u.fichaId);
     return { byFicha, sinFicha };
-  }, [usersArr, fichasArr, activeRolTab, statusFilter]);
+  }, [visibleUsers, fichasArr, activeRolTab, statusFilter, isInstructor]);
 
   const filteredByRole = useMemo(() => {
     const term = search.toLowerCase().trim();
-    return applyFilters(usersArr).filter(u =>
+    return applyFilters(visibleUsers).filter((u: any) =>
       !term || u.nombre?.toLowerCase().includes(term) || u.correo?.toLowerCase().includes(term)
     );
-  }, [usersArr, search, activeRolTab, statusFilter]);
+  }, [visibleUsers, search, activeRolTab, statusFilter]);
 
   const countByRol = useMemo(() => {
     const c: Record<string, number> = {};
-    ROLES.forEach(r => { c[r] = usersArr.filter(u => u.rol === r).length; });
+    ROLES.forEach(r => { c[r] = visibleUsers.filter((u: any) => u.rol === r).length; });
     return c;
-  }, [usersArr]);
+  }, [visibleUsers]);
 
   const isLoading = loadingUsers || loadingFichas;
 
@@ -606,7 +729,7 @@ export const UsersPanel = () => {
         <div>
           <h2 className="text-3xl font-black text-white tracking-tight">Usuarios</h2>
           <p className="text-[12px] font-semibold text-zinc-400 mt-0.5">
-            {usersArr.length} registrados · {usersArr.filter(u => u.activo).length} activos · {fichasArr.length} fichas
+            {visibleUsers.length} registrados · {visibleUsers.filter((u: any) => u.activo).length} activos · {fichasArr.length} fichas
           </p>
         </div>
         <div className="flex items-center gap-5 flex-wrap">
@@ -660,6 +783,7 @@ export const UsersPanel = () => {
               />
               {search && (
                 <button onClick={() => setSearch('')}
+                  title="Limpiar búsqueda" aria-label="Limpiar búsqueda"
                   className="absolute right-3.5 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-200 transition-colors">
                   <X size={16} />
                 </button>
@@ -732,11 +856,14 @@ export const UsersPanel = () => {
                     No hay usuarios con los filtros actuales.
                   </div>
                 )}
-                {fichaGroups.byFicha.map(({ ficha, users: fUsers }) => (
+                {fichaGroups.byFicha.map(({ ficha, users: fUsers }: any) => (
                   <FichaBlock key={ficha.id} ficha={ficha} users={fUsers}
-                    isAdmin={isAdmin} canViewProfiles={canViewProfiles} search={search}
+                    isAdmin={isAdmin} canConfirm={canConfirm} canViewProfiles={canViewProfiles} search={search}
                     onViewProfile={setProfileUserId} onRoleChange={handleRoleChange}
-                    toggleMutation={toggleMutation} deleteMutation={deleteMutation} liderMutation={liderMutation}
+                    toggleMutation={toggleMutation} deleteMutation={deleteMutation}
+                    liderMutation={liderMutation} confirmMutation={confirmMutation}
+                    selectedIds={selectedUserIds} onSelect={toggleSelect}
+                    onSelectGroup={selectGroup} onDeselectGroup={deselectGroup} meId={me?.id}
                   />
                 ))}
                 {fichaGroups.sinFicha.length > 0 && (
@@ -758,9 +885,12 @@ export const UsersPanel = () => {
                           const term = search.toLowerCase().trim();
                           return !term || u.nombre?.toLowerCase().includes(term) || u.correo?.toLowerCase().includes(term);
                         })}
-                        isAdmin={isAdmin} canViewProfiles={canViewProfiles}
+                        isAdmin={isAdmin} canConfirm={canConfirm} canViewProfiles={canViewProfiles}
                         onViewProfile={setProfileUserId} onRoleChange={handleRoleChange}
-                        toggleMutation={toggleMutation} deleteMutation={deleteMutation} liderMutation={liderMutation}
+                        toggleMutation={toggleMutation} deleteMutation={deleteMutation}
+                        liderMutation={liderMutation} confirmMutation={confirmMutation}
+                        selectedIds={selectedUserIds} onSelect={toggleSelect}
+                        onSelectGroup={selectGroup} onDeselectGroup={deselectGroup} meId={me?.id}
                       />
                     </div>
                   </div>
@@ -769,9 +899,12 @@ export const UsersPanel = () => {
             ) : (
               <div className="bg-zinc-900 border border-zinc-700/60 rounded-md mx-4 overflow-hidden shadow-xl">
                 <div className="overflow-x-auto">
-                  <UsersTable users={filteredByRole} isAdmin={isAdmin} canViewProfiles={canViewProfiles}
+                  <UsersTable users={filteredByRole} isAdmin={isAdmin} canConfirm={canConfirm} canViewProfiles={canViewProfiles}
                     onViewProfile={setProfileUserId} onRoleChange={handleRoleChange}
-                    toggleMutation={toggleMutation} deleteMutation={deleteMutation} liderMutation={liderMutation}
+                    toggleMutation={toggleMutation} deleteMutation={deleteMutation}
+                    liderMutation={liderMutation} confirmMutation={confirmMutation}
+                    selectedIds={selectedUserIds} onSelect={toggleSelect}
+                    onSelectGroup={selectGroup} onDeselectGroup={deselectGroup} meId={me?.id}
                   />
                 </div>
                 {filteredByRole.length > 0 && (
@@ -787,6 +920,126 @@ export const UsersPanel = () => {
           </div>
         </>
       )}
+
+      {/* ── Barra flotante de acciones masivas ────────────────────────── */}
+      <AnimatePresence>
+        {selectedUserIds.size > 0 && (
+          <motion.div
+            initial={{ y: 80, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: 80, opacity: 0 }}
+            transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+            className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 px-4 py-3
+                       bg-zinc-900 border border-zinc-600/80 rounded-2xl shadow-2xl shadow-black/60"
+          >
+            {/* Contador */}
+            <div className="flex items-center gap-2 pr-3 border-r border-zinc-700">
+              <div className="w-5 h-5 rounded-full bg-blue-600 flex items-center justify-center">
+                <Check size={11} className="text-white" />
+              </div>
+              <span className="text-[13px] font-black text-white">
+                {selectedUserIds.size} seleccionado{selectedUserIds.size !== 1 ? 's' : ''}
+              </span>
+            </div>
+
+            {/* Confirmar — solo si hay cuentas pendientes */}
+            {hasPending && (
+              <button
+                onClick={() => {
+                  const pendingIds = selectedUsers.filter(u => u.cuenta_confirmada === false).map(u => u.id);
+                  if (confirm(`¿Confirmar ${pendingIds.length} cuenta${pendingIds.length !== 1 ? 's' : ''} pendiente${pendingIds.length !== 1 ? 's' : ''}?`)) {
+                    bulkConfirmMutation.mutate(pendingIds);
+                  }
+                }}
+                disabled={bulkPending}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-black rounded-lg
+                           bg-amber-500/15 text-amber-400 border border-amber-500/30
+                           hover:bg-amber-500/25 hover:border-amber-500/50
+                           disabled:opacity-50 transition-all"
+              >
+                <UserCheck size={13} />
+                Confirmar {selectedUsers.filter(u => u.cuenta_confirmada === false).length > 1
+                  ? `(${selectedUsers.filter(u => u.cuenta_confirmada === false).length})`
+                  : ''}
+              </button>
+            )}
+
+            {/* Activar — solo si hay inactivos */}
+            {hasInactive && (
+              <button
+                onClick={() => {
+                  const inactiveIds = selectedUsers.filter(u => !u.activo).map(u => u.id);
+                  bulkToggleMutation.mutate(inactiveIds);
+                }}
+                disabled={bulkPending}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-black rounded-lg
+                           bg-emerald-500/15 text-emerald-400 border border-emerald-500/30
+                           hover:bg-emerald-500/25 hover:border-emerald-500/50
+                           disabled:opacity-50 transition-all"
+              >
+                <UserCheck size={13} />
+                Activar {selectedUsers.filter(u => !u.activo).length > 1
+                  ? `(${selectedUsers.filter(u => !u.activo).length})`
+                  : ''}
+              </button>
+            )}
+
+            {/* Desactivar — solo si hay activos */}
+            {hasActive && (
+              <button
+                onClick={() => {
+                  const activeIds = selectedUsers.filter(u => u.activo).map(u => u.id);
+                  bulkToggleMutation.mutate(activeIds);
+                }}
+                disabled={bulkPending}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-black rounded-lg
+                           bg-zinc-800 text-zinc-300 border border-zinc-600
+                           hover:bg-zinc-700 hover:text-white hover:border-zinc-500
+                           disabled:opacity-50 transition-all"
+              >
+                <UserX size={13} />
+                Desactivar {selectedUsers.filter(u => u.activo).length > 1
+                  ? `(${selectedUsers.filter(u => u.activo).length})`
+                  : ''}
+              </button>
+            )}
+
+            {/* Eliminar — siempre */}
+            <button
+              onClick={() => {
+                const n = selectedUserIds.size;
+                if (confirm(`¿Eliminar ${n} usuario${n !== 1 ? 's' : ''}? Esta acción no se puede deshacer.`)) {
+                  bulkDeleteMutation.mutate(Array.from(selectedUserIds));
+                }
+              }}
+              disabled={bulkPending}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-black rounded-lg
+                         bg-rose-500/15 text-rose-400 border border-rose-500/30
+                         hover:bg-rose-500/25 hover:border-rose-500/50
+                         disabled:opacity-50 transition-all"
+            >
+              <Trash2 size={13} />
+              Eliminar
+            </button>
+
+            {/* Separador + limpiar */}
+            <div className="pl-3 border-l border-zinc-700">
+              <button
+                onClick={clearSelection}
+                className="p-1.5 text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800 rounded-md transition-all"
+                title="Deseleccionar todo"
+              >
+                <X size={15} />
+              </button>
+            </div>
+
+            {/* Spinner */}
+            {bulkPending && (
+              <span className="w-4 h-4 border-2 border-zinc-600 border-t-blue-400 rounded-full animate-spin ml-1" />
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* ── Modal confirmación cambio a coordinador ─────────────────────── */}
       <RoleChangeConfirmModal

@@ -17,13 +17,14 @@ import { projectService } from '../../services/project.service';
 import { ticketService }  from '../../services/ticket.service';
 import { recursoService } from '../../services/recurso.service';
 import { GitHubWidget }   from '../../components/GitHubWidget';
+import { MiContextoCard } from '../../components/MiContextoCard';
 
 // ── Sugerencias del líder (cambia según el día) ──────────────────────────────
 const SUGGESTIONS = [
   'Realiza el Daily Scrum con tu equipo para sincronizar avances y bloqueos.',
-  'Revisa las tareas en estado "testing" — el equipo puede necesitar tu retroalimentación.',
+  'Revisa las tareas "En revisión" — el equipo puede necesitar tu retroalimentación.',
   'Asegúrate de que cada tarea tenga un responsable claro antes de iniciar el módulo.',
-  'Un backlog bien priorizado acelera la planificación del próximo sprint.',
+  'Una cola de trabajo bien priorizada acelera la planificación del próximo módulo.',
   '¡Felicita a tu equipo por las tareas completadas! La motivación importa.',
   'Identifica tareas bloqueadas y ayuda al equipo a desbloquearlas hoy.',
   'La comunicación constante con el instructor evita sorpresas en la revisión del módulo.',
@@ -31,7 +32,7 @@ const SUGGESTIONS = [
 
 const STAT_CONFIG = [
   { key: 'to_do',       label: 'Por hacer',   icon: Clock,         color: 'text-zinc-400',    bg: 'bg-zinc-800/60'    },
-  { key: 'in_progress', label: 'En progreso', icon: Layers,        color: 'text-blue-400',    bg: 'bg-blue-500/10'    },
+  { key: 'in_progress', label: 'En desarrollo', icon: Layers,        color: 'text-blue-400',    bg: 'bg-blue-500/10'    },
   { key: 'testing',     label: 'En revisión', icon: AlertTriangle, color: 'text-amber-400',   bg: 'bg-amber-500/10'   },
   { key: 'done',        label: 'Completadas', icon: CheckCircle2,  color: 'text-emerald-400', bg: 'bg-emerald-500/10' },
 ] as const;
@@ -46,7 +47,7 @@ const STATUS_COLOR: Record<string, string> = {
 const RECURSO_ICON_MAP: Record<string, { icon: React.ElementType; color: string }> = {
   github: { icon: Github,     color: 'text-zinc-300'   },
   drive:  { icon: HardDrive,  color: 'text-amber-400'  },
-  figma:  { icon: Figma,      color: 'text-purple-400' },
+  figma:  { icon: Figma,      color: 'text-pink-400' },
   docs:   { icon: BookOpen,   color: 'text-emerald-400'},
   notion: { icon: BookOpen,   color: 'text-pink-400'   },
   jira:   { icon: LayoutGrid, color: 'text-blue-500'   },
@@ -68,11 +69,11 @@ export const LiderDashboard = () => {
 
   // Reloj en tiempo real
   const [time, setTime] = useState(() =>
-    new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+    new Date().toLocaleTimeString('es-CO', { hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: true }).toLowerCase()
   );
   useEffect(() => {
     const id = setInterval(() => {
-      setTime(new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+      setTime(new Date().toLocaleTimeString('es-CO', { hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: true }).toLowerCase());
     }, 1000);
     return () => clearInterval(id);
   }, []);
@@ -131,8 +132,8 @@ export const LiderDashboard = () => {
     <div className="space-y-6">
 
       {/* ── Banner ─────────────────────────────────────────────────────────── */}
-      <div className="relative overflow-hidden m-6 rounded-md p-8 text-white shadow-lg bg-gradient-to-r from-blue-800 to-blue-950">
-        {/* SVG decorativo: columnas kanban — identidad visual del líder técnico */}
+      <div className="relative overflow-hidden m-6 rounded-md p-8 text-white shadow-lg" style={{ background: 'linear-gradient(135deg, #1a2234 0%, #243852 50%, #0f1825 100%)' }}>
+        {/* SVG decorativo: columnas del tablero — identidad visual del líder técnico */}
         <div className="absolute top-0 right-0 w-2/5 h-full opacity-15 pointer-events-none">
           <svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
             {/* Headers de columnas */}
@@ -171,7 +172,7 @@ export const LiderDashboard = () => {
             <h1 className="text-3xl font-bold tracking-tight">
               Hola, {user?.nombre?.split(' ')[0]} {user?.nombre?.split(' ')[1] || ''}
             </h1>
-            <p className="text-blue-200 font-medium text-sm">
+            <p className="text-slate-200 font-medium text-sm">
               {miProyecto
                 ? `Liderando: ${miProyecto.nombre}${activeSprint ? ` · ${activeSprint.nombre}` : ''}`
                 : 'Sin proyecto asignado aún'}
@@ -185,11 +186,26 @@ export const LiderDashboard = () => {
           </div>
 
           {/* Badge de progreso */}
-          <div className="hidden sm:flex flex-col items-center gap-1 bg-white/10 backdrop-blur-md px-5 py-3 rounded-md border border-white/20 min-w-[120px]">
-            <span className="text-3xl font-black">{isLoading ? '—' : `${avance}%`}</span>
-            <span className="text-xs font-semibold uppercase tracking-wider opacity-80">Progreso</span>
+          <div className="hidden sm:flex flex-col items-center gap-3">
+            <div className="flex flex-col items-center gap-1 bg-white/10 backdrop-blur-md px-5 py-3 rounded-md border border-white/20 min-w-[120px]">
+              <span className="text-3xl font-black">{isLoading ? '—' : `${avance}%`}</span>
+              <span className="text-xs font-semibold uppercase tracking-wider opacity-80">Progreso</span>
+            </div>
+            {!isLoading && counts.testing > 0 && (
+              <div className="flex items-center gap-1.5 bg-amber-500/20 border border-amber-400/30 rounded-md px-3 py-1.5">
+                <AlertTriangle size={11} className="text-amber-300" />
+                <span className="text-xs font-bold text-amber-200">
+                  {counts.testing} en revisión
+                </span>
+              </div>
+            )}
           </div>
         </div>
+      </div>
+
+      {/* ── Mi contexto en el sistema (ficha, instructor, proyecto, módulo) */}
+      <div className="mx-6">
+        <MiContextoCard />
       </div>
 
       {/* ── Recursos del proyecto ──────────────────────────────────────────── */}

@@ -2,7 +2,19 @@
   "permissions": {
     "allow": [
       "Bash(Get-ChildItem C:\\\\Kanbana\\\\backend\\\\src -Recurse -Name \"*.ts\")",
-      "Bash(npx tsc *)"
+      "Bash(npx tsc *)",
+      "Bash(grep -rhoE \"\\(api|http\\)\\\\.\\(get|post|patch|delete|put\\)\\\\\\(\\\\`?['\\\\\"\\\\`][^'\\\\\"\\\\`]+\" frontend/src/components frontend/src/pages frontend/src/dashboard)",
+      "PowerShell($o=\\(Get-NetTCPConnection -LocalPort 3099 -State Listen -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique\\); if\\($o\\){ $o | ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue }; Write-Host \"backend 3099 detenido\" }; Remove-Item C:\\\\Kanbana\\\\backend\\\\qa3099.log,C:\\\\Kanbana\\\\backend\\\\qa3099.err -ErrorAction SilentlyContinue; Write-Host \"limpieza lista\")",
+      "PowerShell(wsl docker exec kanbana-backend-1 sh -c \"cd /app && npx tsc --noEmit 2>&1 | head -30\")",
+      "Read(//c/Users/berke/AppData/Roaming/Claude/local-agent-mode-sessions/skills-plugin/9a4cbf36-e278-4a6f-a3e9-582e9bb04af8/6bf09b49-778b-43cb-b673-abfd8c8eb5f0/skills/docx/**)",
+      "Bash(PYTHONUTF8=1 python scripts/office/pack.py unpacked/ \"C:\\\\Kanbana\\\\documentos\\\\Manual-de-Usuario-Kanbana-DNP.docx\" --original \"C:\\\\Users\\\\berke\\\\Downloads\\\\Guía para la Elaboración del Manual del Usuario del Sistema.docx\")",
+      "Bash(rm -rf verify)",
+      "Bash(PYTHONUTF8=1 python scripts/office/unpack.py \"C:\\\\Kanbana\\\\documentos\\\\Manual-de-Usuario-Kanbana-DNP.docx\" verify/)",
+      "Bash(node -e ' *)",
+      "Bash(rm -rf tmp_orig)",
+      "Bash(PYTHONUTF8=1 python scripts/office/unpack.py \"C:\\\\Users\\\\berke\\\\Downloads\\\\Guía para la Elaboración del Manual del Usuario del Sistema.docx\" tmp_orig/)",
+      "Bash(cp tmp_orig/word/header*.xml unpacked/word/)",
+      "Bash(cp tmp_orig/word/footer*.xml unpacked/word/)"
     ]
   }
 }

@@ -4,6 +4,7 @@ import {
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { ProjectsService } from './projects.service';
+import { SugerenciasService } from './sugerencias.service';
 import { NotificationsService } from '../notifications/notifications.service';
 
 @Controller('projects')
@@ -11,8 +12,18 @@ import { NotificationsService } from '../notifications/notifications.service';
 export class ProjectsController {
   constructor(
     private readonly projectsService: ProjectsService,
+    private readonly sugerenciasService: SugerenciasService,
     private readonly notificationsService: NotificationsService,
   ) {}
+
+  // Permiso para gestionar módulos/sugerencias: instructor, coordinador o líder técnico.
+  private assertPuedeGestionar(req: any) {
+    const rol = req.user?.rol;
+    const esLider = rol === 'aprendiz' && req.user?.es_lider_tecnico === true;
+    if (rol !== 'coordinador' && rol !== 'instructor' && !esLider) {
+      throw new ForbiddenException('No tienes permisos para gestionar sugerencias de módulos.');
+    }
+  }
 
   // ── GET /projects — filtra según el rol del usuario autenticado ────────
   // FIX BUG: Antes devolvía TODOS los proyectos a todos los roles.
@@ -38,6 +49,36 @@ export class ProjectsController {
     return this.projectsService.bulkGenerateTrimestres(dto);
   }
 
+  // POST /projects/seed-modulos
+  // Seed one-shot: genera módulos de la plantilla SDLC para TODOS los proyectos
+  // con ficha que aún no tienen sprints. Solo coordinador/instructor.
+  // IMPORTANTE: ruta estática → debe ir ANTES de las rutas con :id.
+  @Post('seed-modulos')
+  seedModulos(@Request() req: any) {
+    const rol = req.user?.rol;
+    if (rol !== 'coordinador' && rol !== 'instructor') {
+      throw new ForbiddenException('Solo coordinadores o instructores pueden ejecutar el seed de módulos.');
+    }
+    return this.projectsService.seedModulosFaltantes();
+  }
+
+  // ── Sugerencias inteligentes — acciones por sugerencia (rutas estáticas) ──
+  // IMPORTANTE: van ANTES de las rutas con :id para no capturarse como parámetro.
+
+  // POST /projects/sugerencias/:sugId/crear-modulo
+  @Post('sugerencias/:sugId/crear-modulo')
+  crearModuloDesdeSugerencia(@Param('sugId', ParseIntPipe) sugId: number, @Request() req: any) {
+    this.assertPuedeGestionar(req);
+    return this.sugerenciasService.crearModulo(sugId);
+  }
+
+  // POST /projects/sugerencias/:sugId/descartar
+  @Post('sugerencias/:sugId/descartar')
+  descartarSugerencia(@Param('sugId', ParseIntPipe) sugId: number, @Request() req: any) {
+    this.assertPuedeGestionar(req);
+    return this.sugerenciasService.descartar(sugId);
+  }
+
   @Get('for-me')
   findForMe(@Request() req: any) {
     return this.projectsService.findForUser(req.user);
@@ -51,6 +92,45 @@ export class ProjectsController {
   @Post()
   create(@Body() dto: any) {
     return this.projectsService.create(dto);
+  }
+
+  // POST /projects/:id/generar-modulos
+  // Genera los módulos de la plantilla SDLC para un proyecto existente que
+  // no tiene módulos. Body opcional: { force?: boolean }. Solo admin/instructor.
+  @Post(':id/generar-modulos')
+  generarModulos(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: { force?: boolean },
+    @Request() req: any,
+  ) {
+    const rol = req.user?.rol;
+    const esLider = rol === 'aprendiz' && req.user?.es_lider_tecnico === true;
+    if (rol !== 'coordinador' && rol !== 'instructor' && !esLider) {
+      throw new ForbiddenException('No tienes permisos para generar módulos.');
+    }
+    return this.projectsService.generarModulosParaProyecto(id, { force: body?.force });
+  }
+
+  // ── Sugerencias inteligentes — por proyecto ───────────────────────────────
+
+  // GET /projects/:id/sugerencias — lista las sugerencias activas agrupadas por trimestre
+  @Get(':id/sugerencias')
+  getSugerencias(@Param('id', ParseIntPipe) id: number) {
+    return this.sugerenciasService.listar(id);
+  }
+
+  // POST /projects/:id/sugerencias/generar — genera (si no hay) usando IA + catálogo
+  @Post(':id/sugerencias/generar')
+  generarSugerencias(@Param('id', ParseIntPipe) id: number, @Request() req: any) {
+    this.assertPuedeGestionar(req);
+    return this.sugerenciasService.generar(id, false);
+  }
+
+  // POST /projects/:id/sugerencias/regenerar — fuerza un nuevo análisis
+  @Post(':id/sugerencias/regenerar')
+  regenerarSugerencias(@Param('id', ParseIntPipe) id: number, @Request() req: any) {
+    this.assertPuedeGestionar(req);
+    return this.sugerenciasService.generar(id, true);
   }
 
   @Patch(':id')
@@ -73,12 +153,22 @@ export class ProjectsController {
   }
 
   @Delete(':id')
-  remove(@Param('id', ParseIntPipe) id: number, @Request() req: any) {
-    // Solo el coordinador puede eliminar proyectos
-    if (req.user?.rol !== 'coordinador') {
-      throw new ForbiddenException('Solo el coordinador puede eliminar proyectos');
+  async remove(@Param('id', ParseIntPipe) id: number, @Request() req: any) {
+    const rol = req.user?.rol;
+    if (rol === 'coordinador') {
+      return this.projectsService.remove(id);
     }
-    return this.projectsService.remove(id);
+    if (rol === 'instructor') {
+      // El instructor solo puede eliminar proyectos que él creó
+      const proyecto = await this.projectsService.findOne(id);
+      if (!proyecto) throw new ForbiddenException('Proyecto no encontrado');
+      const instructorId = (proyecto as any).instructorId ?? (proyecto as any).instructor?.id;
+      if (instructorId !== req.user.id) {
+        throw new ForbiddenException('Solo puedes eliminar proyectos que tú creaste');
+      }
+      return this.projectsService.remove(id);
+    }
+    throw new ForbiddenException('No tienes permisos para eliminar proyectos');
   }
 
   @Get(':id/members')
@@ -179,6 +269,15 @@ export class ProjectsController {
     return this.projectsService.updateTrimestre(tid, dto);
   }
 
+  // PATCH /projects/trimestres/:tid/close
+  // Cierra un trimestre (esta_finalizado = true).
+  // Solo es posible si todos sus sprints están finalizados.
+  // IMPORTANTE: va DESPUÉS de trimestres/:tid para que NestJS lo resuelva correctamente.
+  @Patch('trimestres/:tid/close')
+  closeTrimestre(@Param('tid', ParseIntPipe) tid: number) {
+    return this.projectsService.closeTrimestre(tid);
+  }
+
   // PATCH /projects/sprints/:sprintId/assign-trimestre
   // Vincula un sprint a un trimestre (o lo desvincula con trimestreId: null).
   // Body: { trimestreId: number | null }
@@ -234,15 +333,43 @@ export class ProjectsController {
   }
 
   /**
+   * POST /projects/sprints/solicitud/:notifId/accept
+   * Instructor acepta la solicitud de módulo del líder técnico.
+   * Crea el sprint automáticamente con los datos de la notificación.
+   * IMPORTANTE: va ANTES de :id/solicitar-sprint para evitar conflictos de routing.
+   */
+  @Post('sprints/solicitud/:notifId/accept')
+  acceptSprintSolicitud(
+    @Param('notifId', ParseIntPipe) notifId: number,
+    @Request() req: any,
+  ) {
+    return this.projectsService.acceptSprintSolicitud(notifId, req.user.id);
+  }
+
+  /**
+   * POST /projects/sprints/solicitud/:notifId/reject
+   * Instructor rechaza la solicitud de módulo del líder técnico.
+   * Body: { motivo?: string }
+   */
+  @Post('sprints/solicitud/:notifId/reject')
+  rejectSprintSolicitud(
+    @Param('notifId', ParseIntPipe) notifId: number,
+    @Body('motivo') motivo: string,
+    @Request() req: any,
+  ) {
+    return this.projectsService.rejectSprintSolicitud(notifId, req.user.id, motivo || undefined);
+  }
+
+  /**
    * POST /projects/:id/solicitar-sprint
    * El líder técnico solicita al instructor que cree un nuevo sprint.
-   * Genera una notificación para el instructor del proyecto.
-   * Body: { nombre: string, justificacion?: string }
+   * Genera una notificación accionable (action_type: 'solicitar_modulo') para el instructor.
+   * Body: { nombre: string, justificacion?: string, fecha_inicio?: string, fecha_fin?: string }
    */
   @Post(':id/solicitar-sprint')
   async solicitarSprint(
     @Param('id', ParseIntPipe) id: number,
-    @Body() body: { nombre: string; justificacion?: string },
+    @Body() body: { nombre: string; justificacion?: string; fecha_inicio?: string; fecha_fin?: string },
     @Request() req: any,
   ) {
     const usuario = req.user;
@@ -267,14 +394,24 @@ export class ProjectsController {
       );
     }
 
-    // Crear notificación para el instructor
+    // Crear notificación accionable para el instructor (con accept/reject)
     await this.notificationsService.create({
-      usuario_id: instructorId,
-      titulo: `Solicitud de sprint — ${proyecto.nombre}`,
-      mensaje: `El líder técnico ${usuario.nombre} solicita crear el sprint "${body.nombre}".${
+      usuario_id:  instructorId,
+      titulo:      `Solicitud de módulo — ${proyecto.nombre}`,
+      mensaje:     `El líder técnico ${usuario.nombre} solicita crear el módulo "${body.nombre}".${
         body.justificacion ? ` Justificación: ${body.justificacion}` : ''
       }`,
-      tipo: 'info' as any,
+      tipo:        'info' as any,
+      action_type: 'solicitar_modulo',
+      action_data: JSON.stringify({
+        nombre:       body.nombre,
+        justificacion: body.justificacion || '',
+        fecha_inicio: body.fecha_inicio  || '',
+        fecha_fin:    body.fecha_fin     || '',
+        proyecto_id:  id,
+        lider_id:     usuario.id,
+        lider_nombre: usuario.nombre,
+      }),
     });
 
     return { mensaje: 'Solicitud enviada al instructor correctamente.' };

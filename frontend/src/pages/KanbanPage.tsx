@@ -4,19 +4,21 @@
  *
  * Rediseñado con estilo zinc/moderno, unificado con el resto de la app.
  */
-import { useState }                               from 'react';
+import { useState, useMemo }                       from 'react';
 import { useParams, useNavigate }                 from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient }  from '@tanstack/react-query';
 import {
-  ChevronLeft, Search, ListTodo, CheckCircle2,
+  ChevronLeft, Search, CheckCircle2,
   Users, Plus, AlertCircle, LayoutGrid, Layers,
-  KanbanSquare, Clock, UserCircle2,
+  Clock, SlidersHorizontal, X, Flag, User2, CalendarClock,
 } from 'lucide-react';
 import { projectService }  from '../services/project.service';
 import { ticketService }   from '../services/ticket.service';
 import { KanbanBoard }     from '../components/KanbanBoard';
 import { Modal }           from '../components/Modal';
 import { Button }          from '../components/Button';
+import { DateTimeInput }   from '../components/DateTimeInput';
+import { RejectModal }     from '../components/RejectModal';
 import { useAuthStore }    from '../store/auth.store';
 import { TicketStatus }    from '../types/ticket.types';
 
@@ -39,9 +41,22 @@ export const KanbanPage = () => {
   const [searchTerm,       setSearchTerm]       = useState('');
   const [showTicketModal,  setShowTicketModal]  = useState(false);
   const [showMembers,      setShowMembers]      = useState(false);
+  const [showFilters,      setShowFilters]      = useState(false);
+  const [rejectingTicket,  setRejectingTicket]  = useState<{ id: number; titulo?: string } | null>(null);
 
-  const canManage = user?.rol === 'coordinador' || user?.rol === 'instructor' ||
-                    (user?.rol === 'aprendiz' && (user as any).es_lider_tecnico);
+  // ── Filtros avanzados ─────────────────────────────────────────────────────
+  const [filterAssignee,  setFilterAssignee]  = useState<number | null>(null);
+  const [filterPriority,  setFilterPriority]  = useState<string | null>(null);
+  const [filterBlocked,   setFilterBlocked]   = useState(false);
+  const [filterDate,      setFilterDate]      = useState<'overdue' | 'week' | null>(null);
+
+  const canManage   = user?.rol === 'coordinador' || user?.rol === 'instructor' ||
+                      (user?.rol === 'aprendiz' && (user as any).es_lider_tecnico);
+  const esInstructor = user?.rol === 'instructor' || user?.rol === 'coordinador';
+  const esLider      = user?.rol === 'aprendiz' && (user as any)?.es_lider_tecnico;
+  const kanbanRole   = esInstructor ? user!.rol
+                     : esLider      ? 'lider_tecnico'
+                     : 'aprendiz';
 
   // ── Queries ────────────────────────────────────────────────────────────────
   const { data: project } = useQuery({
@@ -94,13 +109,57 @@ export const KanbanPage = () => {
     },
   });
 
+  // Líder técnico: aprobar/rechazar tareas en revisión (testing)
+  const liderApproveMut = useMutation({
+    mutationFn: (ticketId: number) => ticketService.approveCompletion(ticketId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['tickets', projectId] }),
+    onError:   (err: any) => alert(err?.response?.data?.message ?? 'No se pudo aprobar la tarea.'),
+  });
+
+  const liderRejectMut = useMutation({
+    mutationFn: ({ id, motivo }: { id: number; motivo?: string }) =>
+      ticketService.rejectCompletion(id, motivo),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tickets', projectId] });
+      setRejectingTicket(null);
+    },
+    onError:   (err: any) => alert(err?.response?.data?.message ?? 'No se pudo rechazar la tarea.'),
+  });
+
   // ── Derivados ──────────────────────────────────────────────────────────────
-  const ticketsArr     = tickets as any[];
-  const membersArr     = members as any[];
-  const aprendices     = membersArr.filter((m: any) => m.rol === 'aprendiz');
-  const filteredTickets = ticketsArr.filter(t =>
-    t.titulo?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const ticketsArr = tickets as any[];
+  const membersArr = members as any[];
+  const aprendices = membersArr.filter((m: any) => m.rol === 'aprendiz');
+
+  const filteredTickets = useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const endOfWeek = new Date(today);
+    endOfWeek.setDate(today.getDate() + 7);
+
+    return ticketsArr.filter(t => {
+      if (searchTerm && !t.titulo?.toLowerCase().includes(searchTerm.toLowerCase())) return false;
+      if (filterAssignee) {
+        const aid = t.asignado_a?.id ?? t.asignado_a_id ?? t.asignado_a;
+        if (aid !== filterAssignee) return false;
+      }
+      if (filterPriority && t.prioridad !== filterPriority) return false;
+      if (filterBlocked && !t.esta_bloqueado) return false;
+      if (filterDate === 'overdue') {
+        if (!t.fecha_limite) return false;
+        const due = new Date(t.fecha_limite);
+        if (due >= today) return false;
+      }
+      if (filterDate === 'week') {
+        if (!t.fecha_limite) return false;
+        const due = new Date(t.fecha_limite);
+        if (due < today || due > endOfWeek) return false;
+      }
+      return true;
+    });
+  }, [ticketsArr, searchTerm, filterAssignee, filterPriority, filterBlocked, filterDate]);
+
+  const activeFilterCount = [filterAssignee, filterPriority, filterBlocked, filterDate].filter(Boolean).length;
 
   const done       = ticketsArr.filter(t => t.estado === 'done').length;
   const inProgress = ticketsArr.filter(t => t.estado === 'in_progress').length;
@@ -181,12 +240,29 @@ export const KanbanPage = () => {
               />
             </div>
 
+            {/* Filtros */}
+            <button
+              onClick={() => setShowFilters(!showFilters)}
+              className={`relative flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-bold transition-all ${
+                showFilters || activeFilterCount > 0
+                  ? 'bg-blue-500/15 border-blue-500/30 text-blue-400'
+                  : 'bg-zinc-800 border-zinc-700 text-zinc-400 hover:text-zinc-200 hover:border-zinc-600'
+              }`}
+            >
+              <SlidersHorizontal size={13} /> Filtros
+              {activeFilterCount > 0 && (
+                <span className="absolute -top-1 -right-1 w-4 h-4 bg-blue-500 text-white rounded-full text-[9px] font-black flex items-center justify-center">
+                  {activeFilterCount}
+                </span>
+              )}
+            </button>
+
             {/* Equipo */}
             <button
               onClick={() => setShowMembers(!showMembers)}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-bold transition-all ${
                 showMembers
-                  ? 'bg-primary-600/15 border-primary-500/30 text-primary-400'
+                  ? 'bg-blue-500/15 border-blue-500/30 text-blue-400'
                   : 'bg-zinc-800 border-zinc-700 text-zinc-400 hover:text-zinc-200 hover:border-zinc-600'
               }`}
             >
@@ -237,6 +313,108 @@ export const KanbanPage = () => {
           </div>
         )}
       </div>
+
+      {/* ── Panel de filtros avanzados ────────────────────────────────────── */}
+      {showFilters && (
+        <div className="bg-zinc-900/90 border-b border-zinc-800 px-5 py-3 shrink-0">
+          <div className="flex items-center gap-4 flex-wrap">
+
+            {/* Asignado a */}
+            <div className="flex items-center gap-2">
+              <User2 size={12} className="text-zinc-500" />
+              <span className="text-[10px] font-black text-zinc-600 uppercase tracking-widest">Asignado a</span>
+              <select
+                value={filterAssignee ?? ''}
+                onChange={e => setFilterAssignee(e.target.value ? Number(e.target.value) : null)}
+                className="bg-zinc-800 border border-zinc-700 rounded-lg px-2 py-1 text-xs text-zinc-200 outline-none focus:border-zinc-600 transition-colors"
+              >
+                <option value="">Todos</option>
+                {aprendices.map((m: any) => (
+                  <option key={m.id} value={m.id}>{m.nombre.split(' ')[0]}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Prioridad */}
+            <div className="flex items-center gap-2">
+              <Flag size={12} className="text-zinc-500" />
+              <span className="text-[10px] font-black text-zinc-600 uppercase tracking-widest">Prioridad</span>
+              <div className="flex gap-1">
+                {[
+                  { val: null,    label: 'Todas', cls: 'text-zinc-400 bg-zinc-800 border-zinc-700' },
+                  { val: 'alta',  label: '🔴 Alta',  cls: 'text-rose-400 bg-rose-500/10 border-rose-500/20' },
+                  { val: 'media', label: '🟡 Media', cls: 'text-amber-400 bg-amber-500/10 border-amber-500/20' },
+                  { val: 'baja',  label: '🟢 Baja',  cls: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20' },
+                ].map(({ val, label, cls }) => (
+                  <button
+                    key={String(val)}
+                    onClick={() => setFilterPriority(val)}
+                    className={`px-2 py-0.5 rounded-lg text-[11px] font-bold border transition-all ${
+                      filterPriority === val ? cls + ' ring-1 ring-offset-0' : 'text-zinc-500 bg-zinc-800/50 border-zinc-700/50 hover:bg-zinc-800'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Bloqueado */}
+            <button
+              onClick={() => setFilterBlocked(b => !b)}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[11px] font-bold transition-all ${
+                filterBlocked
+                  ? 'text-rose-400 bg-rose-500/10 border-rose-500/20'
+                  : 'text-zinc-500 bg-zinc-800/50 border-zinc-700/50 hover:bg-zinc-800'
+              }`}
+            >
+              🚫 Solo bloqueados
+            </button>
+
+            {/* Fecha */}
+            <div className="flex items-center gap-2">
+              <CalendarClock size={12} className="text-zinc-500" />
+              <div className="flex gap-1">
+                {[
+                  { val: null,      label: 'Cualquier fecha' },
+                  { val: 'overdue', label: 'Vencidas' },
+                  { val: 'week',    label: 'Esta semana' },
+                ].map(({ val, label }) => (
+                  <button
+                    key={String(val)}
+                    onClick={() => setFilterDate(val as any)}
+                    className={`px-2 py-0.5 rounded-lg text-[11px] font-bold border transition-all ${
+                      filterDate === val
+                        ? 'text-blue-400 bg-blue-500/10 border-blue-500/20'
+                        : 'text-zinc-500 bg-zinc-800/50 border-zinc-700/50 hover:bg-zinc-800'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Limpiar filtros */}
+            {activeFilterCount > 0 && (
+              <button
+                onClick={() => { setFilterAssignee(null); setFilterPriority(null); setFilterBlocked(false); setFilterDate(null); }}
+                className="flex items-center gap-1 text-[11px] text-zinc-500 hover:text-zinc-300 transition-colors ml-auto"
+              >
+                <X size={11} /> Limpiar
+              </button>
+            )}
+          </div>
+
+          {/* Resumen de resultados */}
+          {activeFilterCount > 0 && (
+            <p className="text-[10px] text-zinc-600 mt-2">
+              Mostrando <span className="text-zinc-300 font-bold">{filteredTickets.length}</span> de{' '}
+              <span className="text-zinc-300 font-bold">{ticketsArr.length}</span> tareas
+            </p>
+          )}
+        </div>
+      )}
 
       {/* ── Panel de equipo (colapsable) ───────────────────────────────────── */}
       {showMembers && (
@@ -289,9 +467,24 @@ export const KanbanPage = () => {
             tickets={filteredTickets}
             onStatusChange={(ticketId, status) => updateStatusMutation.mutate({ ticketId, status })}
             readonly={!canManage}
+            role={kanbanRole}
+            currentUserId={user?.id}
+            onApprove={esLider ? (id) => liderApproveMut.mutate(id) : undefined}
+            onReject={esLider ? (id) => {
+              const t = ticketsArr.find(x => x.id === id);
+              setRejectingTicket({ id, titulo: t?.titulo });
+            } : undefined}
           />
         )}
       </div>
+
+      {/* ── Modal: Rechazo de tarea ────────────────────────────────────────── */}
+      <RejectModal
+        ticket={rejectingTicket}
+        onClose={() => setRejectingTicket(null)}
+        onReject={(id, motivo) => liderRejectMut.mutate({ id, motivo: motivo || undefined })}
+        isPending={liderRejectMut.isPending}
+      />
 
       {/* ── Modal: Nueva Tarea ─────────────────────────────────────────────── */}
       <Modal isOpen={showTicketModal} onClose={() => setShowTicketModal(false)} title="Nueva Tarea">
@@ -334,7 +527,14 @@ export const KanbanPage = () => {
             </FormField>
           </div>
           <FormField label="Fecha límite">
-            <input name="fecha_limite" type="date" className={inputCls} />
+            <DateTimeInput
+              name="fecha_limite"
+              withTime={true}
+              timeName="hora_limite"
+              min={(activeSprint as any)?.fecha_inicio?.toString().slice(0, 10)}
+              max={(activeSprint as any)?.fecha_fin?.toString().slice(0, 10)}
+              rangeLabel={(activeSprint as any)?.nombre ? `Dentro de "${(activeSprint as any).nombre}"` : undefined}
+            />
           </FormField>
           {activeSprint && (
             <div className="flex items-center gap-2 p-3 bg-emerald-500/8 border border-emerald-500/20 rounded-xl text-xs text-emerald-400">

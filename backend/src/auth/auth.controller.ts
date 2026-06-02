@@ -1,8 +1,9 @@
 import {
   Controller, Post, Body, UnauthorizedException,
-  Get, UseGuards, Request, HttpCode, HttpStatus
+  Get, UseGuards, Request, HttpCode, HttpStatus, Query, Res,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
+import type { Response } from 'express';
 import { AuthService } from './auth.service';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 
@@ -29,6 +30,69 @@ export class AuthController {
     }
 
     return this.authService.login(user);
+  }
+
+  @Post('register')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Registro público de auto-servicio (crea un aprendiz)' })
+  async register(@Body() body: { nombre: string; correo: string; contrasena: string }) {
+    return this.authService.register(body);
+  }
+
+  // ── Login con Google (OAuth) — rutas públicas ────────────────────────────
+  @Get('google')
+  @ApiOperation({ summary: 'Redirige a Google para iniciar sesión' })
+  googleAuth(@Res() res: Response) {
+    return res.redirect(this.authService.googleAuthUrl());
+  }
+
+  // ── Login con GitHub (OAuth) — rutas públicas ────────────────────────────
+  @Get('github')
+  @ApiOperation({ summary: 'Redirige a GitHub para iniciar sesión' })
+  githubLoginAuth(@Res() res: Response) {
+    return res.redirect(this.authService.githubLoginAuthUrl());
+  }
+
+  @Get('github/callback')
+  @ApiOperation({ summary: 'Callback de GitHub login — emite la sesión y redirige al frontend' })
+  async githubLoginCallback(
+    @Query('code')  code:  string,
+    @Query('state') state: string,
+    @Res() res: Response,
+  ) {
+    const front = this.authService.frontendUrl;
+    try {
+      const { tokens } = await this.authService.githubLoginCallback(code, state);
+      const qs = new URLSearchParams({
+        access_token:  tokens.access_token,
+        refresh_token: tokens.refresh_token,
+      });
+      return res.redirect(`${front}/auth/callback?${qs.toString()}`);
+    } catch (err: any) {
+      const msg = err?.message || 'No se pudo iniciar sesión con GitHub';
+      return res.redirect(`${front}/?error=${encodeURIComponent(msg)}`);
+    }
+  }
+
+  @Get('google/callback')
+  @ApiOperation({ summary: 'Callback de Google — emite la sesión y redirige al frontend' })
+  async googleCallback(
+    @Query('code') code: string,
+    @Query('state') state: string,
+    @Res() res: Response,
+  ) {
+    const front = this.authService.frontendUrl;
+    try {
+      const { tokens } = await this.authService.googleCallback(code, state);
+      const qs = new URLSearchParams({
+        access_token:  tokens.access_token,
+        refresh_token: tokens.refresh_token,
+      });
+      return res.redirect(`${front}/auth/callback?${qs.toString()}`);
+    } catch (err: any) {
+      const msg = err?.message || 'No se pudo iniciar sesión con Google';
+      return res.redirect(`${front}/?error=${encodeURIComponent(msg)}`);
+    }
   }
 
   @Get('me')

@@ -1,0 +1,108 @@
+# ══════════════════════════════════════════════════════════════════════════════
+# Kanbana — stack completo autocontenido
+#   mysql · redis · backend (NestJS) · frontend (Vite build servido por nginx)
+#
+# Uso:   docker compose up --build
+#   Frontend:  http://localhost:5173
+#   Backend:   http://localhost:3000  (API en /api)
+#
+# Nota: MySQL arranca VACÍO (synchronize:true crea las tablas al primer boot).
+#       Registra un usuario o usa el flujo de la app para poblarlo.
+# ══════════════════════════════════════════════════════════════════════════════
+services:
+
+  mysql:
+    image: mysql:8.0
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: kanbana_root_2026
+      MYSQL_DATABASE: kanbana_db
+      MYSQL_USER: kanbana_user
+      MYSQL_PASSWORD: kanbana2026
+    volumes:
+      - mysql_data:/var/lib/mysql
+    # Puerto NO publicado para no chocar con un MySQL local en 3306.
+    # (Descomenta si quieres conectarte desde el host)
+    # ports: ["3307:3306"]
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-pkanbana_root_2026"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    networks: [kanbana]
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    networks: [kanbana]
+
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    # Toma todas las variables de backend/.env (JWT, MAIL, GEMINI, GITHUB, etc.)
+    env_file: ./backend/.env
+    # ...y sobreescribe host de BD/Redis para apuntar a los contenedores
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      DB_HOST: mysql
+      DB_PORT: "3306"
+      DB_USER: kanbana_user
+      DB_PASSWORD: kanbana2026
+      DB_NAME: kanbana_db
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    ports:
+      - "3000:3000"
+    volumes:
+      - backend_uploads:/app/uploads
+    networks: [kanbana]
+
+  frontend:
+    build: ./frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "5173:80"
+    networks: [kanbana]
+
+  # ── n8n — automatización de flujos ────────────────────────────────────────
+  # UI/editor:  http://localhost:5678  (login básico)
+  # Habla con el backend por la red interna en http://backend:3000/api
+  n8n:
+    image: n8nio/n8n:latest
+    restart: unless-stopped
+    ports:
+      - "5678:5678"
+    environment:
+      # Acceso a la UI (cámbialos en producción)
+      N8N_BASIC_AUTH_ACTIVE: "true"
+      N8N_BASIC_AUTH_USER: admin
+      N8N_BASIC_AUTH_PASSWORD: kanbana2026
+      # URL pública del editor / webhooks
+      N8N_HOST: localhost
+      N8N_PORT: "5678"
+      N8N_PROTOCOL: http
+      WEBHOOK_URL: http://localhost:5678/
+      GENERIC_TIMEZONE: America/Bogota
+      # Para que n8n llegue al backend desde sus workflows usa: http://backend:3000/api
+    volumes:
+      - n8n_data:/home/node/.n8n
+    depends_on:
+      - backend
+    networks: [kanbana]
+
+volumes:
+  mysql_data:
+  backend_uploads:
+  n8n_data:
+
+networks:
+  kanbana:
+    driver: bridge

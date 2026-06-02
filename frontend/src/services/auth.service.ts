@@ -8,6 +8,12 @@ export const authService = {
       | { user: any; tokens: { access_token: string; refresh_token: string } };
   },
 
+  /** Registro público — crea una cuenta de aprendiz (activa de inmediato) */
+  register: async (dto: { nombre: string; correo: string; contrasena: string }) => {
+    const { data } = await api.post('/auth/register', dto);
+    return data as { id: number; nombre: string; correo: string };
+  },
+
   logout: async (): Promise<void> => {
     await api.post('/auth/logout');
     localStorage.removeItem('access_token');

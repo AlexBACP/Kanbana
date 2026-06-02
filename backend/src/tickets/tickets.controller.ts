@@ -104,10 +104,16 @@ export class TicketsController {
       );
     }
 
-    return this.ticketsService.create({
-      ...createTicketDto,
-      creado_por_id: usuario?.id ?? null,
-    });
+    // El líder técnico solo puede crear tareas en su propio proyecto.
+    // (El service validará la pertenencia para instructor/coordinador
+    //  si se desea restringir más estrictamente).
+    return this.ticketsService.create(
+      {
+        ...createTicketDto,
+        creado_por_id: usuario?.id ?? null,
+      },
+      usuario,
+    );
   }
 
   @Get()
@@ -140,7 +146,15 @@ export class TicketsController {
   moveTask(
     @Param('id') id: string,
     @Body('sprint_id') sprint_id: number | null,
+    @Request() req: any,
   ) {
+    // Solo coordinador, instructor o líder técnico pueden mover tareas entre módulos.
+    // Un aprendiz normal no debería poder reorganizar la planificación del equipo.
+    const usuario = req.user;
+    const esLider = usuario?.rol === 'aprendiz' && usuario?.es_lider_tecnico === true;
+    if (usuario?.rol === 'aprendiz' && !esLider) {
+      throw new ForbiddenException('Solo el líder técnico puede mover tareas entre módulos.');
+    }
     return this.ticketsService.moveTask(+id, sprint_id);
   }
 
@@ -148,17 +162,37 @@ export class TicketsController {
   setFlag(
     @Param('id') id: string,
     @Body() flagDto: { isBlocked: boolean; reason?: string },
+    @Request() req: any,
   ) {
+    // Bloquear/desbloquear es una acción de liderazgo: coordinador, instructor o líder técnico.
+    const usuario = req.user;
+    const esLider = usuario?.rol === 'aprendiz' && usuario?.es_lider_tecnico === true;
+    if (usuario?.rol === 'aprendiz' && !esLider) {
+      throw new ForbiddenException('Solo el líder técnico puede bloquear o desbloquear tareas.');
+    }
     return this.ticketsService.setFlag(+id, flagDto);
   }
 
   @Patch(':id')
-  update(@Param('id') id: string, @Body() updateTicketDto: any) {
-    return this.ticketsService.update(+id, updateTicketDto);
+  update(@Param('id') id: string, @Body() updateTicketDto: any, @Request() req: any) {
+    // Edición de tareas: solo coordinador, instructor o líder técnico.
+    // Un aprendiz normal no puede editar el contenido de las tareas.
+    const usuario = req.user;
+    const esLider = usuario?.rol === 'aprendiz' && usuario?.es_lider_tecnico === true;
+    if (usuario?.rol === 'aprendiz' && !esLider) {
+      throw new ForbiddenException('Solo el líder técnico puede editar tareas.');
+    }
+    return this.ticketsService.update(+id, updateTicketDto, usuario);
   }
 
   @Delete(':id')
-  remove(@Param('id') id: string) {
+  remove(@Param('id') id: string, @Request() req: any) {
+    // Eliminar tareas: solo coordinador, instructor o líder técnico.
+    const usuario = req.user;
+    const esLider = usuario?.rol === 'aprendiz' && usuario?.es_lider_tecnico === true;
+    if (usuario?.rol === 'aprendiz' && !esLider) {
+      throw new ForbiddenException('Solo el líder técnico puede eliminar tareas.');
+    }
     return this.ticketsService.remove(+id);
   }
 
@@ -221,10 +255,37 @@ export class TicketsController {
     return this.ticketsService.liderApprove(+id);
   }
 
-  // POST /tickets/:id/lider-reject — líder rechaza → devuelve al pool
+  // POST /tickets/:id/lider-reject — líder rechaza → devuelve en rojo (in_progress + bloqueado)
+  // Body opcional: { motivo: string }
   @Post(':id/lider-reject')
-  liderReject(@Param('id') id: string) {
-    return this.ticketsService.liderReject(+id);
+  liderReject(@Param('id') id: string, @Body('motivo') motivo: string | undefined) {
+    return this.ticketsService.liderReject(+id, motivo);
+  }
+
+  // POST /tickets/:id/instructor-approve — instructor aprueba → testing → done
+  // Solo accessible para rol instructor o coordinador.
+  @Post(':id/instructor-approve')
+  instructorApprove(@Param('id') id: string, @Request() req: any) {
+    const rol = req.user?.rol;
+    if (rol !== 'instructor' && rol !== 'coordinador') {
+      throw new ForbiddenException('Solo el instructor o coordinador puede finalizar tareas.');
+    }
+    return this.ticketsService.instructorApprove(+id);
+  }
+
+  // POST /tickets/:id/instructor-reject — instructor rechaza → in_progress + bloqueado (rojo)
+  // Body opcional: { motivo: string }
+  @Post(':id/instructor-reject')
+  instructorReject(
+    @Param('id')   id:   string,
+    @Body('motivo') motivo: string | undefined,
+    @Request()     req:  any,
+  ) {
+    const rol = req.user?.rol;
+    if (rol !== 'instructor' && rol !== 'coordinador') {
+      throw new ForbiddenException('Solo el instructor o coordinador puede rechazar tareas.');
+    }
+    return this.ticketsService.instructorReject(+id, motivo);
   }
 
   // DELETE /api/tickets/:id/attachments/:aid
@@ -235,7 +296,10 @@ export class TicketsController {
   deleteAttachment(
     @Param('id')  id:  string,
     @Param('aid') aid: string,
+    @Request()    req: any,
   ) {
-    return this.ticketsService.deleteAttachment(+aid);
+    // Solo el subió el adjunto, un líder técnico, instructor o coordinador puede borrarlo.
+    // La validación granular (propiedad) se hace en el service.
+    return this.ticketsService.deleteAttachment(+aid, req.user);
   }
 }

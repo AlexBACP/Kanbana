@@ -113,15 +113,31 @@ export const ticketService = {
     return data;
   },
 
-  // Líder rechaza el trabajo → la tarea vuelve al pool (to_do, sin asignar).
-  rejectCompletion: async (ticketId: number): Promise<Ticket> => {
-    const { data } = await api.post(`/tickets/${ticketId}/lider-reject`);
+  // Líder rechaza el trabajo → la tarea vuelve a in_progress + bloqueada (rojo).
+  // motivo opcional: se muestra en la tarjeta y se envía como notificación al aprendiz.
+  rejectCompletion: async (ticketId: number, motivo?: string): Promise<Ticket> => {
+    const { data } = await api.post(`/tickets/${ticketId}/lider-reject`, motivo ? { motivo } : undefined);
     return data;
   },
 
   // Lista todos los adjuntos de un ticket, ordenados del más reciente al más antiguo.
   getAttachments: async (ticketId: number): Promise<TicketAttachment[]> => {
     const { data } = await api.get(`/tickets/${ticketId}/attachments`);
+    return data;
+  },
+
+  // ══ Instructor: calificación final ══════════════════════════════════════
+
+  // Instructor aprueba tarea en revisión → done (finalizado).
+  instructorApprove: async (ticketId: number): Promise<Ticket> => {
+    const { data } = await api.post(`/tickets/${ticketId}/instructor-approve`);
+    return data;
+  },
+
+  // Instructor rechaza tarea en revisión → in_progress + bloqueado (color rojo).
+  // motivo opcional: se guarda en motivo_bloqueo y aparece en la tarjeta.
+  instructorReject: async (ticketId: number, motivo?: string): Promise<Ticket> => {
+    const { data } = await api.post(`/tickets/${ticketId}/instructor-reject`, { motivo });
     return data;
   },
 

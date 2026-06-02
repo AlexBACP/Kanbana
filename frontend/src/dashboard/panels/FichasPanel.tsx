@@ -26,19 +26,24 @@ import {
   GraduationCap, FolderKanban, Users, User,
   CheckCircle2, UserPlus, ShieldCheck, Search,
   Crown, UserMinus, Check, FileSpreadsheet, Upload, Download,
-  AlertTriangle, Layers, Settings, Ticket, Send, Clock, LayoutGrid, Loader2,
+  AlertTriangle, Layers, Ticket, Send, Clock, LayoutGrid, Loader2,
   Pencil, X, Save, Link2,
-  Github, HardDrive, Figma, BookOpen,
+  Github, HardDrive, Figma, BookOpen, MailX,
 } from 'lucide-react';
 import { fichaService } from '../../services/ficha.service';
+import { InstructorCrearFichaForm } from './InstructorCrearFichaForm';
 import { projectService } from '../../services/project.service';
 import { ticketService } from '../../services/ticket.service';
 import { userService } from '../../services/user.service';
 import { Button } from '../../components/Button';
 import { Modal } from '../../components/Modal';
 import { KanbanBoard } from '../../components/KanbanBoard';
+import { RejectModal } from '../../components/RejectModal';
 import { UserProfileModal } from '../../components/UserProfileModal';
 import { RecursosPanel } from '../../components/RecursosPanel';
+import { DateTimeInput } from '../../components/DateTimeInput';
+import { SolicitudesPendientesPanel } from '../../components/SolicitudesPendientesPanel';
+import { ExcelAprendicesPreview, parseExcelPreview, type ExcelPreview } from '../../components/ExcelAprendicesPreview';
 import { recursoService } from '../../services/recurso.service';
 import { useAuthStore } from '../../store/auth.store';
 
@@ -48,8 +53,8 @@ type FichaTab = 'trimestres' | 'aprendices' | 'nuevo_proyecto';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const STATUS_COLORS: Record<string, string> = {
-  activo:     'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
-  pausado:    'bg-amber-500/10 text-amber-400 border-amber-500/20',
+  activo: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
+  pausado: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
   finalizado: 'bg-rose-500/10 text-rose-400 border-rose-500/20',
 };
 
@@ -64,7 +69,7 @@ const Chip = ({ label, color }: { label: string; color: string }) => (
 );
 
 const AvatarBadge = ({ nombre, url, size = 8 }: { nombre?: string; url?: string; size?: number }) => (
-  <div className={`w-${size} h-${size} rounded-xl bg-gradient-to-br from-primary-600 to-indigo-700 flex items-center justify-center overflow-hidden border border-white/10 shrink-0`}>
+  <div className={`w-${size} h-${size} rounded-md bg-gradient-to-br from-primary-600 to-indigo-700 flex items-center justify-center overflow-hidden border border-white/10 shrink-0`}>
     {url
       ? <img src={url} className="w-full h-full object-cover" alt="" />
       : <span className="text-white font-black text-xs">{nombre?.slice(0, 2).toUpperCase() || 'KA'}</span>}
@@ -87,11 +92,10 @@ const FormField = ({ label, children }: { label: string; children: React.ReactNo
 const TabBtn = ({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) => (
   <button
     onClick={onClick}
-    className={`inline-flex items-center justify-center gap-2 py-3 text-xl font-black border-b transition-all duration-200 ${
-      active
-        ? 'text-blue-400 border-white'
-        : 'text-zinc-400 border-transparent hover:text-blue-400 hover:border-white'
-    }`}
+    className={`inline-flex items-center justify-center gap-2 py-3 text-xl font-black border-b transition-all duration-200 ${active
+      ? 'text-blue-400 border-white'
+      : 'text-zinc-400 border-transparent hover:text-blue-400 hover:border-white'
+      }`}
   >
     {children}
   </button>
@@ -100,7 +104,7 @@ const TabBtn = ({ active, onClick, children }: { active: boolean; onClick: () =>
 // ─── ProyectoDetalle — diseño inline estilo ProjectsPanel ────────────────────
 type ProyectoTab = 'tablero' | 'equipo' | 'nueva_tarea' | 'recursos';
 
-const ProyectoDetalle = ({ proyectoId, onBack }: { proyectoId: number; onBack: () => void }) => {
+const ProyectoDetalle = ({ proyectoId, onBack, trimestreId }: { proyectoId: number; onBack: () => void; trimestreId?: number }) => {
   const { user } = useAuthStore();
   const qc = useQueryClient();
   const navigate = useNavigate();
@@ -113,6 +117,7 @@ const ProyectoDetalle = ({ proyectoId, onBack }: { proyectoId: number; onBack: (
   const [equipoSearch, setEquipoSearch] = useState('');
   const [profileUserId, setProfileUserId] = useState<number | null>(null);
   const [ticketFormError, setTicketFormError] = useState<string | null>(null);
+  const [rejectingTicket, setRejectingTicket] = useState<{ id: number; titulo?: string } | null>(null);
 
   // ── Queries ──────────────────────────────────────────────────────────────────
   const { data: proyecto, isLoading } = useQuery({
@@ -143,9 +148,9 @@ const ProyectoDetalle = ({ proyectoId, onBack }: { proyectoId: number; onBack: (
     (proyecto as any)?.fichaId ?? (proyecto as any)?.ficha?.id ?? null;
   const { data: fichaUsers = [], isLoading: loadingUsers } = useQuery({
     queryKey: ['fichas', proyFichaId, 'members'],
-    queryFn:  () => fichaService.getMembers(proyFichaId!),
+    queryFn: () => fichaService.getMembers(proyFichaId!),
     staleTime: 60_000,
-    enabled:  tab === 'equipo' && !!proyFichaId,
+    enabled: tab === 'equipo' && !!proyFichaId,
   });
   const { data: recursosData = [] } = useQuery({
     queryKey: ['recursos', proyectoId],
@@ -162,9 +167,9 @@ const ProyectoDetalle = ({ proyectoId, onBack }: { proyectoId: number; onBack: (
   const createTicketMutation = useMutation({
     mutationFn: (dto: any) => ticketService.create({
       ...dto,
-      proyecto_id:   proyectoId,
+      proyecto_id: proyectoId,
       creado_por_id: user?.id,
-      sprint_id:     (activeSprint as any)?.id ?? undefined,
+      sprint_id: (activeSprint as any)?.id ?? undefined,
     }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['tickets', proyectoId] });
@@ -189,11 +194,11 @@ const ProyectoDetalle = ({ proyectoId, onBack }: { proyectoId: number; onBack: (
     mutationFn: (uid: number) => projectService.removeMember(proyectoId, uid),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['projects', proyectoId, 'members'] }),
   });
-  const toggleLiderMutation = useMutation({
-    mutationFn: (uid: number) => userService.toggleLiderTecnico(uid),
+  // Bug 7 fix: usar fichaService para promover/demover dentro de la ficha del proyecto
+  const promoteInProjectMutation = useMutation({
+    mutationFn: ({ fichaId, userId }: { fichaId: number; userId: number }) =>
+      fichaService.promoteToLider(fichaId, userId),
     onSuccess: () => {
-      // Invalidar el equipo del proyecto, el proyecto completo (liderId cambió)
-      // y los usuarios — la pantalla del coordinador/instructor se actualiza inmediatamente
       qc.invalidateQueries({ queryKey: ['projects', proyectoId, 'members'] });
       qc.invalidateQueries({ queryKey: ['projects', proyectoId] });
       qc.invalidateQueries({ queryKey: ['projects', 'for-me'] });
@@ -201,8 +206,38 @@ const ProyectoDetalle = ({ proyectoId, onBack }: { proyectoId: number; onBack: (
     },
     onError: (err: any) => {
       const msg = err?.response?.data?.message;
-      alert(Array.isArray(msg) ? msg.join(', ') : (msg || 'Error al cambiar rol'));
+      alert(Array.isArray(msg) ? msg.join(', ') : (msg || 'Error al promover'));
     },
+  });
+  const demoteInProjectMutation = useMutation({
+    mutationFn: ({ fichaId, userId }: { fichaId: number; userId: number }) =>
+      fichaService.demoteToAprendiz(fichaId, userId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['projects', proyectoId, 'members'] });
+      qc.invalidateQueries({ queryKey: ['projects', proyectoId] });
+      qc.invalidateQueries({ queryKey: ['projects', 'for-me'] });
+      qc.invalidateQueries({ queryKey: ['users'] });
+    },
+    onError: (err: any) => {
+      const msg = err?.response?.data?.message;
+      alert(Array.isArray(msg) ? msg.join(', ') : (msg || 'Error al demover'));
+    },
+  });
+
+  // Bug 3 fix: approve/reject para líder técnico en el tablero
+  const liderApproveMut = useMutation({
+    mutationFn: (ticketId: number) => ticketService.approveCompletion(ticketId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['tickets', proyectoId] }),
+    onError: (e: any) => alert(e?.response?.data?.message ?? 'No se pudo aprobar la tarea.'),
+  });
+  const liderRejectMut = useMutation({
+    mutationFn: ({ id, motivo }: { id: number; motivo?: string }) =>
+      ticketService.rejectCompletion(id, motivo),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['tickets', proyectoId] });
+      setRejectingTicket(null);
+    },
+    onError: (e: any) => alert(e?.response?.data?.message ?? 'No se pudo rechazar la tarea.'),
   });
 
   // ── Skeleton / guards ─────────────────────────────────────────────────────────
@@ -210,7 +245,7 @@ const ProyectoDetalle = ({ proyectoId, onBack }: { proyectoId: number; onBack: (
     <div className="flex flex-col h-full">
       <div className="h-[200px] bg-zinc-800/40 rounded-none animate-pulse" />
       <div className="p-6 space-y-4">
-        {[1,2,3].map(n => <div key={n} className="h-16 bg-zinc-800/30 rounded-2xl animate-pulse" />)}
+        {[1, 2, 3].map(n => <div key={n} className="h-16 bg-zinc-800/30 rounded-md animate-pulse" />)}
       </div>
     </div>
   );
@@ -223,12 +258,15 @@ const ProyectoDetalle = ({ proyectoId, onBack }: { proyectoId: number; onBack: (
   const sprint = activeSprint as any;
   const recursosArr = recursosData as any[];
   const canManage = user?.rol === 'coordinador' || user?.rol === 'instructor' ||
-                    (user?.rol === 'aprendiz' && user.es_lider_tecnico);
+    (user?.rol === 'aprendiz' && user.es_lider_tecnico);
+  const esInstructor = user?.rol === 'instructor' || user?.rol === 'coordinador';
+  const esLider      = user?.rol === 'aprendiz' && (user as any)?.es_lider_tecnico;
+  const kanbanRole   = esInstructor ? user!.rol : esLider ? 'lider_tecnico' : 'aprendiz';
 
-  const done       = ticketsArr.filter((t: any) => t.estado === 'done').length;
+  const done = ticketsArr.filter((t: any) => t.estado === 'done').length;
   const inProgress = ticketsArr.filter((t: any) => t.estado === 'in_progress').length;
-  const todo       = ticketsArr.filter((t: any) => t.estado === 'to_do').length;
-  const progress   = ticketsArr.length > 0 ? Math.round((done / ticketsArr.length) * 100) : 0;
+  const todo = ticketsArr.filter((t: any) => t.estado === 'to_do').length;
+  const progress = ticketsArr.length > 0 ? Math.round((done / ticketsArr.length) * 100) : 0;
 
   const filteredTickets = ticketsArr.filter((t: any) =>
     t.titulo?.toLowerCase().includes(search.toLowerCase())
@@ -263,11 +301,10 @@ const ProyectoDetalle = ({ proyectoId, onBack }: { proyectoId: number; onBack: (
   const PTab = ({ id, icon: Icon, label }: { id: ProyectoTab; icon: any; label: string }) => (
     <button
       onClick={() => setTab(id)}
-      className={`flex items-center gap-2 px-5 py-3 text-[13px] font-black border-b-2 transition-all duration-200 whitespace-nowrap ${
-        tab === id
-          ? 'text-white border-white'
-          : 'text-zinc-500 border-transparent hover:text-zinc-300 hover:border-zinc-600'
-      }`}
+      className={`flex items-center gap-2 px-5 py-3 text-[13px] font-black border-b-2 transition-all duration-200 whitespace-nowrap ${tab === id
+        ? 'text-white border-white'
+        : 'text-zinc-500 border-transparent hover:text-zinc-300 hover:border-zinc-600'
+        }`}
     >
       <Icon size={14} /> {label}
     </button>
@@ -280,17 +317,17 @@ const ProyectoDetalle = ({ proyectoId, onBack }: { proyectoId: number; onBack: (
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -12 }}
       transition={{ duration: 0.2 }}
-      className="flex flex-col h-full overflow-hidden"
+      className="flex flex-col h-full overflow-y-auto"
     >
-      {/* ── Header card ───────────────────────────────────────────────────────── */}
-      <div className="bg-zinc-900 border-b border-zinc-800 shrink-0">
+      {/* ── Info del proyecto (se desplaza con el scroll) ───────────────────── */}
+      <div className="bg-zinc-900 shrink-0">
         {/* Back + info row */}
         <div className="px-6 pt-5 pb-4">
           <button
             onClick={onBack}
             className="flex items-center gap-1.5 text-zinc-500 hover:text-zinc-300 transition-colors text-[11px] font-black uppercase tracking-widest mb-4"
           >
-            <ChevronLeft size={13} /> Todos los proyectos
+            <ChevronLeft size={13} /> Volver a la ficha
           </button>
 
           <div className="flex items-start justify-between gap-4 flex-wrap">
@@ -336,7 +373,7 @@ const ProyectoDetalle = ({ proyectoId, onBack }: { proyectoId: number; onBack: (
                 { label: 'Progreso', value: inProgress, color: 'text-blue-400' },
                 { label: 'Listas', value: done, color: 'text-emerald-400' },
               ].map(s => (
-                <div key={s.label} className="flex flex-col items-center px-3 py-2 bg-zinc-800/60 border border-zinc-700/50 rounded-xl min-w-[52px]">
+                <div key={s.label} className="flex flex-col items-center px-3 py-2 bg-zinc-800/60 border border-zinc-700/50 rounded-md min-w-[52px]">
                   <span className={`text-[18px] font-black ${s.color}`}>{s.value}</span>
                   <span className="text-[9px] text-zinc-500 uppercase tracking-wider">{s.label}</span>
                 </div>
@@ -355,6 +392,11 @@ const ProyectoDetalle = ({ proyectoId, onBack }: { proyectoId: number; onBack: (
           )}
         </div>
 
+      </div>{/* /info del proyecto */}
+
+      {/* ── Techo pegajoso: recursos + tabs (siempre visibles al hacer scroll) ──
+          z-20: por debajo del TopBar (z-40) para no tapar el menú de perfil ── */}
+      <div className="sticky top-0 z-20 bg-zinc-900 border-b border-zinc-800 shrink-0 shadow-lg shadow-black/20">
         {/* ── Recursos strip — acceso rápido siempre visible ──────────────── */}
         {(recursosArr.length > 0 || canManage) && (
           <div className="flex items-center gap-2 px-6 py-2.5 border-t border-zinc-800/60 overflow-x-auto scrollbar-none">
@@ -362,26 +404,26 @@ const ProyectoDetalle = ({ proyectoId, onBack }: { proyectoId: number; onBack: (
             {recursosArr.map((r: any) => {
               const ICONS: Record<string, any> = {
                 github: Github,
-                drive:  HardDrive,
-                figma:  Figma,
+                drive: HardDrive,
+                figma: Figma,
                 notion: BookOpen,
                 trello: LayoutGrid,
-                jira:   Ticket,
-                link:   Link2,
+                jira: Ticket,
+                link: Link2,
               };
               const COLORS: Record<string, string> = {
                 github: 'text-white   bg-zinc-800     border-zinc-600',
-                drive:  'text-blue-400  bg-blue-500/10  border-blue-500/25',
-                figma:  'text-pink-400  bg-pink-500/10  border-pink-500/25',
+                drive: 'text-blue-400  bg-blue-500/10  border-blue-500/25',
+                figma: 'text-pink-400  bg-pink-500/10  border-pink-500/25',
                 notion: 'text-zinc-300 bg-zinc-700/40  border-zinc-600/40',
                 trello: 'text-blue-400  bg-blue-500/10  border-blue-500/25',
-                jira:   'text-indigo-400 bg-indigo-500/10 border-indigo-500/25',
-                link:   'text-zinc-400 bg-zinc-700/30  border-zinc-600/30',
+                jira: 'text-indigo-400 bg-indigo-500/10 border-indigo-500/25',
+                link: 'text-zinc-400 bg-zinc-700/30  border-zinc-600/30',
               };
-              const tipo  = r.tipo || 'link';
+              const tipo = r.tipo || 'link';
               const RIcon = ICONS[tipo] || Link2;
-              const cls   = COLORS[tipo] || COLORS.link;
-              const isGH  = tipo === 'github';
+              const cls = COLORS[tipo] || COLORS.link;
+              const isGH = tipo === 'github';
               return (
                 <button
                   key={r.id}
@@ -408,15 +450,15 @@ const ProyectoDetalle = ({ proyectoId, onBack }: { proyectoId: number; onBack: (
 
         {/* Tab bar */}
         <div className="flex items-center gap-1 px-4 border-t border-zinc-800/60 overflow-x-auto">
-          <PTab id="tablero"      icon={LayoutGrid} label="Tablero" />
-          <PTab id="equipo"       icon={Users}      label={`Equipo (${miembrosArr.length})`} />
-          <PTab id="recursos"     icon={Link2}      label="Recursos" />
-          {canManage && <PTab id="nueva_tarea" icon={Plus}  label="Nueva tarea" />}
+          <PTab id="tablero" icon={LayoutGrid} label="Tablero" />
+          <PTab id="equipo" icon={Users} label={`Equipo (${miembrosArr.length})`} />
+          <PTab id="recursos" icon={Link2} label="Recursos" />
+          {canManage && <PTab id="nueva_tarea" icon={Plus} label="Nueva tarea" />}
         </div>
       </div>
 
       {/* ── Tab content ───────────────────────────────────────────────────────── */}
-      <div className="flex-1 overflow-hidden">
+      <div className="shrink-0">
         <AnimatePresence mode="wait">
 
           {/* ── TABLERO ─────────────────────────────────────────────────────── */}
@@ -427,7 +469,7 @@ const ProyectoDetalle = ({ proyectoId, onBack }: { proyectoId: number; onBack: (
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.15 }}
-              className="h-full flex flex-col"
+              className="flex flex-col"
             >
               {/* Sprint info bar */}
               <div className="flex items-center justify-between gap-3 px-6 py-3 bg-zinc-900/60 border-b border-zinc-800/60 shrink-0 flex-wrap">
@@ -463,7 +505,7 @@ const ProyectoDetalle = ({ proyectoId, onBack }: { proyectoId: number; onBack: (
                     />
                   </div>
                   <button
-                    onClick={() => navigate(`/projects/${proyectoId}/backlog`)}
+                    onClick={() => navigate(`/projects/${proyectoId}/backlog${trimestreId ? `?trimestreId=${trimestreId}` : ''}`)}
                     className="flex items-center gap-1.5 px-3 py-1.5 bg-zinc-800 border border-zinc-700 text-zinc-400 hover:text-zinc-200 rounded-lg text-[11px] font-black uppercase tracking-widest transition-all"
                   >
                     <Layers size={12} /> Cola de trabajo
@@ -471,11 +513,12 @@ const ProyectoDetalle = ({ proyectoId, onBack }: { proyectoId: number; onBack: (
                 </div>
               </div>
 
-              {/* Kanban board */}
-              <div className="flex-1 overflow-x-auto overflow-y-hidden p-5">
+              {/* Kanban board — altura acotada al viewport para que las columnas
+                  tengan scroll interno; el header se desplaza con el scroll de la página */}
+              <div className="h-[calc(100vh-15rem)] min-h-[420px] overflow-x-auto overflow-y-hidden p-5">
                 {!sprint ? (
                   <div className="h-full flex flex-col items-center justify-center text-center max-w-sm mx-auto py-16">
-                    <div className="w-16 h-16 bg-zinc-800 border border-zinc-700 rounded-2xl flex items-center justify-center mb-5">
+                    <div className="w-16 h-16 bg-zinc-800 border border-zinc-700 rounded-md flex items-center justify-center mb-5">
                       <LayoutGrid size={28} className="text-zinc-600" />
                     </div>
                     <h3 className="text-[15px] font-black text-zinc-300 mb-2">El tablero está en espera</h3>
@@ -483,16 +526,16 @@ const ProyectoDetalle = ({ proyectoId, onBack }: { proyectoId: number; onBack: (
                       Activa un módulo desde la cola de trabajo para visualizar el flujo de trabajo del equipo.
                     </p>
                     <button
-                      onClick={() => navigate(`/projects/${proyectoId}/backlog`)}
-                      className="px-6 py-3 bg-primary-600 hover:bg-primary-500 text-white text-[12px] font-black rounded-xl transition-all"
+                      onClick={() => navigate(`/projects/${proyectoId}/backlog${trimestreId ? `?trimestreId=${trimestreId}` : ''}`)}
+                      className="px-6 py-3 bg-primary-600 hover:bg-primary-500 text-white text-[12px] font-black rounded-md transition-all"
                     >
                       Cola de Trabajo
                     </button>
                   </div>
                 ) : ticketsLoading ? (
                   <div className="flex gap-5 h-full">
-                    {[1,2,3,4].map(i => (
-                      <div key={i} className="w-72 shrink-0 bg-zinc-800/40 rounded-2xl border border-zinc-700/30 animate-pulse" />
+                    {[1, 2, 3, 4].map(i => (
+                      <div key={i} className="w-72 shrink-0 bg-zinc-800/40 rounded-md border border-zinc-700/30 animate-pulse" />
                     ))}
                   </div>
                 ) : (
@@ -502,6 +545,13 @@ const ProyectoDetalle = ({ proyectoId, onBack }: { proyectoId: number; onBack: (
                       updateStatusMutation.mutate({ ticketId, status: newStatus })
                     }
                     readonly={!canManage}
+                    role={kanbanRole}
+                    currentUserId={user?.id}
+                    onApprove={esLider ? (id) => liderApproveMut.mutate(id) : undefined}
+                    onReject={esLider ? (id) => {
+                      const t = filteredTickets.find((x: any) => x.id === id);
+                      setRejectingTicket({ id, titulo: (t as any)?.titulo });
+                    } : undefined}
                   />
                 )}
               </div>
@@ -516,27 +566,26 @@ const ProyectoDetalle = ({ proyectoId, onBack }: { proyectoId: number; onBack: (
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.15 }}
-              className="h-full overflow-y-auto p-6"
+              className="p-6"
             >
-              <div className="max-w-2xl space-y-5">
-                {/* Integrantes actuales */}
-                <div className="bg-zinc-800/40 border border-zinc-700/50 rounded-2xl p-5">
+              {/* ── Layout horizontal: equipo | añadir ──────────────────────── */}
+              <div className="flex gap-5 items-stretch">
+
+                {/* ── Columna izquierda: Equipo actual ────────────────────── */}
+                <div className="flex-1 min-w-0 bg-zinc-800/40 border border-zinc-700/50 rounded-lg p-5">
                   {/* Header + filtros */}
                   <div className="flex flex-col gap-3 mb-4">
-                    <div className="flex items-center justify-between">
-                      <h3 className="text-[11px] font-black text-zinc-400 uppercase tracking-widest flex items-center gap-2">
-                        <Users size={13} /> Equipo actual ({miembrosArr.length})
-                      </h3>
-                    </div>
+                    <h3 className="text-[11px] font-black text-zinc-400 uppercase tracking-widest flex items-center gap-2">
+                      <Users size={13} /> Equipo actual ({miembrosArr.length})
+                    </h3>
                     <div className="flex items-center gap-2 flex-wrap">
                       {(['todos', 'lideres', 'aprendices'] as const).map(f => (
                         <button
                           key={f}
                           onClick={() => setEquipoFilter(f)}
-                          className={`px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest border transition-all ${
-                            equipoFilter === f
-                              ? 'bg-primary-600/20 border-primary-500/40 text-primary-400'
-                              : 'bg-zinc-800 border-zinc-700 text-zinc-500 hover:text-zinc-300 hover:border-zinc-600'
+                          className={`px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest border transition-all ${equipoFilter === f
+                            ? 'bg-primary-600/20 border-primary-500/40 text-primary-400'
+                            : 'bg-zinc-800 border-zinc-700 text-zinc-500 hover:text-zinc-300 hover:border-zinc-600'
                           }`}
                         >
                           {f === 'todos' ? 'Todos' : f === 'lideres' ? 'Líderes' : 'Aprendices'}
@@ -554,14 +603,15 @@ const ProyectoDetalle = ({ proyectoId, onBack }: { proyectoId: number; onBack: (
                       </div>
                     </div>
                   </div>
+
                   {miembrosArr.length === 0 ? (
-                    <p className="text-[12px] text-zinc-500 text-center py-4">Sin integrantes asignados</p>
+                    <p className="text-[12px] text-zinc-500 text-center py-6">Sin integrantes asignados</p>
                   ) : filteredMiembros.length === 0 ? (
-                    <p className="text-[12px] text-zinc-500 text-center py-4">Sin resultados</p>
+                    <p className="text-[12px] text-zinc-500 text-center py-6">Sin resultados</p>
                   ) : (
-                    <div className="space-y-2">
+                    <div className="space-y-1.5">
                       {filteredMiembros.map((m: any) => (
-                        <div key={m.id} className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-zinc-700/20 transition-all group">
+                        <div key={m.id} className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-zinc-700/20 transition-all group">
                           <button onClick={() => setProfileUserId(m.id)} className="shrink-0 hover:opacity-80 transition-opacity">
                             <AvatarBadge nombre={m.nombre} url={m.avatar_url} size={8} />
                           </button>
@@ -576,17 +626,17 @@ const ProyectoDetalle = ({ proyectoId, onBack }: { proyectoId: number; onBack: (
                             <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
                               {m.es_lider_tecnico ? (
                                 <button
-                                  onClick={() => toggleLiderMutation.mutate(m.id)}
-                                  disabled={toggleLiderMutation.isPending}
-                                  className="flex items-center gap-1 px-2 py-1 rounded-xl text-amber-400 hover:bg-amber-500/10 transition-all disabled:opacity-40 text-[10px] font-bold"
+                                  onClick={() => proyFichaId && demoteInProjectMutation.mutate({ fichaId: proyFichaId, userId: m.id })}
+                                  disabled={demoteInProjectMutation.isPending || promoteInProjectMutation.isPending}
+                                  className="flex items-center gap-1 px-2 py-1 rounded-lg text-amber-400 hover:bg-amber-500/10 transition-all disabled:opacity-40 text-[10px] font-bold"
                                 >
                                   <Crown size={11} /> Quitar líder
                                 </button>
                               ) : (
                                 <button
-                                  onClick={() => toggleLiderMutation.mutate(m.id)}
-                                  disabled={toggleLiderMutation.isPending}
-                                  className="flex items-center gap-1 px-2 py-1 rounded-xl text-emerald-400 hover:bg-emerald-500/10 transition-all disabled:opacity-40 text-[10px] font-bold"
+                                  onClick={() => proyFichaId && promoteInProjectMutation.mutate({ fichaId: proyFichaId, userId: m.id })}
+                                  disabled={promoteInProjectMutation.isPending || demoteInProjectMutation.isPending}
+                                  className="flex items-center gap-1 px-2 py-1 rounded-lg text-emerald-400 hover:bg-emerald-500/10 transition-all disabled:opacity-40 text-[10px] font-bold"
                                 >
                                   <Crown size={11} /> Hacer líder
                                 </button>
@@ -594,7 +644,7 @@ const ProyectoDetalle = ({ proyectoId, onBack }: { proyectoId: number; onBack: (
                               <button
                                 onClick={() => removeMemberMutation.mutate(m.id)}
                                 disabled={removeMemberMutation.isPending}
-                                className="p-1.5 rounded-xl text-zinc-600 hover:text-rose-400 hover:bg-rose-500/10 transition-all disabled:opacity-30"
+                                className="p-1.5 rounded-lg text-zinc-600 hover:text-rose-400 hover:bg-rose-500/10 transition-all disabled:opacity-30"
                               >
                                 <UserMinus size={13} />
                               </button>
@@ -606,32 +656,35 @@ const ProyectoDetalle = ({ proyectoId, onBack }: { proyectoId: number; onBack: (
                   )}
                 </div>
 
-                {/* Añadir integrantes */}
+                {/* ── Columna derecha: Añadir integrantes ─────────────────── */}
                 {canManage && (
-                  <div className="bg-zinc-800/40 border border-zinc-700/50 rounded-2xl p-5">
+                  <div className="w-72 shrink-0 bg-zinc-800/40 border border-zinc-700/50 rounded-lg p-5">
                     <h3 className="text-[11px] font-black text-zinc-400 uppercase tracking-widest mb-4 flex items-center gap-2">
                       <UserPlus size={13} /> Añadir integrantes
                     </h3>
+
                     {memberAddOk && (
-                      <div className="flex items-center gap-2 p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-emerald-400 text-[11px] font-bold mb-3">
-                        <CheckCircle2 size={13} /> Integrante(s) añadido(s) correctamente
+                      <div className="flex items-center gap-2 p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-lg text-emerald-400 text-[11px] font-bold mb-3">
+                        <CheckCircle2 size={13} /> Añadido(s) correctamente
                       </div>
                     )}
+
                     <div className="relative mb-3">
-                      <Search size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
+                      <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
                       <input
                         type="text"
                         value={memberSearch}
                         onChange={e => setMemberSearch(e.target.value)}
-                        placeholder="Buscar aprendices disponibles..."
-                        className="input-dark pl-8 text-[12px] w-full"
+                        placeholder="Buscar aprendices..."
+                        className="pl-8 pr-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-[11px] text-zinc-300 outline-none focus:border-primary-500/50 w-full placeholder:text-zinc-600 transition-colors"
                       />
                     </div>
-                    <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
+
+                    <div className="space-y-1.5 max-h-64 overflow-y-auto pr-0.5">
                       {loadingUsers ? (
-                        [1,2,3].map(n => <div key={n} className="h-12 bg-zinc-700/30 rounded-xl animate-pulse" />)
+                        [1, 2, 3].map(n => <div key={n} className="h-11 bg-zinc-700/30 rounded-lg animate-pulse" />)
                       ) : addableUsers.length === 0 ? (
-                        <p className="text-[12px] text-zinc-500 text-center py-4">
+                        <p className="text-[11px] text-zinc-500 text-center py-6">
                           {memberSearch ? 'Sin resultados' : 'No hay aprendices disponibles'}
                         </p>
                       ) : addableUsers.map((u: any) => {
@@ -640,31 +693,35 @@ const ProyectoDetalle = ({ proyectoId, onBack }: { proyectoId: number; onBack: (
                           <button
                             key={u.id}
                             onClick={() => toggleSelect(u.id)}
-                            className={`w-full flex items-center gap-3 p-2.5 rounded-xl border transition-all text-left ${isSel ? 'bg-primary-600/15 border-primary-500/30' : 'bg-zinc-700/20 border-zinc-700/40 hover:border-zinc-600'}`}
+                            className={`w-full flex items-center gap-2.5 p-2.5 rounded-lg border transition-all text-left ${isSel ? 'bg-primary-600/15 border-primary-500/30' : 'bg-zinc-700/20 border-zinc-700/40 hover:border-zinc-600'}`}
                           >
                             <div className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-all ${isSel ? 'bg-primary-600 border-primary-500' : 'border-zinc-600 bg-zinc-800'}`}>
                               {isSel && <Check size={10} className="text-white" />}
                             </div>
-                            <AvatarBadge nombre={u.nombre} url={u.avatar_url} size={7} />
+                            <AvatarBadge nombre={u.nombre} url={u.avatar_url} size={6} />
                             <div className="flex-1 min-w-0">
-                              <p className="text-[12px] font-bold text-zinc-200 truncate">{u.nombre}</p>
-                              <p className="text-[10px] text-zinc-500 truncate">{u.correo}</p>
+                              <p className="text-[11px] font-bold text-zinc-200 truncate">{u.nombre}</p>
+                              <p className="text-[9px] text-zinc-500 truncate">{u.correo}</p>
                             </div>
                           </button>
                         );
                       })}
                     </div>
+
                     {selectedMemberIds.size > 0 && (
                       <button
                         onClick={() => addMemberMutation.mutate([...selectedMemberIds])}
                         disabled={addMemberMutation.isPending}
-                        className="mt-3 w-full py-3 bg-primary-600 hover:bg-primary-500 disabled:opacity-40 text-white text-[12px] font-black rounded-xl uppercase tracking-widest transition-all"
+                        className="mt-3 w-full py-2.5 bg-primary-600/20 hover:bg-primary-600/30 border border-primary-500/30 hover:border-primary-500/50 disabled:opacity-40 text-primary-400 text-[11px] font-black rounded-lg uppercase tracking-widest transition-all"
                       >
-                        {addMemberMutation.isPending ? 'Añadiendo...' : `Añadir ${selectedMemberIds.size} integrante(s)`}
+                        {addMemberMutation.isPending
+                          ? 'Añadiendo...'
+                          : `Añadir ${selectedMemberIds.size} integrante${selectedMemberIds.size > 1 ? 's' : ''}`}
                       </button>
                     )}
                   </div>
                 )}
+
               </div>
             </motion.div>
           )}
@@ -677,11 +734,11 @@ const ProyectoDetalle = ({ proyectoId, onBack }: { proyectoId: number; onBack: (
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.15 }}
-              className="h-full overflow-y-auto p-6"
+              className="p-6"
             >
               <div className="max-w-lg">
                 {/* Sprint activo info */}
-                <div className={`flex items-center gap-2 p-3 rounded-xl text-[11px] font-bold mb-6 ${sprint ? 'bg-emerald-500/8 border border-emerald-500/15 text-emerald-400' : 'bg-amber-500/8 border border-amber-500/15 text-amber-400'}`}>
+                <div className={`flex items-center gap-2 p-3 rounded-md text-[11px] font-bold mb-6 ${sprint ? 'bg-emerald-500/8 border border-emerald-500/15 text-emerald-400' : 'bg-amber-500/8 border border-amber-500/15 text-amber-400'}`}>
                   {sprint ? <CheckCircle2 size={13} /> : <AlertTriangle size={13} />}
                   {sprint
                     ? <>La tarea se creará en el módulo activo: <strong>{sprint.nombre}</strong></>
@@ -696,12 +753,12 @@ const ProyectoDetalle = ({ proyectoId, onBack }: { proyectoId: number; onBack: (
                     const f = new FormData(e.currentTarget);
                     const asignadoRaw = f.get('asignado_a_id');
                     createTicketMutation.mutate({
-                      titulo:        f.get('titulo') as string,
-                      descripcion:   (f.get('descripcion') as string) || '',
-                      tipo:          f.get('tipo') as string,
-                      prioridad:     f.get('prioridad') as string,
+                      titulo: f.get('titulo') as string,
+                      descripcion: (f.get('descripcion') as string) || '',
+                      tipo: f.get('tipo') as string,
+                      prioridad: f.get('prioridad') as string,
                       asignado_a_id: asignadoRaw ? Number(asignadoRaw) : undefined,
-                      fecha_limite:  (f.get('fecha_limite') as string) || undefined,
+                      fecha_limite: (f.get('fecha_limite') as string) || undefined,
                     });
                   }}
                   className="space-y-4"
@@ -711,7 +768,7 @@ const ProyectoDetalle = ({ proyectoId, onBack }: { proyectoId: number; onBack: (
                       name="titulo"
                       required
                       placeholder="Descripción breve de la tarea"
-                      className="w-full bg-dark-bg border border-dark-border rounded-xl px-3 py-2.5 text-sm text-dark-text outline-none focus:border-blue-500/50 transition-colors placeholder:text-dark-muted/50"
+                      className="w-full bg-zinc-950 border border-zinc-800 rounded-md px-3 py-2.5 text-sm text-zinc-100 outline-none focus:border-blue-500/50 transition-colors placeholder:text-zinc-600"
                     />
                   </FormField>
 
@@ -720,14 +777,14 @@ const ProyectoDetalle = ({ proyectoId, onBack }: { proyectoId: number; onBack: (
                       name="descripcion"
                       rows={3}
                       placeholder="Detalles, criterios de aceptación..."
-                      className="w-full bg-dark-bg border border-dark-border rounded-xl px-3 py-2.5 text-sm text-dark-text outline-none focus:border-blue-500/50 transition-colors resize-none placeholder:text-dark-muted/50"
+                      className="w-full bg-zinc-950 border border-zinc-800 rounded-md px-3 py-2.5 text-sm text-zinc-100 outline-none focus:border-blue-500/50 transition-colors resize-none placeholder:text-zinc-600"
                     />
                   </FormField>
 
                   <div className="grid grid-cols-2 gap-3">
                     <FormField label="Tipo">
                       <select name="tipo" defaultValue="task"
-                        className="w-full bg-dark-bg border border-dark-border rounded-xl px-3 py-2.5 text-sm text-dark-text outline-none focus:border-blue-500/50 transition-colors"
+                        className="w-full bg-zinc-950 border border-zinc-800 rounded-md px-3 py-2.5 text-sm text-zinc-100 outline-none focus:border-blue-500/50 transition-colors"
                       >
                         <option value="task">✅ Tarea</option>
                         <option value="bug">🐛 Bug</option>
@@ -736,7 +793,7 @@ const ProyectoDetalle = ({ proyectoId, onBack }: { proyectoId: number; onBack: (
                     </FormField>
                     <FormField label="Prioridad">
                       <select name="prioridad" defaultValue="media"
-                        className="w-full bg-dark-bg border border-dark-border rounded-xl px-3 py-2.5 text-sm text-dark-text outline-none focus:border-blue-500/50 transition-colors"
+                        className="w-full bg-zinc-950 border border-zinc-800 rounded-md px-3 py-2.5 text-sm text-zinc-100 outline-none focus:border-blue-500/50 transition-colors"
                       >
                         <option value="alta">🔴 Alta</option>
                         <option value="media">🟡 Media</option>
@@ -747,7 +804,7 @@ const ProyectoDetalle = ({ proyectoId, onBack }: { proyectoId: number; onBack: (
 
                   <FormField label="Asignar a">
                     <select name="asignado_a_id"
-                      className="w-full bg-dark-bg border border-dark-border rounded-xl px-3 py-2.5 text-sm text-dark-text outline-none focus:border-blue-500/50 transition-colors"
+                      className="w-full bg-zinc-950 border border-zinc-800 rounded-md px-3 py-2.5 text-sm text-zinc-100 outline-none focus:border-blue-500/50 transition-colors"
                     >
                       <option value="">Sin asignar</option>
                       {miembrosArr.map((a: any) => (
@@ -759,13 +816,18 @@ const ProyectoDetalle = ({ proyectoId, onBack }: { proyectoId: number; onBack: (
                   </FormField>
 
                   <FormField label="Fecha límite">
-                    <input name="fecha_limite" type="date"
-                      className="w-full bg-dark-bg border border-dark-border rounded-xl px-3 py-2.5 text-sm text-dark-text outline-none focus:border-blue-500/50 transition-colors"
+                    <DateTimeInput
+                      name="fecha_limite"
+                      withTime={true}
+                      timeName="hora_limite"
+                      min={(activeSprint as any)?.fecha_inicio?.toString().slice(0, 10)}
+                      max={(activeSprint as any)?.fecha_fin?.toString().slice(0, 10)}
+                      rangeLabel={(activeSprint as any)?.nombre ? `Dentro de "${(activeSprint as any).nombre}"` : undefined}
                     />
                   </FormField>
 
                   {ticketFormError && (
-                    <div className="flex items-center gap-2 px-3 py-2.5 bg-rose-500/10 border border-rose-500/20 rounded-xl">
+                    <div className="flex items-center gap-2 px-3 py-2.5 bg-rose-500/10 border border-rose-500/20 rounded-md">
                       <AlertTriangle size={13} className="text-rose-400 shrink-0" />
                       <p className="text-xs text-rose-400">{ticketFormError}</p>
                     </div>
@@ -774,7 +836,7 @@ const ProyectoDetalle = ({ proyectoId, onBack }: { proyectoId: number; onBack: (
                   <button
                     type="submit"
                     disabled={createTicketMutation.isPending}
-                    className="w-full py-3 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-black uppercase tracking-widest rounded-xl text-xs transition-all flex items-center justify-center gap-2"
+                    className="w-full py-3 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-black uppercase tracking-widest rounded-md text-xs transition-all flex items-center justify-center gap-2"
                   >
                     {createTicketMutation.isPending
                       ? <><Loader2 size={14} className="animate-spin" /> Creando tarea...</>
@@ -794,7 +856,7 @@ const ProyectoDetalle = ({ proyectoId, onBack }: { proyectoId: number; onBack: (
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.15 }}
-              className="h-full"
+              className="min-h-[60vh]"
             >
               <RecursosPanel proyectoId={proyectoId} canManage={canManage} />
             </motion.div>
@@ -802,6 +864,14 @@ const ProyectoDetalle = ({ proyectoId, onBack }: { proyectoId: number; onBack: (
 
         </AnimatePresence>
       </div>
+
+      {/* ── RejectModal (líder técnico rechaza tarea en revisión) ───────── */}
+      <RejectModal
+        ticket={rejectingTicket}
+        onClose={() => setRejectingTicket(null)}
+        onReject={(id, motivo) => liderRejectMut.mutate({ id, motivo: motivo || undefined })}
+        isPending={liderRejectMut.isPending}
+      />
 
       {/* ── UserProfileModal ─────────────────────────────────────────────── */}
       <AnimatePresence>
@@ -814,52 +884,66 @@ const ProyectoDetalle = ({ proyectoId, onBack }: { proyectoId: number; onBack: (
 };
 
 // ─── MemberRow ────────────────────────────────────────────────────────────────
-const MemberRow = ({ member, canManage, isLider, onPromote, onDemote, onRemove, onProfile, isLoading }: any) => (
-  <div className="flex items-center gap-3 p-2.5 rounded-2xl hover:bg-zinc-800/40 transition-all group">
-    <button onClick={onProfile} className="shrink-0 hover:opacity-80 transition-opacity">
-      <AvatarBadge nombre={member.nombre} url={member.avatar_url} size={7} />
-    </button>
-    <div className="flex-1 min-w-0 cursor-pointer" onClick={onProfile}>
-      <p className="text-xs font-bold text-zinc-200 truncate hover:text-primary-400 transition-colors">{member.nombre}</p>
-      <p className="text-[10px] text-zinc-500 truncate">{member.correo}</p>
-    </div>
-    <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-lg border uppercase tracking-widest shrink-0 ${isLider ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20'}`}>{isLider ? 'Líder' : 'Aprendiz'}</span>
-    {canManage && (
-      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-        {isLider
-          ? <button onClick={onDemote} disabled={isLoading} className="flex items-center gap-1 px-2 py-1 rounded-xl text-amber-400 hover:bg-amber-500/10 transition-all disabled:opacity-40 text-[10px] font-bold"><Crown size={11} /> Quitar líder</button>
-          : <button onClick={onPromote} disabled={isLoading} className="flex items-center gap-1 px-2 py-1 rounded-xl text-emerald-400 hover:bg-emerald-500/10 transition-all disabled:opacity-40 text-[10px] font-bold"><Crown size={11} /> Hacer líder</button>}
-        <button onClick={onRemove} disabled={isLoading} className="p-1.5 rounded-xl text-rose-400 hover:bg-rose-500/10 transition-all disabled:opacity-40"><UserMinus size={12} /></button>
+const MemberRow = ({ member, canManage, isLider, onPromote, onDemote, onRemove, onProfile, onResend, isLoading }: any) => {
+  const pendingConfirm = !(member.cuenta_confirmada ?? true);
+  return (
+    <div className="flex items-center gap-3 p-2.5 rounded-md hover:bg-zinc-800/40 transition-all group">
+      <button onClick={onProfile} className="shrink-0 hover:opacity-80 transition-opacity">
+        <AvatarBadge nombre={member.nombre} url={member.avatar_url} size={7} />
+      </button>
+      <div className="flex-1 min-w-0 cursor-pointer" onClick={onProfile}>
+        <p className="text-xs font-bold text-zinc-200 truncate hover:text-primary-400 transition-colors">{member.nombre}</p>
+        <p className="text-[10px] text-zinc-500 truncate">{member.correo}</p>
+        {pendingConfirm && member.correo_entrega_estado !== 'rebotado' && (
+          <span className="text-[9px] font-black text-amber-400 flex items-center gap-0.5 mt-0.5">
+            ● Cuenta pendiente de confirmación
+          </span>
+        )}
+        {member.correo_entrega_estado === 'rebotado' && (
+          <span className="text-[9px] font-black text-rose-400 flex items-center gap-1 mt-0.5">
+            ✕ El correo rebotó — buzón inexistente
+          </span>
+        )}
       </div>
-    )}
-  </div>
-);
+      <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-lg border uppercase tracking-widest shrink-0 ${isLider ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20'}`}>{isLider ? 'Líder' : 'Aprendiz'}</span>
+      {canManage && (
+        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+          {pendingConfirm && onResend && (
+            <button onClick={onResend} disabled={isLoading} title="Reenviar correo de confirmación" className="flex items-center gap-1 px-2 py-1 rounded-md text-blue-400 hover:bg-blue-500/10 transition-all disabled:opacity-40 text-[10px] font-bold">
+              <Send size={11} /> Reenviar
+            </button>
+          )}
+          {isLider
+            ? <button onClick={onDemote} disabled={isLoading} className="flex items-center gap-1 px-2 py-1 rounded-md text-amber-400 hover:bg-amber-500/10 transition-all disabled:opacity-40 text-[10px] font-bold"><Crown size={11} /> Quitar líder</button>
+            : <button onClick={onPromote} disabled={isLoading} className="flex items-center gap-1 px-2 py-1 rounded-md text-emerald-400 hover:bg-emerald-500/10 transition-all disabled:opacity-40 text-[10px] font-bold"><Crown size={11} /> Hacer líder</button>}
+          <button onClick={onRemove} disabled={isLoading} className="p-1.5 rounded-md text-rose-400 hover:bg-rose-500/10 transition-all disabled:opacity-40"><UserMinus size={12} /></button>
+        </div>
+      )}
+    </div>
+  );
+};
 
 // ─── AprendicesManager ────────────────────────────────────────────────────────
-const AprendicesManager = ({ fichaId, canManage }: { fichaId: number; canManage: boolean }) => {
+const AprendicesManager = ({ fichaId, fichaCode, canManage }: { fichaId: number; fichaCode?: string; canManage: boolean }) => {
   const qc = useQueryClient();
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [activeTab, setActiveTab] = useState<'invitar' | 'manual' | 'excel'>('invitar');
-  const [inviteForm, setInviteForm] = useState({ nombre: '', correo: '', documento: '' });
-  const [inviteSuccess, setInviteSuccess] = useState(false);
-  const [inviteError, setInviteError] = useState<string | null>(null);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
-  const [addResult, setAddResult] = useState<{ added: number[]; errors: { id: number; reason: string }[] } | null>(null);
-  const [excelFile, setExcelFile] = useState<File | null>(null);
-  const [dragOver, setDragOver] = useState(false);
-  const [importResult, setImportResult] = useState<{ created: number; linked: number; errors: { fila: number; correo: string; reason: string }[] } | null>(null);
-  const [filterRole, setFilterRole] = useState<'todos' | 'lideres' | 'aprendices'>('todos');
-  const [mainSearch, setMainSearch] = useState('');
-  const [profileUserId, setProfileUserId] = useState<number | null>(null);
+  const [showAddModal,   setShowAddModal]   = useState(false);
+  const [activeTab,      setActiveTab]      = useState<'invitar' | 'excel'>('invitar');
+  const [inviteForm,     setInviteForm]     = useState({ nombre: '', correo: '', documento: '' });
+  const [inviteSuccess,  setInviteSuccess]  = useState(false);
+  const [inviteError,    setInviteError]    = useState<string | null>(null);
+  const [excelFile,      setExcelFile]      = useState<File | null>(null);
+  const [dragOver,       setDragOver]       = useState(false);
+  const [importResult,   setImportResult]   = useState<{ created: number; linked: number; errors: { fila: number; correo: string; reason: string }[] } | null>(null);
+  const [excelPreview,   setExcelPreview]   = useState<ExcelPreview | null>(null);
+  const [excelParsing,   setExcelParsing]   = useState(false);
+  const [filterRole,     setFilterRole]     = useState<'todos' | 'lideres' | 'aprendices'>('todos');
+  const [mainSearch,     setMainSearch]     = useState('');
+  const [profileUserId,  setProfileUserId]  = useState<number | null>(null);
+  // ── Confirmación masiva ──────────────────────────────────────────────────────
+  const [confirmMode,    setConfirmMode]    = useState(false);
+  const [confirmSelIds,  setConfirmSelIds]  = useState<Set<number>>(new Set());
 
   const { data: members = [], isLoading: loadingMembers } = useQuery({ queryKey: ['fichas', fichaId, 'members'], queryFn: () => fichaService.getMembers(fichaId), staleTime: 30000 });
-  const { data: available = [], isLoading: loadingAvailable } = useQuery({ queryKey: ['fichas', 'available-users'], queryFn: () => fichaService.getAvailableUsers(), staleTime: 30000, enabled: showAddModal && activeTab === 'manual' });
-
-  const addMembersMutation = useMutation({
-    mutationFn: (ids: number[]) => fichaService.addMembers(fichaId, ids),
-    onSuccess: (result) => { setAddResult(result); setSelectedIds(new Set()); qc.invalidateQueries({ queryKey: ['fichas', fichaId, 'members'] }); qc.invalidateQueries({ queryKey: ['fichas', 'available-users'] }); if (!result.errors.length) setTimeout(() => { setShowAddModal(false); setAddResult(null); }, 1200); },
-  });
   const importExcelMutation = useMutation({
     mutationFn: (file: File) => fichaService.importFromExcel(fichaId, file),
     onSuccess: (result) => { setImportResult(result); qc.invalidateQueries({ queryKey: ['fichas', fichaId, 'members'] }); },
@@ -883,14 +967,41 @@ const AprendicesManager = ({ fichaId, canManage }: { fichaId: number; canManage:
     onSuccess: () => { setInviteSuccess(true); setInviteForm({ nombre: '', correo: '', documento: '' }); setInviteError(null); qc.invalidateQueries({ queryKey: ['fichas', fichaId, 'members'] }); },
     onError: (err: any) => { const msg = err?.response?.data?.message; setInviteError(Array.isArray(msg) ? msg.join(', ') : (msg || 'Error al invitar')); },
   });
+  const reenviarMutation = useMutation({
+    mutationFn: (userId: number) => fichaService.reenviarInvitacion(fichaId, userId),
+    onSuccess: () => alert('Correo de confirmación reenviado correctamente.'),
+    onError: (err: any) => { const msg = err?.response?.data?.message; alert(Array.isArray(msg) ? msg.join(', ') : (msg || 'Error al reenviar')); },
+  });
+  const confirmBulkMutation = useMutation({
+    mutationFn: (ids: number[]) => userService.confirmBulk(ids),
+    onSuccess: (result) => {
+      qc.invalidateQueries({ queryKey: ['fichas', fichaId, 'members'] });
+      setConfirmMode(false);
+      setConfirmSelIds(new Set());
+      const n = result.confirmed.length;
+      if (n > 0) alert(`✓ ${n} cuenta${n !== 1 ? 's' : ''} confirmada${n !== 1 ? 's' : ''} correctamente.`);
+    },
+    onError: (err: any) => { const msg = err?.response?.data?.message; alert(Array.isArray(msg) ? msg.join(', ') : (msg || 'Error al confirmar')); },
+  });
+
+  const revisarRebotesMutation = useMutation({
+    mutationFn: () => userService.revisarRebotes(),
+    onSuccess: (r) => {
+      qc.invalidateQueries({ queryKey: ['fichas', fichaId, 'members'] });
+      if (r.rebotados > 0) {
+        alert(`📭 Se detectaron ${r.rebotados} correo(s) rebotado(s):\n${r.correos.join('\n')}`);
+      } else {
+        alert('✓ No se encontraron rebotes nuevos.');
+      }
+    },
+    onError: (err: any) => {
+      const msg = err?.response?.data?.message;
+      alert(msg || 'No se pudo revisar rebotes. Verifica que IMAP esté habilitado en la cuenta de correo.');
+    },
+  });
 
   const membersArr = members as any[];
-  const availableArr = available as any[];
-  const filteredAvailable = useMemo(() => {
-    if (!searchQuery.trim()) return availableArr;
-    const q = searchQuery.toLowerCase();
-    return availableArr.filter((u: any) => u.nombre?.toLowerCase().includes(q) || u.correo?.toLowerCase().includes(q));
-  }, [availableArr, searchQuery]);
+  const rebotadosCount = membersArr.filter((m: any) => m.correo_entrega_estado === 'rebotado').length;
 
   const filteredMembers = useMemo(() => {
     let list = membersArr.filter((m: any) => m.rol === 'aprendiz');
@@ -903,82 +1014,192 @@ const AprendicesManager = ({ fichaId, canManage }: { fichaId: number; canManage:
     return list;
   }, [membersArr, filterRole, mainSearch]);
 
-  const toggleSelect = (id: number) => setSelectedIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  const toggleConfirmSel  = (id: number) => setConfirmSelIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
 
-  const handleFileDrop = (file: File) => {
-    if (!file.name.match(/\.(xlsx|xls)$/i)) return;
-    setExcelFile(file); setImportResult(null);
+  const pendingMembers    = membersArr.filter((m: any) => m.rol === 'aprendiz' && !(m.cuenta_confirmada ?? true));
+  const pendingCount      = pendingMembers.length;
+
+  const handleFileDrop = async (file: File) => {
+    if (!file.name.match(/\.(xlsx|xls|csv)$/i)) return;
+    setExcelFile(file);
+    setImportResult(null);
+    setExcelPreview(null);
+    setExcelParsing(true);
+    try {
+      const p = await parseExcelPreview(file);
+      setExcelPreview(p);
+    } catch {
+      setExcelPreview(null);
+    } finally {
+      setExcelParsing(false);
+    }
   };
 
-  const lideres   = membersArr.filter(m => m.rol === 'aprendiz' && m.es_lider_tecnico);
+  const lideres = membersArr.filter(m => m.rol === 'aprendiz' && m.es_lider_tecnico);
   const aprendices = membersArr.filter(m => m.rol === 'aprendiz' && !m.es_lider_tecnico);
 
   return (
     <div className="space-y-4">
+      {/* Solicitudes pendientes (aprendices auto-registrados) */}
+      {canManage && fichaCode && (
+        <SolicitudesPendientesPanel fichaId={fichaId} fichaCode={fichaCode} />
+      )}
+
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
         <h3 className="text-xs font-black text-zinc-400 uppercase tracking-widest flex items-center gap-2">
-          <GraduationCap size={13} /> Aprendices de la Ficha ({membersArr.filter((m:any) => m.rol === 'aprendiz').length})
+          <GraduationCap size={13} /> Aprendices de la Ficha ({membersArr.filter((m: any) => m.rol === 'aprendiz').length})
         </h3>
         {canManage && (
-          <button
-            onClick={() => { setShowAddModal(true); setAddResult(null); setImportResult(null); setSelectedIds(new Set()); setSearchQuery(''); setExcelFile(null); setInviteForm({ nombre:'',correo:'',documento:'' }); setInviteSuccess(false); setInviteError(null); setActiveTab('invitar'); }}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-primary-600/10 border border-primary-500/20 text-primary-400 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-primary-600/20 transition-all"
-          >
-            <UserPlus size={12} /> Agregar Aprendices
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => revisarRebotesMutation.mutate()}
+              disabled={revisarRebotesMutation.isPending}
+              title="Revisa la bandeja de correo en busca de mensajes rebotados"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-zinc-800 border border-zinc-700 text-zinc-400 rounded-md text-[10px] font-black uppercase tracking-widest hover:text-zinc-200 hover:border-zinc-600 transition-all disabled:opacity-50"
+            >
+              {revisarRebotesMutation.isPending
+                ? <><span className="animate-spin inline-block w-3 h-3 border-2 border-zinc-500/30 border-t-zinc-400 rounded-full" /> Revisando...</>
+                : <><MailX size={12} /> Revisar rebotes{rebotadosCount > 0 ? ` (${rebotadosCount})` : ''}</>}
+            </button>
+            <button
+              onClick={() => { setShowAddModal(true); setImportResult(null); setExcelFile(null); setInviteForm({ nombre: '', correo: '', documento: '' }); setInviteSuccess(false); setInviteError(null); setActiveTab('invitar'); }}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-primary-600/10 border border-primary-500/20 text-primary-400 rounded-md text-[10px] font-black uppercase tracking-widest hover:bg-primary-600/20 transition-all"
+            >
+              <UserPlus size={12} /> Agregar Aprendices
+            </button>
+          </div>
         )}
       </div>
 
-      {/* Filtros + búsqueda */}
+      {/* ── Banner de confirmación masiva (aparece cuando hay pendientes) ───── */}
+      {canManage && pendingCount > 0 && !confirmMode && (
+        <div className="flex items-center gap-3 px-4 py-3 bg-amber-500/10 border border-amber-500/25 rounded-md flex-wrap">
+          <AlertTriangle size={14} className="text-amber-400 shrink-0" />
+          <p className="text-[12px] font-black text-amber-300 flex-1">
+            {pendingCount} cuenta{pendingCount !== 1 ? 's' : ''} pendiente{pendingCount !== 1 ? 's' : ''} de confirmación
+          </p>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => confirmBulkMutation.mutate(pendingMembers.map((m: any) => m.id))}
+              disabled={confirmBulkMutation.isPending}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/30 text-amber-300 rounded-md text-[10px] font-black uppercase tracking-widest transition-all disabled:opacity-50"
+            >
+              {confirmBulkMutation.isPending
+                ? <><span className="w-3 h-3 border-2 border-amber-300/30 border-t-amber-300 rounded-full animate-spin" /> Confirmando...</>
+                : <><CheckCircle2 size={11} /> Confirmar todas</>}
+            </button>
+            <button
+              onClick={() => { setConfirmMode(true); setConfirmSelIds(new Set()); }}
+              className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 border border-zinc-600 text-zinc-300 rounded-md text-[10px] font-black uppercase tracking-widest transition-all"
+            >
+              Seleccionar
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Barra de acción en modo selección ───────────────────────────────── */}
+      {canManage && confirmMode && (
+        <div className="flex items-center gap-3 px-4 py-3 bg-blue-500/10 border border-blue-500/25 rounded-md flex-wrap">
+          <p className="text-[12px] font-black text-blue-300 flex-1">
+            {confirmSelIds.size > 0
+              ? `${confirmSelIds.size} seleccionada${confirmSelIds.size !== 1 ? 's' : ''}`
+              : 'Haz clic en las cuentas pendientes para seleccionarlas'}
+          </p>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setConfirmSelIds(new Set(pendingMembers.map((m: any) => m.id)))}
+              className="px-2.5 py-1.5 text-[10px] font-black text-blue-400 hover:underline uppercase tracking-widest"
+            >
+              Todas ({pendingCount})
+            </button>
+            <button
+              onClick={() => confirmBulkMutation.mutate([...confirmSelIds])}
+              disabled={confirmSelIds.size === 0 || confirmBulkMutation.isPending}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white rounded-md text-[10px] font-black uppercase tracking-widest transition-all"
+            >
+              {confirmBulkMutation.isPending
+                ? <><span className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Confirmando...</>
+                : <><CheckCircle2 size={11} /> Confirmar</>}
+            </button>
+            <button
+              onClick={() => { setConfirmMode(false); setConfirmSelIds(new Set()); }}
+              className="p-1.5 rounded-md text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800 transition-all"
+            >
+              <X size={13} />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Búsqueda — full width */}
+      <div className="relative">
+        <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 pointer-events-none" />
+        <input
+          type="text"
+          value={mainSearch}
+          onChange={e => setMainSearch(e.target.value)}
+          placeholder="Buscar aprendiz por nombre o correo..."
+          className="w-full pl-9 pr-3 py-2.5 bg-zinc-800/60 border border-zinc-700 rounded-lg text-[12px] text-zinc-300 outline-none focus:border-primary-500/50 placeholder:text-zinc-600 transition-colors"
+        />
+      </div>
+
+      {/* Filtros — debajo del buscador */}
       <div className="flex items-center gap-2 flex-wrap">
         {(['todos', 'lideres', 'aprendices'] as const).map(f => (
           <button
             key={f}
             onClick={() => setFilterRole(f)}
-            className={`px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest border transition-all ${
-              filterRole === f
-                ? 'bg-primary-600/20 border-primary-500/40 text-primary-400'
-                : 'bg-zinc-800/60 border-zinc-700 text-zinc-500 hover:text-zinc-300 hover:border-zinc-600'
-            }`}
+            className={`px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest border transition-all ${filterRole === f
+              ? 'bg-primary-600/20 border-primary-500/40 text-primary-400'
+              : 'bg-zinc-800/60 border-zinc-700 text-zinc-500 hover:text-zinc-300 hover:border-zinc-600'
+              }`}
           >
-            {f === 'todos' ? `Todos (${membersArr.filter((m:any) => m.rol === 'aprendiz').length})` : f === 'lideres' ? `Líderes (${lideres.length})` : `Aprendices (${aprendices.length})`}
+            {f === 'todos' ? `Todos (${membersArr.filter((m: any) => m.rol === 'aprendiz').length})` : f === 'lideres' ? `Líderes (${lideres.length})` : `Aprendices (${aprendices.length})`}
           </button>
         ))}
-        <div className="relative flex-1 min-w-[150px]">
-          <Search size={11} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-500" />
-          <input
-            type="text"
-            value={mainSearch}
-            onChange={e => setMainSearch(e.target.value)}
-            placeholder="Buscar aprendiz..."
-            className="pl-7 pr-3 py-1 bg-zinc-800/60 border border-zinc-700 rounded-lg text-[11px] text-zinc-300 outline-none focus:border-primary-500/50 w-full placeholder:text-zinc-600 transition-colors"
-          />
-        </div>
       </div>
 
       {/* Lista */}
       {loadingMembers
-        ? <div className="space-y-2">{[1,2,3].map(n => <div key={n} className="h-12 bg-zinc-800/40 rounded-2xl animate-pulse" />)}</div>
-        : membersArr.filter((m:any) => m.rol === 'aprendiz').length === 0
-          ? <div className="text-center py-8 bg-zinc-800/20 rounded-2xl border border-dashed border-zinc-700"><GraduationCap size={24} className="mx-auto text-zinc-600 mb-2 opacity-30" /><p className="text-xs text-zinc-500 font-bold uppercase tracking-widest">Sin aprendices vinculados</p></div>
+        ? <div className="space-y-2">{[1, 2, 3].map(n => <div key={n} className="h-12 bg-zinc-800/40 rounded-md animate-pulse" />)}</div>
+        : membersArr.filter((m: any) => m.rol === 'aprendiz').length === 0
+          ? <div className="text-center py-8 bg-zinc-800/20 rounded-md border border-dashed border-zinc-700"><GraduationCap size={24} className="mx-auto text-zinc-600 mb-2 opacity-30" /><p className="text-xs text-zinc-500 font-bold uppercase tracking-widest">Sin aprendices vinculados</p></div>
           : filteredMembers.length === 0
             ? <p className="text-[12px] text-zinc-500 text-center py-6">Sin resultados</p>
             : <div className="space-y-1">
-                {filteredMembers.map((m:any) => (
-                  <MemberRow
-                    key={m.id}
-                    member={m}
-                    canManage={canManage}
-                    isLider={m.es_lider_tecnico}
-                    onProfile={() => setProfileUserId(m.id)}
-                    onPromote={() => { if (confirm(`¿Promover a ${m.nombre} como Líder Técnico?`)) promoteMutation.mutate(m.id); }}
-                    onDemote={() => demoteMutation.mutate(m.id)}
-                    onRemove={() => { if (confirm(`¿Desvincular a ${m.nombre}?`)) removeMemberMutation.mutate(m.id); }}
-                    isLoading={promoteMutation.isPending || demoteMutation.isPending || removeMemberMutation.isPending}
-                  />
-                ))}
-              </div>
+              {filteredMembers.map((m: any) => {
+                const isPending = !(m.cuenta_confirmada ?? true);
+                const isConfirmSelected = confirmSelIds.has(m.id);
+                return (
+                  <div key={m.id} className="relative">
+                    {/* Checkbox de selección (solo en modo confirmación y cuenta pendiente) */}
+                    {confirmMode && isPending && (
+                      <button
+                        onClick={() => toggleConfirmSel(m.id)}
+                        className={`absolute left-0 top-1/2 -translate-y-1/2 -translate-x-1 z-10 w-5 h-5 rounded border flex items-center justify-center transition-all ${isConfirmSelected ? 'bg-blue-600 border-blue-500' : 'bg-zinc-800 border-zinc-600 hover:border-blue-500'}`}
+                      >
+                        {isConfirmSelected && <Check size={11} className="text-white" />}
+                      </button>
+                    )}
+                    <div className={confirmMode && isPending ? 'ml-6 transition-all' : ''}>
+                      <MemberRow
+                        member={m}
+                        canManage={canManage && !confirmMode}
+                        isLider={m.es_lider_tecnico}
+                        onProfile={() => !confirmMode && setProfileUserId(m.id)}
+                        onPromote={() => { if (confirm(`¿Promover a ${m.nombre} como Líder Técnico?`)) promoteMutation.mutate(m.id); }}
+                        onDemote={() => demoteMutation.mutate(m.id)}
+                        onRemove={() => { if (confirm(`¿Desvincular a ${m.nombre}?`)) removeMemberMutation.mutate(m.id); }}
+                        onResend={() => reenviarMutation.mutate(m.id)}
+                        isLoading={promoteMutation.isPending || demoteMutation.isPending || removeMemberMutation.isPending || reenviarMutation.isPending}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
       }
 
       {/* UserProfileModal */}
@@ -988,63 +1209,222 @@ const AprendicesManager = ({ fichaId, canManage }: { fichaId: number; canManage:
         )}
       </AnimatePresence>
 
-      <Modal isOpen={showAddModal} onClose={() => { setShowAddModal(false); setAddResult(null); setImportResult(null); setExcelFile(null); setSelectedIds(new Set()); }} title="Agregar Aprendices a la Ficha">
-        <div className="space-y-4">
-          <div className="flex gap-1 p-1 bg-dark-bg/60 rounded-2xl border border-dark-border">
-            {(['invitar','manual','excel'] as const).map(tab => (
-              <button key={tab} onClick={() => setActiveTab(tab)} className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all ${activeTab === tab ? (tab==='invitar' ? 'bg-primary-600/20 text-primary-400 border border-primary-500/30' : tab==='manual' ? 'bg-indigo-600/20 text-indigo-400 border border-indigo-500/30' : 'bg-emerald-600/20 text-emerald-400 border border-emerald-500/30') : 'text-dark-muted hover:text-dark-text'}`}>
-                {tab==='invitar' && <><UserPlus size={12} /> Invitar nuevo</>}{tab==='manual' && <><Search size={12} /> Buscar usuario</>}{tab==='excel' && <><FileSpreadsheet size={12} /> Excel masivo</>}
-              </button>
-            ))}
-          </div>
-          {activeTab === 'invitar' && (
-            <div className="space-y-4">
-              <div className="px-4 py-3 bg-primary-500/8 border border-primary-500/20 rounded-2xl"><p className="text-[11px] font-black text-primary-400 uppercase tracking-widest">Crear cuenta y enviar invitación</p><p className="text-[10px] text-dark-muted mt-1">Se crea la cuenta con la cédula como contraseña inicial.</p></div>
-              {inviteSuccess && <div className="px-4 py-3 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl flex items-center gap-2"><CheckCircle2 size={14} className="text-emerald-400" /><p className="text-xs text-emerald-400 font-bold">¡Aprendiz invitado! Correo de confirmación enviado.</p></div>}
-              {inviteError && <div className="px-4 py-3 bg-rose-500/10 border border-rose-500/20 rounded-2xl flex items-center gap-2"><AlertTriangle size={14} className="text-rose-400" /><p className="text-xs text-rose-400 font-bold">{inviteError}</p></div>}
-              <form onSubmit={e => { e.preventDefault(); if (!inviteForm.nombre.trim()||!inviteForm.correo.trim()||!inviteForm.documento.trim()) { setInviteError('Todos los campos son obligatorios'); return; } setInviteError(null); setInviteSuccess(false); inviteMutation.mutate(inviteForm); }} className="space-y-3">
-                {([{key:'nombre' as const, label:'Nombre completo', placeholder:'Juan Pérez García', type:'text'}, {key:'correo' as const, label:'Correo electrónico', placeholder:'juan@sena.edu.co', type:'email'}, {key:'documento' as const, label:'Cédula / documento', placeholder:'1234567890', type:'text'}] as const).map(({key,label,placeholder,type}) => (
-                  <div key={key} className="space-y-1.5"><label className="text-[10px] font-black text-dark-muted uppercase tracking-widest ml-1">{label}</label><input type={type} value={inviteForm[key]} onChange={e => setInviteForm(f => ({...f,[key]:e.target.value}))} placeholder={placeholder} className="input-dark w-full text-sm" /></div>
-                ))}
-                <button type="submit" disabled={inviteMutation.isPending} className="w-full py-3.5 bg-primary-600 hover:bg-primary-500 disabled:opacity-40 text-white font-black uppercase tracking-widest rounded-2xl text-xs transition-all flex items-center justify-center gap-2">{inviteMutation.isPending ? <><span className="animate-spin inline-block w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full" /> Enviando...</> : <><UserPlus size={13} /> Crear cuenta y enviar correo</>}</button>
-              </form>
-            </div>
-          )}
-          {activeTab === 'manual' && (
-            <div className="space-y-4">
-              {addResult && <div className="space-y-2">{addResult.added.length>0 && <div className="px-4 py-3 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl flex items-center gap-2"><Check size={14} className="text-emerald-400" /><p className="text-xs text-emerald-400 font-bold">{addResult.added.length} aprendiz(ces) vinculados</p></div>}{addResult.errors.length>0 && <div className="px-4 py-3 bg-amber-500/10 border border-amber-500/20 rounded-2xl">{addResult.errors.map(e => <p key={e.id} className="text-[10px] text-amber-400">· {e.reason}</p>)}</div>}</div>}
-              <div className="relative"><Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-dark-muted pointer-events-none" /><input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Buscar por nombre o correo..." className="input-dark pl-9 text-sm" /></div>
-              {filteredAvailable.length > 0 && <div className="flex items-center justify-between"><p className="text-[10px] text-dark-muted font-bold uppercase tracking-widest">{selectedIds.size>0 ? `${selectedIds.size} seleccionado(s)` : 'Selecciona aprendices'}</p><div className="flex gap-2"><button onClick={() => setSelectedIds(new Set(filteredAvailable.map((u:any)=>u.id)))} className="text-[10px] text-primary-400 font-bold hover:underline">Seleccionar todos</button>{selectedIds.size>0 && <button onClick={() => setSelectedIds(new Set())} className="text-[10px] text-dark-muted font-bold hover:underline">Limpiar</button>}</div></div>}
-              <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
-                {loadingAvailable ? [1,2,3].map(n=><div key={n} className="h-14 bg-dark-bg/50 rounded-2xl animate-pulse" />) : filteredAvailable.length===0 ? <p className="text-sm text-dark-muted text-center py-8">{searchQuery ? 'Sin resultados' : 'No hay aprendices disponibles sin ficha'}</p> : filteredAvailable.map((u:any) => {
-                  const isSel = selectedIds.has(u.id);
-                  return <button key={u.id} onClick={() => toggleSelect(u.id)} className={`w-full flex items-center gap-3 p-3 rounded-2xl border transition-all text-left ${isSel ? 'bg-primary-600/15 border-primary-500/40' : 'bg-dark-bg/50 border-dark-border'}`}>
-                    <div className={`w-5 h-5 rounded-lg border flex items-center justify-center shrink-0 ${isSel ? 'bg-primary-600 border-primary-500' : 'border-dark-border bg-dark-bg'}`}>{isSel && <Check size={11} className="text-white" />}</div>
-                    <AvatarBadge nombre={u.nombre} url={u.avatar_url} size={8} />
-                    <div className="flex-1 min-w-0"><p className="text-sm font-bold text-dark-text truncate">{u.nombre}</p><p className="text-[10px] text-dark-muted truncate">{u.correo}</p></div>
-                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-lg border ${u.es_lider_tecnico ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20'}`}>{u.es_lider_tecnico ? 'Líder técnico' : 'Aprendiz'}</span>
-                  </button>;
-                })}
+      {/* ── Aside deslizante — Agregar Aprendices ─────────────────────────────── */}
+      <AnimatePresence>
+        {showAddModal && (
+          <>
+            {/* Fondo oscuro */}
+            <motion.div
+              className="fixed inset-0 bg-black/20 z-40 backdrop-blur-sm"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => { setShowAddModal(false); setImportResult(null); setExcelFile(null); }}
+            />
+            {/* Panel lateral */}
+            <motion.aside
+              className="fixed top-0 right-0 h-full w-full max-w-[440px] bg-zinc-900 border-l border-zinc-800 shadow-2xl z-50 flex flex-col"
+              initial={{ x: '100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '100%' }}
+              transition={{ type: 'spring', damping: 28, stiffness: 220 }}
+            >
+              {/* Cabecera */}
+              <div className="flex items-center justify-between px-6 py-5 border-b border-zinc-800 shrink-0">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-md bg-primary-600/15 border border-primary-500/25 flex items-center justify-center">
+                    <UserPlus size={15} className="text-primary-400" />
+                  </div>
+                  <div>
+                    <h2 className="text-sm font-black text-zinc-100">Agregar Aprendices</h2>
+                  </div>
+                </div>
+                <button
+                  onClick={() => { setShowAddModal(false); setImportResult(null); setExcelFile(null); }}
+                  className="w-8 h-8 flex items-center justify-center rounded-md text-zinc-500 hover:text-zinc-100 hover:bg-zinc-800 transition-all"
+                >
+                  <X size={16} />
+                </button>
               </div>
-              <button onClick={() => selectedIds.size>0 && addMembersMutation.mutate([...selectedIds])} disabled={selectedIds.size===0||addMembersMutation.isPending} className="w-full py-3.5 bg-primary-600 hover:bg-primary-500 disabled:opacity-40 text-white font-black uppercase tracking-widest rounded-2xl text-xs transition-all">
-                {addMembersMutation.isPending ? 'Vinculando...' : selectedIds.size===0 ? 'Selecciona aprendices' : `Vincular ${selectedIds.size} aprendiz${selectedIds.size>1?'ces':''}`}
-              </button>
-            </div>
-          )}
-          {activeTab === 'excel' && (
-            <div className="space-y-4">
-              <div className="px-4 py-3 bg-emerald-500/8 border border-emerald-500/20 rounded-2xl space-y-1"><p className="text-[11px] font-black text-emerald-400 uppercase tracking-widest">Importación masiva Excel</p><p className="text-[10px] text-dark-muted">Columnas: <strong className="text-dark-text">nombre</strong>, <strong className="text-dark-text">correo</strong>, <strong className="text-dark-text">cedula</strong></p><p className="text-[10px] text-amber-400/70">⚠ Se envía correo de confirmación a cada aprendiz.</p></div>
-              <button onClick={() => fichaService.downloadTemplate().catch(() => alert('Error al descargar'))} className="w-full flex items-center justify-center gap-2 py-2.5 bg-dark-bg/60 border border-dark-border hover:border-primary-500/30 text-dark-muted hover:text-primary-400 rounded-2xl text-xs font-black uppercase tracking-widest transition-all"><Download size={13} /> Descargar plantilla .xlsx</button>
-              {!importResult && <div onDragOver={e=>{e.preventDefault();setDragOver(true);}} onDragLeave={()=>setDragOver(false)} onDrop={e=>{e.preventDefault();setDragOver(false);const f=e.dataTransfer.files[0];if(f)handleFileDrop(f);}} className={`relative border-2 border-dashed rounded-2xl p-8 text-center transition-all cursor-pointer ${dragOver?'border-emerald-500/60 bg-emerald-500/8':excelFile?'border-emerald-500/40 bg-emerald-500/5':'border-dark-border hover:border-primary-500/30 bg-dark-bg/30'}`} onClick={()=>{const input=document.createElement('input');input.type='file';input.accept='.xlsx,.xls,.csv';input.onchange=e=>{const f=(e.target as HTMLInputElement).files?.[0];if(f)handleFileDrop(f);};input.click();}}>
-                {excelFile ? <div className="space-y-2"><div className="w-12 h-12 bg-emerald-500/10 rounded-2xl flex items-center justify-center mx-auto"><FileSpreadsheet size={22} className="text-emerald-400" /></div><p className="text-sm font-black text-emerald-400">{excelFile.name}</p><button onClick={e=>{e.stopPropagation();setExcelFile(null);}} className="text-[10px] text-rose-400 hover:underline font-bold">Cambiar archivo</button></div>
-                  : <div className="space-y-3"><div className="w-12 h-12 bg-dark-border/50 rounded-2xl flex items-center justify-center mx-auto"><Upload size={20} className="text-dark-muted" /></div><div><p className="text-sm font-black text-dark-text">Arrastra tu archivo aquí</p><p className="text-[10px] text-dark-muted mt-1">o haz clic · .xlsx, .xls, .csv</p></div></div>}
-              </div>}
-              {importResult && <div className="space-y-3"><div className="grid grid-cols-2 gap-3"><div className="bg-emerald-500/10 border border-emerald-500/20 rounded-2xl p-3 text-center"><p className="text-2xl font-black text-emerald-400">{importResult.created}</p><p className="text-[10px] text-emerald-400/70 font-bold uppercase tracking-wider">Creados</p></div><div className="bg-blue-500/10 border border-blue-500/20 rounded-2xl p-3 text-center"><p className="text-2xl font-black text-blue-400">{importResult.linked}</p><p className="text-[10px] text-blue-400/70 font-bold uppercase tracking-wider">Vinculados</p></div></div>{importResult.errors.length>0 && <div className="bg-amber-500/8 border border-amber-500/20 rounded-2xl p-3"><p className="text-[11px] font-black text-amber-400 flex items-center gap-1.5"><AlertTriangle size={12} /> {importResult.errors.length} fila(s) con errores</p>{importResult.errors.map((e,i)=><p key={i} className="text-[10px] text-amber-400/80">Fila {e.fila}: {e.reason}</p>)}</div>}<button onClick={()=>{setImportResult(null);setExcelFile(null);}} className="w-full py-2.5 bg-dark-bg/60 border border-dark-border text-dark-muted hover:text-dark-text rounded-2xl text-xs font-black uppercase tracking-widest transition-all">Importar otro archivo</button></div>}
-              {!importResult && <button onClick={()=>{if(excelFile)importExcelMutation.mutate(excelFile);}} disabled={!excelFile||importExcelMutation.isPending} className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white font-black uppercase tracking-widest rounded-2xl text-xs transition-all flex items-center justify-center gap-2">{importExcelMutation.isPending ? <><span className="animate-spin inline-block w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full" /> Importando...</> : <><FileSpreadsheet size={14} /> {excelFile ? 'Importar aprendices' : 'Selecciona un archivo primero'}</>}</button>}
-            </div>
-          )}
-        </div>
-      </Modal>
+
+              {/* Tabs */}
+              <div className="px-5 pt-5 shrink-0">
+                <div className="flex gap-1 p-1 bg-zinc-900/80 rounded-md border border-zinc-800">
+                  {(['invitar', 'excel'] as const).map(tab => (
+                    <button
+                      key={tab}
+                      onClick={() => setActiveTab(tab)}
+                      className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-md text-[11px] font-black uppercase tracking-widest transition-all ${
+                        activeTab === tab
+                          ? tab === 'invitar'
+                            ? 'bg-primary-600/20 text-primary-400 border border-primary-500/30'
+                            : 'bg-emerald-600/20 text-emerald-400 border border-emerald-500/30'
+                          : 'text-zinc-500 hover:text-zinc-100'
+                      }`}
+                    >
+                      {tab === 'invitar' ? <><UserPlus size={12} /> Invitar nuevo</> : <><FileSpreadsheet size={12} /> Excel masivo</>}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Contenido (scrollable) */}
+              <div className="flex-1 overflow-y-auto px-5 py-5 space-y-4">
+                {activeTab === 'invitar' && (
+                  <div className="space-y-4">
+                    <div className="px-4 py-3 bg-primary-500/8 border border-primary-500/20 rounded-md">
+                      <p className="text-[11px] font-black text-primary-400 uppercase tracking-widest">Crear cuenta y enviar invitación</p>
+                      <p className="text-[10px] text-zinc-500 mt-1">Se crea la cuenta con la cédula como contraseña inicial.</p>
+                    </div>
+                    {inviteSuccess && (
+                      <div className="px-4 py-3 bg-emerald-500/10 border border-emerald-500/20 rounded-md flex items-center gap-2">
+                        <CheckCircle2 size={14} className="text-emerald-400" />
+                        <p className="text-xs text-emerald-400 font-bold">¡Aprendiz invitado! Correo de confirmación enviado.</p>
+                      </div>
+                    )}
+                    {inviteError && (
+                      <div className="px-4 py-3 bg-rose-500/10 border border-rose-500/20 rounded-md flex items-center gap-2">
+                        <AlertTriangle size={14} className="text-rose-400" />
+                        <p className="text-xs text-rose-400 font-bold">{inviteError}</p>
+                      </div>
+                    )}
+                    <form
+                      onSubmit={e => {
+                        e.preventDefault();
+                        if (!inviteForm.nombre.trim() || !inviteForm.correo.trim() || !inviteForm.documento.trim()) {
+                          setInviteError('Todos los campos son obligatorios');
+                          return;
+                        }
+                        setInviteError(null);
+                        setInviteSuccess(false);
+                        inviteMutation.mutate(inviteForm);
+                      }}
+                      className="space-y-3"
+                    >
+                      {([
+                        { key: 'nombre' as const,    label: 'Nombre completo',    placeholder: 'Juan Pérez García', type: 'text'  },
+                        { key: 'correo' as const,    label: 'Correo electrónico', placeholder: 'juan@sena.edu.co', type: 'email' },
+                        { key: 'documento' as const, label: 'Cédula / documento', placeholder: '1234567890',       type: 'number'  },
+                      ] as const).map(({ key, label, placeholder, type }) => (
+                        <div key={key} className="space-y-1.5">
+                          <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest ml-1">{label}</label>
+                          <input
+                            type={type}
+                            value={inviteForm[key]}
+                            onChange={e => setInviteForm(f => ({ ...f, [key]: e.target.value }))}
+                            placeholder={placeholder}
+                            className="input-dark w-full text-sm"
+                          />
+                          {/* Verificación de Gmail en vivo bajo el campo de correo */}
+                          {key === 'correo' && inviteForm.correo.trim() && (() => {
+                            const c = inviteForm.correo.trim().toLowerCase();
+                            if (!/^\S+@\S+\.\S+$/.test(c)) return null;
+                            const esGmail = /^[a-z0-9](\.?[a-z0-9]){5,29}@(gmail|googlemail)\.com$/i.test(c);
+                            return esGmail
+                              ? <p className="text-[10px] text-emerald-400 flex items-center gap-1 ml-1"><CheckCircle2 size={10} /> Correo Gmail válido</p>
+                              : <p className="text-[10px] text-amber-400 flex items-center gap-1 ml-1"><AlertTriangle size={10} /> No es un correo Gmail — no podrá iniciar sesión con Google.</p>;
+                          })()}
+                        </div>
+                      ))}
+                      <button
+                        type="submit"
+                        disabled={inviteMutation.isPending}
+                        className="w-full py-3.5 bg-primary-600 hover:bg-primary-500 disabled:opacity-40 text-white font-black uppercase tracking-widest rounded-md text-xs transition-all flex items-center justify-center gap-2"
+                      >
+                        {inviteMutation.isPending
+                          ? <><span className="animate-spin inline-block w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full" /> Enviando...</>
+                          : <><UserPlus size={13} /> Crear cuenta y enviar correo</>}
+                      </button>
+                    </form>
+                  </div>
+                )}
+
+                {activeTab === 'excel' && (
+                  <div className="space-y-4">
+                    <div className="px-4 py-3 bg-emerald-500/8 border border-emerald-500/20 rounded-md space-y-1">
+                      <p className="text-[11px] font-black text-emerald-400 uppercase tracking-widest">Importación masiva Excel</p>
+                      <p className="text-[10px] text-zinc-500">Columnas: <strong className="text-zinc-100">nombre</strong>, <strong className="text-zinc-100">correo</strong>, <strong className="text-zinc-100">cedula</strong></p>
+                      <p className="text-[10px] text-amber-400/70">⚠ Se envía correo de confirmación a cada aprendiz.</p>
+                    </div>
+                    <button
+                      onClick={() => fichaService.downloadTemplate().catch(() => alert('Error al descargar'))}
+                      className="w-full flex items-center justify-center gap-2 py-2.5 bg-zinc-900/60 border border-zinc-800 hover:border-primary-500/30 text-zinc-500 hover:text-primary-400 rounded-md text-xs font-black uppercase tracking-widest transition-all"
+                    >
+                      <Download size={13} /> Descargar plantilla .xlsx
+                    </button>
+                    {!importResult && (
+                      <div
+                        onDragOver={e => { e.preventDefault(); setDragOver(true); }}
+                        onDragLeave={() => setDragOver(false)}
+                        onDrop={e => { e.preventDefault(); setDragOver(false); const f = e.dataTransfer.files[0]; if (f) handleFileDrop(f); }}
+                        className={`relative border-2 border-dashed rounded-md p-8 text-center transition-all cursor-pointer ${dragOver ? 'border-emerald-500/60 bg-emerald-500/8' : excelFile ? 'border-emerald-500/40 bg-emerald-500/5' : 'border-zinc-800 hover:border-primary-500/30 bg-zinc-900/30'}`}
+                        onClick={() => { const input = document.createElement('input'); input.type = 'file'; input.accept = '.xlsx,.xls,.csv'; input.onchange = e => { const f = (e.target as HTMLInputElement).files?.[0]; if (f) handleFileDrop(f); }; input.click(); }}
+                      >
+                        {excelFile
+                          ? <div className="space-y-2">
+                              <div className="w-12 h-12 bg-emerald-500/10 rounded-md flex items-center justify-center mx-auto"><FileSpreadsheet size={22} className="text-emerald-400" /></div>
+                              <p className="text-sm font-black text-emerald-400">{excelFile.name}</p>
+                              <button onClick={e => { e.stopPropagation(); setExcelFile(null); setExcelPreview(null); }} className="text-[10px] text-rose-400 hover:underline font-bold">Cambiar archivo</button>
+                            </div>
+                          : <div className="space-y-3">
+                              <div className="w-12 h-12 bg-zinc-700/50 rounded-md flex items-center justify-center mx-auto"><Upload size={20} className="text-zinc-500" /></div>
+                              <div><p className="text-sm font-black text-zinc-100">Arrastra tu archivo aquí</p><p className="text-[10px] text-zinc-500 mt-1">o haz clic · .xlsx, .xls, .csv</p></div>
+                            </div>}
+                      </div>
+                    )}
+
+                    {/* Preview del Excel antes de importar */}
+                    {!importResult && excelParsing && (
+                      <div className="flex items-center justify-center gap-2 py-3 text-xs text-zinc-500">
+                        <span className="animate-spin inline-block w-3.5 h-3.5 border-2 border-zinc-600/30 border-t-zinc-400 rounded-full" /> Analizando archivo…
+                      </div>
+                    )}
+                    {!importResult && !excelParsing && excelPreview && (
+                      <ExcelAprendicesPreview preview={excelPreview} />
+                    )}
+                    {importResult && (
+                      <div className="space-y-3">
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-md p-3 text-center">
+                            <p className="text-2xl font-black text-emerald-400">{importResult.created}</p>
+                            <p className="text-[10px] text-emerald-400/70 font-bold uppercase tracking-wider">Creados</p>
+                          </div>
+                          <div className="bg-blue-500/10 border border-blue-500/20 rounded-md p-3 text-center">
+                            <p className="text-2xl font-black text-blue-400">{importResult.linked}</p>
+                            <p className="text-[10px] text-blue-400/70 font-bold uppercase tracking-wider">Vinculados</p>
+                          </div>
+                        </div>
+                        {importResult.errors.length > 0 && (
+                          <div className="bg-amber-500/8 border border-amber-500/20 rounded-md p-3">
+                            <p className="text-[11px] font-black text-amber-400 flex items-center gap-1.5 mb-1.5"><AlertTriangle size={12} /> {importResult.errors.length} fila(s) con errores</p>
+                            {importResult.errors.map((e, i) => <p key={i} className="text-[10px] text-amber-400/80">Fila {e.fila}: {e.reason}</p>)}
+                          </div>
+                        )}
+                        <button onClick={() => { setImportResult(null); setExcelFile(null); setExcelPreview(null); }} className="w-full py-2.5 bg-zinc-900/60 border border-zinc-800 text-zinc-500 hover:text-zinc-100 rounded-md text-xs font-black uppercase tracking-widest transition-all">
+                          Importar otro archivo
+                        </button>
+                      </div>
+                    )}
+                    {!importResult && (
+                      <button
+                        onClick={() => { if (excelFile) importExcelMutation.mutate(excelFile); }}
+                        disabled={!excelFile || importExcelMutation.isPending || (excelPreview != null && excelPreview.total === 0)}
+                        className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white font-black uppercase tracking-widest rounded-md text-xs transition-all flex items-center justify-center gap-2"
+                      >
+                        {importExcelMutation.isPending
+                          ? <><span className="animate-spin inline-block w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full" /> Importando...</>
+                          : excelPreview && excelPreview.total > 0
+                            ? <><FileSpreadsheet size={14} /> Importar {excelPreview.total} aprendiz{excelPreview.total !== 1 ? 'es' : ''}</>
+                            : <><FileSpreadsheet size={14} /> {excelFile ? 'Importar aprendices' : 'Selecciona un archivo primero'}</>}
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            </motion.aside>
+          </>
+        )}
+      </AnimatePresence>
     </div>
   );
 };
@@ -1052,19 +1432,17 @@ const AprendicesManager = ({ fichaId, canManage }: { fichaId: number; canManage:
 // ─── FichaDetalle (inline — sin header propio) ────────────────────────────────
 const FichaDetalleInline = ({
   fichaId, onBack, onSelectProyecto,
-}: { fichaId: number; onBack: () => void; onSelectProyecto: (id: number) => void }) => {
+}: { fichaId: number; onBack: () => void; onSelectProyecto: (id: number, trimestreId?: number) => void }) => {
   const { user } = useAuthStore();
   const qc = useQueryClient();
   const [fichaTab, setFichaTab] = useState<FichaTab>('trimestres');
   const [selectedTrimestre, setSelectedTrimestre] = useState<any | null>(null);
-  const [showTrimModal, setShowTrimModal] = useState(false);
-  const [numTrimFicha, setNumTrimFicha] = useState(3);
-  const [numTrimestresNew, setNumTrimestresNew] = useState(3);
+  // (showTrimModal/numTrimFicha eliminados — los trimestres se generan automáticamente desde la ficha)
 
   // ── Inline edit state ─────────────────────────────────────────────────────
   const [isEditing, setIsEditing] = useState(false);
   const [editForm, setEditForm] = useState({
-    codigo: '', programa: '', fecha_inicio: '', fecha_fin: '', instructor_id: '',
+    codigo: '', programa: '', fecha_inicio: '', fecha_fin: '', instructor_id: '', jornada: 'mañana',
   });
 
   const goToTab = (tab: FichaTab) => { setFichaTab(tab); setSelectedTrimestre(null); };
@@ -1080,19 +1458,13 @@ const FichaDetalleInline = ({
 
   const createProyectoMutation = useMutation({
     mutationFn: projectService.create,
-    onSuccess: async (proyecto: any) => {
-      try { await projectService.generateTrimestres(proyecto.id, { num: numTrimestresNew }); } catch { }
+    onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['projects', { fichaId }] });
       goToTab('trimestres');
-      setNumTrimestresNew(3);
     },
   });
 
-  const generateTrimMutation = useMutation({
-    mutationFn: (dto: any) => fichaService.generateTrimestres(fichaId, dto),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['fichas', fichaId, 'trimestres'] }); setShowTrimModal(false); },
-    onError: (e: any) => alert(e?.response?.data?.message ?? 'Error al generar trimestres'),
-  });
+  // (generateTrimMutation eliminado — los trimestres se generan automáticamente al crear la ficha)
 
   const updateFichaMutation = useMutation({
     mutationFn: (dto: any) => fichaService.update(fichaId, dto),
@@ -1106,90 +1478,139 @@ const FichaDetalleInline = ({
 
   const openEdit = (f: any) => {
     setEditForm({
-      codigo:       f.codigo       ?? '',
-      programa:     f.programa     ?? '',
+      codigo: f.codigo ?? '',
+      programa: f.programa ?? '',
       fecha_inicio: f.fecha_inicio ? f.fecha_inicio.slice(0, 10) : '',
-      fecha_fin:    f.fecha_fin    ? f.fecha_fin.slice(0, 10)    : '',
+      fecha_fin: f.fecha_fin ? f.fecha_fin.slice(0, 10) : '',
       instructor_id: f.instructor_id ? String(f.instructor_id) : '',
+      jornada: f.jornada ?? 'mañana',
     });
     setIsEditing(true);
   };
 
   const handleEditSave = () => {
     const dto: any = {
-      codigo:       editForm.codigo,
-      programa:     editForm.programa,
+      codigo: editForm.codigo,
+      programa: editForm.programa,
+      jornada: editForm.jornada,
       fecha_inicio: editForm.fecha_inicio || undefined,
-      fecha_fin:    editForm.fecha_fin    || undefined,
-      instructor_id: editForm.instructor_id ? Number(editForm.instructor_id) : null,
+      fecha_fin: editForm.fecha_fin || undefined,
+      // Solo el coordinador puede cambiar el instructor asignado
+      ...(user?.rol === 'coordinador'
+        ? { instructor_id: editForm.instructor_id ? Number(editForm.instructor_id) : null }
+        : {}),
     };
     updateFichaMutation.mutate(dto);
   };
 
   const canCreate = user?.rol === 'coordinador' || user?.rol === 'instructor';
   const canManageMembers = user?.rol === 'coordinador' || user?.rol === 'instructor';
-  const canManageTrim = user?.rol === 'coordinador' || user?.rol === 'instructor';
 
   const aprendicesCount = (fichaMembers as any[]).filter(u => u.rol === 'aprendiz').length;
   const proyectosArr = proyectos as any[];
   const trimestresArr = trimestres as any[];
 
-  if (loadingFicha) return <div className="p-6 space-y-4">{[1,2].map(n => <div key={n} className="h-36 bg-zinc-800/40 rounded-2xl animate-pulse" />)}</div>;
+  if (loadingFicha) return <div className="p-6 space-y-4">{[1, 2].map(n => <div key={n} className="h-36 bg-zinc-800/40 rounded-md animate-pulse" />)}</div>;
   if (!ficha) return null;
   const f = ficha as any;
 
   // instructores disponibles para el select (solo si canCreate)
   const instructores = (allUsers as any[]).filter((u: any) => u.rol === 'instructor');
-  const inCls = 'w-full bg-zinc-800 border border-zinc-700 rounded-xl px-3 py-2 text-sm text-zinc-200 outline-none focus:border-primary-500/50 placeholder:text-zinc-600 transition-colors';
+  const inCls = 'w-full bg-zinc-800 border border-zinc-700 rounded-md px-3 py-2 text-sm text-zinc-200 outline-none focus:border-primary-500/50 placeholder:text-zinc-600 transition-colors';
 
   // ── Métricas de la ficha para el banner del coordinador ───────────────────
-  const fichaActivos    = proyectosArr.filter((p: any) => p.estado === 'activo').length;
-  const fichaPausados   = proyectosArr.filter((p: any) => p.estado === 'pausado').length;
-  const fichaAvancePct  = proyectosArr.length > 0
+  const fichaActivos = proyectosArr.filter((p: any) => p.estado === 'activo').length;
+  const fichaPausados = proyectosArr.filter((p: any) => p.estado === 'pausado').length;
+  const fichaAvancePct = proyectosArr.length > 0
     ? Math.round(proyectosArr.reduce((sum: number, p: any) => sum + (p.avance ?? 0), 0) / proyectosArr.length)
     : 0;
 
   return (
-    <div className="animate-[fadeIn_0.2s_ease-out]">
+    <div className="animate-[fadeIn_0.2s_ease-out] ">
+      <div className="min-w-0 mt-3 flex justify-between gap-4 felx-col-2 mr-6 ml-5 rounded">
+        <div>
+          <button
+            onClick={onBack}
+            className="inline-flex items-center gap-1 text-zinc-500 hover:text-zinc-300 transition-colors text-[11px] font-bold uppercase tracking-widest mb-2"
+          >
+            <ChevronLeft size={19} /> Fichas
+          </button>
+        </div>
+        <div>
+          {canCreate && !isEditing && (
+            <button
+              onClick={() => openEdit(f)}
+              title="Editar ficha"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-500 hover:text-zinc-200 hover:border-zinc-500 transition-all text-[12px] font-black shrink-0"
+            >
+              <Pencil size={15} /> Editar
+            </button>
+          )}
+        </div>
+      </div>
 
       {/* ── Banner de métricas (solo coordinador) ─────────────────────────── */}
       {user?.rol === 'coordinador' && (
-        <div className="relative overflow-hidden mx-6 mt-4 mb-0 rounded-md p-5 text-white shadow-lg bg-gradient-to-br from-emerald-700 via-teal-800 to-teal-950">
+        <div className="relative overflow-hidden mx-6 mt-1 mb-0 rounded-md p-5 text-white shadow-lg bg-gradient-to-br from-emerald-700 via-teal-800 to-teal-950">
           {/* SVG de fondo */}
           <div className="absolute top-0 right-0 w-1/3 h-full opacity-10 pointer-events-none">
             <svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
-              <polygon points="100,16 128,32 128,64 100,80 72,64 72,32" fill="none" stroke="currentColor" strokeWidth="2" opacity="0.8"/>
-              <polygon points="150,56 178,72 178,104 150,120 122,104 122,72" fill="none" stroke="currentColor" strokeWidth="1.5" opacity="0.6"/>
-              <polygon points="50,56 78,72 78,104 50,120 22,104 22,72" fill="none" stroke="currentColor" strokeWidth="1.5" opacity="0.6"/>
-              <line x1="128" y1="48" x2="150" y2="72" stroke="currentColor" strokeWidth="1" opacity="0.5"/>
-              <line x1="72"  y1="48" x2="50"  y2="72" stroke="currentColor" strokeWidth="1" opacity="0.5"/>
-              <circle cx="100" cy="48"  r="4" fill="currentColor" opacity="0.7"/>
-              <circle cx="150" cy="88"  r="3" fill="currentColor" opacity="0.5"/>
-              <circle cx="50"  cy="88"  r="3" fill="currentColor" opacity="0.5"/>
+              <polygon points="100,16 128,32 128,64 100,80 72,64 72,32" fill="none" stroke="currentColor" strokeWidth="2" opacity="0.8" />
+              <polygon points="150,56 178,72 178,104 150,120 122,104 122,72" fill="none" stroke="currentColor" strokeWidth="1.5" opacity="0.6" />
+              <polygon points="50,56 78,72 78,104 50,120 22,104 22,72" fill="none" stroke="currentColor" strokeWidth="1.5" opacity="0.6" />
+              <line x1="128" y1="48" x2="150" y2="72" stroke="currentColor" strokeWidth="1" opacity="0.5" />
+              <line x1="72" y1="48" x2="50" y2="72" stroke="currentColor" strokeWidth="1" opacity="0.5" />
+              <circle cx="100" cy="48" r="4" fill="currentColor" opacity="0.7" />
+              <circle cx="150" cy="88" r="3" fill="currentColor" opacity="0.5" />
+              <circle cx="50" cy="88" r="3" fill="currentColor" opacity="0.5" />
             </svg>
+
           </div>
+
           <div className="relative z-10 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+
             <div>
+
               <p className="text-[10px] font-black uppercase tracking-widest text-emerald-300 mb-1">
                 Ficha de Formación
               </p>
-              <h2 className="text-lg font-black leading-tight text-white">
+              <h2 className="text-[22px] font-black leading-tight text-white">
                 #{f.codigo} — {f.programa}
               </h2>
               {f.instructor && (
-                <p className="text-xs text-emerald-200 mt-0.5">
-                  Instructor: {f.instructor.nombre}
+                <p className="text-[14px] text-emerald-100 mt-0.5">
+                  <span className='font-bold text-white'>Instructor :</span> {f.instructor.nombre}
                 </p>
               )}
+              <div className='flex flew-col-2 gap-16'>
+                {(f.fecha_inicio || f.fecha_fin) && (
+                  <span className="text-[13px] text-zinc-500 flex items-center gap-1">
+                    <Calendar size={10} />
+                    {fmt(f.fecha_inicio)} → {fmt(f.fecha_fin)}
+                  </span>
+                )}
+                <div className="flex items-center gap-4 mt-1.5 flex-wrap">
+                  {/* Jornada */}
+                  {f.jornada && (
+                    <span className="text-[11px] font-bold flex items-center gap-1 capitalize text-amber-300">
+                      {f.jornada === 'mañana' ? '🌅' : f.jornada === 'tarde' ? '☀️' : '🌙'} {f.jornada}
+                    </span>
+                  )}
+                  <span className="text-[11px] text-blue-400 font-bold flex items-center gap-1">
+                    <GraduationCap size={11} />
+                    {aprendicesCount} aprendiz{aprendicesCount !== 1 ? 'ces' : ''}
+                  </span>
+                </div>
+              </div>
             </div>
             {/* Métricas rápidas */}
             <div className="flex items-center gap-3 flex-wrap">
               {[
-                { label: 'Proyectos',  value: proyectosArr.length, color: 'text-white' },
-                { label: 'Activos',    value: fichaActivos,         color: 'text-emerald-300' },
-                { label: 'En pausa',   value: fichaPausados,        color: 'text-amber-300' },
-                { label: 'Aprendices', value: aprendicesCount,      color: 'text-cyan-300' },
-                { label: 'Avance',     value: `${fichaAvancePct}%`, color: 'text-white' },
+                { label: 'Proyectos', value: proyectosArr.length, color: 'text-white' },
+                { label: 'Activos', value: fichaActivos, color: 'text-emerald-300' },
+                { label: 'En pausa', value: fichaPausados, color: 'text-amber-300' },
+                { label: 'Aprendices', value: aprendicesCount, color: 'text-cyan-300' },
+                { label: 'Avance', value: `${fichaAvancePct}%`, color: 'text-white' },
               ].map(({ label, value, color }) => (
                 <div key={label} className="flex flex-col items-center bg-white/10 backdrop-blur-sm rounded-md px-3 py-2 border border-white/10 min-w-[64px]">
                   <span className={`text-lg font-black ${color}`}>{value}</span>
@@ -1201,42 +1622,26 @@ const FichaDetalleInline = ({
         </div>
       )}
 
-      {/* Breadcrumb + sub-tabs */}
-      <div className="flex items-center gap-4 px-6 md:px-10 pt-6 pb-0 border-b border-zinc-700/50 flex-wrap">
-        <div className="flex items-center gap-3 flex-1 min-w-0">
-          <button onClick={onBack} className="inline-flex items-center gap-1 text-zinc-500 hover:text-zinc-300 transition-colors text-[11px] font-bold uppercase tracking-widest shrink-0">
-            <ChevronLeft size={13} /> Fichas
-          </button>
-          <span className="text-zinc-700">/</span>
-          <div className="min-w-0 flex items-center gap-2">
-            <p className="text-zinc-400 font-black text-sm truncate">#{f.codigo} — {f.programa}</p>
-            {canCreate && !isEditing && (
-              <button
-                onClick={() => openEdit(f)}
-                title="Editar ficha"
-                className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-500 hover:text-zinc-200 hover:border-zinc-500 transition-all text-[10px] font-black shrink-0"
-              >
-                <Pencil size={11} /> Editar
-              </button>
-            )}
-          </div>
-        </div>
+      {/* ── Sub-cabecera: título arriba, tabs abajo ─────────────────────── */}
+      <div className="bg-zinc-900 border-b border-zinc-700/50 shrink-0">
 
-        {/* sub-tabs */}
-        <div className="flex items-center gap-4 shrink-0">
+        {/* Fila 1: Breadcrumb + título + detalles + botón editar */}
+
+
+        {/* Fila 2: tabs en línea */}
+        <div className="flex items-center px-4 md:px-6 border-t border-zinc-800/60 overflow-x-auto">
           {(['trimestres', ...(canManageMembers ? ['aprendices'] : []), ...(canCreate ? ['nuevo_proyecto'] : [])] as FichaTab[]).map(tab => (
             <button
               key={tab}
               onClick={() => goToTab(tab)}
-              className={`inline-flex items-center gap-1.5 py-2.5 text-sm font-black border-b-2 transition-all duration-200 whitespace-nowrap ${
-                fichaTab === tab
-                  ? 'text-blue-400 border-blue-400'
-                  : 'text-zinc-500 border-transparent hover:text-zinc-300 hover:border-zinc-500'
-              }`}
+              className={`flex items-center gap-1.5 px-5 py-3 text-[13px] font-black border-b-2 transition-all duration-200 whitespace-nowrap ${fichaTab === tab
+                ? 'text-blue-400 border-blue-400'
+                : 'text-zinc-500 border-transparent hover:text-zinc-300 hover:border-zinc-600'
+                }`}
             >
-              {tab === 'trimestres'     && <><Layers size={13} /> Trimestres</>}
-              {tab === 'aprendices'     && <><GraduationCap size={13} /> Aprendices {aprendicesCount > 0 ? `(${aprendicesCount})` : ''}</>}
-              {tab === 'nuevo_proyecto' && <><Plus size={13} /> Nuevo Proyecto</>}
+              {tab === 'trimestres' && <><Layers size={19} /> Trimestres</>}
+              {tab === 'aprendices' && <><GraduationCap size={19} /> Aprendices </>}
+              {tab === 'nuevo_proyecto' && <><Plus size={19} /> Nuevo Proyecto</>}
             </button>
           ))}
         </div>
@@ -1282,6 +1687,18 @@ const FichaDetalleInline = ({
                   />
                 </div>
                 <div className="space-y-1">
+                  <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Jornada</label>
+                  <select
+                    value={editForm.jornada}
+                    onChange={e => setEditForm(p => ({ ...p, jornada: e.target.value }))}
+                    className={inCls}
+                  >
+                    <option value="mañana">🌅 Mañana</option>
+                    <option value="tarde">☀️ Tarde</option>
+                    <option value="noche">🌙 Noche</option>
+                  </select>
+                </div>
+                <div className="space-y-1">
                   <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Fecha inicio</label>
                   <input
                     type="date"
@@ -1299,7 +1716,8 @@ const FichaDetalleInline = ({
                     className={inCls}
                   />
                 </div>
-                {instructores.length > 0 && (
+                {/* Solo el coordinador puede reasignar el instructor de una ficha */}
+                {user?.rol === 'coordinador' && instructores.length > 0 && (
                   <div className="space-y-1 md:col-span-2">
                     <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Instructor</label>
                     <select
@@ -1318,14 +1736,14 @@ const FichaDetalleInline = ({
               <div className="flex items-center justify-end gap-2 pt-1">
                 <button
                   onClick={() => setIsEditing(false)}
-                  className="px-4 py-2 rounded-xl text-[11px] font-black uppercase tracking-widest bg-zinc-800 border border-zinc-700 text-zinc-400 hover:text-zinc-200 hover:border-zinc-600 transition-all"
+                  className="px-4 py-2 rounded-md text-[11px] font-black uppercase tracking-widest bg-zinc-800 border border-zinc-700 text-zinc-400 hover:text-zinc-200 hover:border-zinc-600 transition-all"
                 >
                   Cancelar
                 </button>
                 <button
                   onClick={handleEditSave}
                   disabled={updateFichaMutation.isPending}
-                  className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-[11px] font-black uppercase tracking-widest bg-primary-600 hover:bg-primary-500 text-white disabled:opacity-50 transition-all"
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-md text-[11px] font-black uppercase tracking-widest bg-primary-600 hover:bg-primary-500 text-white disabled:opacity-50 transition-all"
                 >
                   <Save size={12} />
                   {updateFichaMutation.isPending ? 'Guardando...' : 'Guardar cambios'}
@@ -1344,14 +1762,13 @@ const FichaDetalleInline = ({
           <div className="space-y-5">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-black text-zinc-400 uppercase tracking-widest flex items-center gap-2"><Layers size={14} /> Trimestres ({trimestresArr.length})</h3>
-              {canManageTrim && <button onClick={() => setShowTrimModal(true)} className="flex items-center gap-1.5 px-3 py-2 bg-[#3b82f6]/10 border border-[#3b82f6]/25 text-[#3b82f6] rounded-xl text-[11px] font-black uppercase tracking-widest hover:bg-[#3b82f6]/20 transition-all"><Settings size={12} /> {trimestresArr.length > 0 ? 'Reconfigurar' : 'Configurar'}</button>}
             </div>
-            {loadingTrim ? <div className="grid grid-cols-1 md:grid-cols-2 gap-4">{[1,2,3,4].map(n=><div key={n} className="h-36 bg-zinc-800/40 rounded-2xl animate-pulse" />)}</div>
+            {loadingTrim ? <div className="grid grid-cols-1 md:grid-cols-2 gap-4">{[1, 2, 3, 4].map(n => <div key={n} className="h-36 bg-zinc-800/40 rounded-md animate-pulse" />)}</div>
               : trimestresArr.length === 0 ? (
-                <div className="text-center py-16 border-2 border-dashed border-zinc-700/50 rounded-2xl">
+                <div className="text-center py-16 border-2 border-dashed border-zinc-700/50 rounded-lg">
                   <Layers size={32} className="mx-auto text-zinc-600 mb-4" />
-                  <p className="text-zinc-400 font-black uppercase tracking-widest text-sm">Sin trimestres configurados</p>
-                  {canManageTrim && <button onClick={() => setShowTrimModal(true)} className="mt-4 inline-flex items-center gap-2 px-4 py-2.5 bg-[#3b82f6]/10 border border-[#3b82f6]/25 text-[#3b82f6] rounded-xl text-[11px] font-black uppercase tracking-widest hover:bg-[#3b82f6]/20 transition-all"><Settings size={13} /> Configurar ahora</button>}
+                  <p className="text-zinc-400 font-black uppercase tracking-widest text-sm">Los trimestres se generaron al crear la ficha</p>
+                  <p className="text-zinc-600 text-[12px] mt-1">Si no aparecen, recarga la página</p>
                 </div>
               ) : (
                 /* 2 por fila */
@@ -1360,14 +1777,14 @@ const FichaDetalleInline = ({
                     const isDoc = t.tipo === 'documental';
                     return (
                       <motion.button key={t.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} onClick={() => setSelectedTrimestre(t)}
-                        className={`text-left rounded-2xl border p-5 transition-all hover:scale-[1.01] hover:shadow-xl group cursor-pointer ${t.esta_finalizado ? 'border-zinc-700/50 bg-zinc-800/30 opacity-70' : isDoc ? 'border-amber-500/30 bg-amber-500/5 hover:border-amber-500/50' : 'border-[#3b82f6]/30 bg-[#3b82f6]/5 hover:border-[#3b82f6]/50'}`}>
+                        className={`text-left rounded-md border p-5 transition-all hover:scale-[1.01] hover:shadow-xl group cursor-pointer ${t.esta_finalizado ? 'border-zinc-700/50 bg-zinc-800/30 opacity-70' : isDoc ? 'border-amber-500/30 bg-amber-500/5 hover:border-amber-500/50' : 'border-[#3b82f6]/30 bg-[#3b82f6]/5 hover:border-[#3b82f6]/50'}`}>
                         <div className="flex items-center justify-between mb-3">
                           <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded border ${isDoc ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' : 'bg-[#3b82f6]/10 text-[#3b82f6] border-[#3b82f6]/20'}`}>{isDoc ? 'Documental' : 'Desarrollo'}</span>
                           {t.esta_finalizado ? <CheckCircle2 size={14} className="text-zinc-600" /> : <ChevronRight size={14} className={`opacity-0 group-hover:opacity-100 transition-opacity ${isDoc ? 'text-amber-400' : 'text-[#3b82f6]'}`} />}
                         </div>
                         <p className="text-base font-black text-white mb-1">{t.nombre || `Trimestre ${t.numero}`}</p>
                         <p className="text-[11px] text-zinc-500">{fmt(t.fecha_inicio)} → {fmt(t.fecha_fin)}</p>
-                        <p className={`text-[10px] font-bold mt-3 uppercase tracking-widest ${isDoc ? 'text-amber-400/60' : 'text-[#3b82f6]/60'}`}>{proyectosArr.length} proyecto{proyectosArr.length!==1?'s':''} · clic para ver →</p>
+                        <p className={`text-[10px] font-bold mt-3 uppercase tracking-widest ${isDoc ? 'text-amber-400/60' : 'text-[#3b82f6]/60'}`}>Clic para ver proyectos →</p>
                       </motion.button>
                     );
                   })}
@@ -1381,16 +1798,16 @@ const FichaDetalleInline = ({
           <div className="space-y-5">
             <button onClick={() => setSelectedTrimestre(null)} className="inline-flex items-center gap-1.5 text-zinc-500 hover:text-zinc-300 transition-colors text-[11px] font-bold uppercase tracking-widest"><ChevronLeft size={13} /> Trimestres</button>
             <div className="flex items-center gap-3">
-              <div className={`px-3 py-1.5 rounded-xl border text-[10px] font-black uppercase tracking-widest ${selectedTrimestre.tipo==='documental' ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' : 'bg-[#3b82f6]/10 text-[#3b82f6] border-[#3b82f6]/20'}`}>{selectedTrimestre.tipo==='documental' ? 'Documental' : 'Desarrollo'}</div>
+              <div className={`px-3 py-1.5 rounded-md border text-[10px] font-black uppercase tracking-widest ${selectedTrimestre.tipo === 'documental' ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' : 'bg-[#3b82f6]/10 text-[#3b82f6] border-[#3b82f6]/20'}`}>{selectedTrimestre.tipo === 'documental' ? 'Documental' : 'Desarrollo'}</div>
               <div><h3 className="text-xl font-black text-white">{selectedTrimestre.nombre || `Trimestre ${selectedTrimestre.numero}`}</h3><p className="text-[11px] text-zinc-500">{fmt(selectedTrimestre.fecha_inicio)} → {fmt(selectedTrimestre.fecha_fin)}</p></div>
             </div>
             <div className="flex items-center justify-between">
               <h4 className="text-sm font-black text-zinc-400 uppercase tracking-widest flex items-center gap-2"><FolderKanban size={14} /> Proyectos de la Ficha ({proyectosArr.length})</h4>
-              {canCreate && <button onClick={() => goToTab('nuevo_proyecto')} className="inline-flex items-center gap-1.5 px-3 py-2 bg-[#3b82f6]/10 border border-[#3b82f6]/25 text-[#3b82f6] rounded-xl text-[11px] font-black uppercase tracking-widest hover:bg-[#3b82f6]/20 transition-all"><Plus size={13} /> Nuevo Proyecto</button>}
+              {canCreate && <button onClick={() => goToTab('nuevo_proyecto')} className="inline-flex items-center gap-1.5 px-3 py-2 bg-[#3b82f6]/10 border border-[#3b82f6]/25 text-[#3b82f6] rounded-md text-[11px] font-black uppercase tracking-widest hover:bg-[#3b82f6]/20 transition-all"><Plus size={13} /> Nuevo Proyecto</button>}
             </div>
-            {loadingProyectos ? <div className="grid grid-cols-1 md:grid-cols-2 gap-4">{[1,2,3].map(n=><div key={n} className="h-40 bg-zinc-800/40 rounded-2xl animate-pulse" />)}</div>
+            {loadingProyectos ? <div className="grid grid-cols-1 md:grid-cols-2 gap-4">{[1, 2, 3].map(n => <div key={n} className="h-40 bg-zinc-800/40 rounded-md animate-pulse" />)}</div>
               : proyectosArr.length === 0 ? (
-                <div className="text-center py-16 border-2 border-dashed border-zinc-700/50 rounded-2xl">
+                <div className="text-center py-16 border-2 border-dashed border-zinc-700/50 rounded-md">
                   <FolderKanban size={32} className="mx-auto text-zinc-600 mb-4" />
                   <p className="text-zinc-400 font-black uppercase tracking-widest text-sm">Sin proyectos en esta ficha</p>
                   {canCreate && <button onClick={() => goToTab('nuevo_proyecto')} className="mt-4 text-[#3b82f6] text-[12px] font-bold hover:underline">+ Crear primer proyecto</button>}
@@ -1398,10 +1815,10 @@ const FichaDetalleInline = ({
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {proyectosArr.map((p: any, i: number) => (
-                    <motion.button key={p.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i*0.05 }} onClick={() => onSelectProyecto(p.id)}
-                      className="bg-zinc-800/50 border border-zinc-700/60 p-5 rounded-2xl hover:border-[#3b82f6]/40 hover:bg-zinc-800/80 transition-all text-left group">
+                    <motion.button key={p.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }} onClick={() => onSelectProyecto(p.id, selectedTrimestre?.id)}
+                      className="bg-zinc-800/50 border border-zinc-700/60 p-5 rounded-md hover:border-[#3b82f6]/40 hover:bg-zinc-800/80 transition-all text-left group">
                       <div className="flex items-start justify-between mb-3">
-                        <div className="p-2.5 bg-[#3b82f6]/10 rounded-xl text-[#3b82f6] group-hover:scale-110 transition-transform"><FolderKanban size={18} /></div>
+                        <div className="p-2.5 bg-[#3b82f6]/10 rounded-md text-[#3b82f6] group-hover:scale-110 transition-transform"><FolderKanban size={18} /></div>
                         <Chip label={p.estado} color={STATUS_COLORS[p.estado] || STATUS_COLORS.activo} />
                       </div>
                       <h4 className="font-black text-base text-white group-hover:text-[#3b82f6] transition-colors uppercase tracking-tight line-clamp-1">{p.nombre}</h4>
@@ -1416,7 +1833,7 @@ const FichaDetalleInline = ({
         )}
 
         {/* ── Aprendices tab ── */}
-        {fichaTab === 'aprendices' && <AprendicesManager fichaId={fichaId} canManage={canManageMembers} />}
+        {fichaTab === 'aprendices' && <AprendicesManager fichaId={fichaId} fichaCode={ficha?.codigo} canManage={canManageMembers} />}
 
         {/* ── Nuevo Proyecto tab (idéntico a ProjectsPanel) ── */}
         {fichaTab === 'nuevo_proyecto' && (
@@ -1433,16 +1850,16 @@ const FichaDetalleInline = ({
               onSubmit={e => {
                 e.preventDefault();
                 const fd = new FormData(e.currentTarget);
+                const desc = (fd.get('descripcion') as string) || (fd.get('competencia') as string) || '';
                 createProyectoMutation.mutate({
-                  nombre:               fd.get('nombre') as string,
-                  descripcion:          fd.get('descripcion') as string,
-                  competencia:          fd.get('competencia') as string,
+                  nombre:                fd.get('nombre') as string,
+                  descripcion:           desc,
+                  competencia:           fd.get('competencia') as string,
                   resultado_aprendizaje: fd.get('resultado_aprendizaje') as string,
                   fichaId,
-                  instructorId:         f.instructor?.id,
-                  liderId:              Number(fd.get('liderId')) || undefined,
-                  fecha_inicio:         fd.get('fecha_inicio') as string,
-                  fecha_fin:            fd.get('fecha_fin') as string,
+                  instructorId: f.instructor?.id,
+                  liderId: Number(fd.get('liderId')) || undefined,
+                  // Las fechas las auto-deriva el backend de la ficha (fichaId)
                 } as any);
               }}
               className="space-y-5 max-w-full bg-zinc-900 p-6 rounded-md"
@@ -1466,15 +1883,6 @@ const FichaDetalleInline = ({
                   className="w-full bg-zinc-900 border border-zinc-600 rounded-md px-3 py-2 text-[13px] text-zinc-100 outline-none hover:bg-zinc-800 focus:bg-zinc-800 focus:border-blue-600 transition-colors resize-none placeholder-zinc-600" />
               </FormField>
 
-              <FormField label="Estructura inicial de trimestres">
-                <div className="flex items-center gap-2">
-                  <button type="button" onClick={() => setNumTrimestresNew(n => Math.max(1, n-1))} className="w-8 h-8 rounded-lg hover:bg-zinc-800 bg-zinc-950 border border-zinc-600 text-zinc-400 hover:text-white flex items-center justify-center font-bold text-[13px] select-none transition-colors active:scale-95">-</button>
-                  <span className="w-12 text-[13px] font-black text-zinc-200 text-center tabular-nums">{numTrimestresNew} trim.</span>
-                  <button type="button" onClick={() => setNumTrimestresNew(n => Math.min(8, n+1))} className="w-8 h-8 rounded-lg hover:bg-zinc-800 bg-zinc-950 border border-zinc-600 text-zinc-400 hover:text-white flex items-center justify-center font-bold text-[13px] select-none transition-colors active:scale-95">+</button>
-                </div>
-                <p className="text-[12px] text-zinc-400 mt-1 italic leading-tight">Cada bloque de trimestre se autogenerará con duración estándar de 3 meses correlativos.</p>
-              </FormField>
-
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <FormField label="Competencia principal">
                   <textarea name="competencia" required rows={2} placeholder="Escriba la competencia asociada..."
@@ -1483,15 +1891,6 @@ const FichaDetalleInline = ({
                 <FormField label="Resultado de aprendizaje">
                   <textarea name="resultado_aprendizaje" required rows={2} placeholder="Escriba el resultado de aprendizaje..."
                     className="w-full bg-zinc-900 hover:bg-zinc-800 focus:bg-zinc-800 border border-zinc-600 rounded-md px-3 py-2 text-[13px] text-zinc-200 outline-none focus:border-blue-600 transition-colors resize-none placeholder-zinc-600" />
-                </FormField>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <FormField label="Fecha de inicio de fase">
-                  <input name="fecha_inicio" type="date" required className="w-full bg-zinc-900 border border-zinc-600 rounded-md px-3 py-2 text-[13px] text-zinc-300 outline-none focus:border-blue-600 transition-colors" />
-                </FormField>
-                <FormField label="Fecha de finalización">
-                  <input name="fecha_fin" type="date" required className="w-full bg-zinc-900 border border-zinc-600 rounded-md px-3 py-2 text-[13px] text-zinc-300 outline-none focus:border-blue-600 transition-colors" />
                 </FormField>
               </div>
 
@@ -1504,18 +1903,7 @@ const FichaDetalleInline = ({
         )}
       </div>
 
-      {/* Modal: configurar trimestres */}
-      <Modal isOpen={showTrimModal} onClose={() => setShowTrimModal(false)} title="Configurar trimestres" size="lg">
-        <div className="space-y-5">
-          {trimestresArr.length > 0 && <div className="flex items-start gap-2 p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl"><AlertTriangle size={14} className="text-amber-400 shrink-0 mt-0.5" /><p className="text-xs text-amber-400">Los trimestres anteriores serán eliminados.</p></div>}
-          <div className="space-y-2 bg-[#3b82f6]/5 border border-[#3b82f6]/20 rounded-xl p-4">
-            <div className="flex items-center justify-between"><label className="text-[10px] font-bold text-[#3b82f6] uppercase tracking-[0.15em]">Número de trimestres</label><span className="text-2xl font-black text-[#3b82f6]">{numTrimFicha}</span></div>
-            <input type="range" min={3} max={10} step={1} value={numTrimFicha} onChange={e => setNumTrimFicha(Number(e.target.value))} className="w-full accent-[#3b82f6] cursor-pointer" />
-            <p className="text-[10px] text-zinc-500">Cada trimestre dura 3 meses · Total: {numTrimFicha*3} meses</p>
-          </div>
-          <button onClick={() => generateTrimMutation.mutate({ num: numTrimFicha })} disabled={generateTrimMutation.isPending} className="w-full py-3.5 bg-[#3b82f6] hover:bg-[#2563eb] disabled:opacity-50 text-white font-bold rounded-xl transition-all flex items-center justify-center gap-2">{generateTrimMutation.isPending ? <><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Generando...</> : `Generar ${numTrimFicha} trimestres →`}</button>
-        </div>
-      </Modal>
+      {/* Modal de configuración de trimestres eliminado — se generan automáticamente al crear la ficha */}
     </div>
   );
 };
@@ -1528,8 +1916,6 @@ export const FichasPanel = () => {
   const [mainTab, setMainTab] = useState<MainTab>('todas');
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'todas' | 'con_proyectos' | 'sin_proyectos'>('todas');
-  const [solicitudEnviada, setSolicitudEnviada] = useState(false);
-  const [solicitudError, setSolicitudError] = useState<string | null>(null);
 
   // ── Sub-navegación persistida en la URL ────────────────────────────────────
   // ?s=fichas            → lista de fichas
@@ -1538,6 +1924,7 @@ export const FichasPanel = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const selectedFichaId    = searchParams.get('ficha')    ? Number(searchParams.get('ficha'))    : null;
   const selectedProyectoId = searchParams.get('proyecto') ? Number(searchParams.get('proyecto')) : null;
+  const selectedTrimId     = searchParams.get('trimestre') ? Number(searchParams.get('trimestre')) : null;
 
   const { data: fichas = [], isLoading } = useQuery({ queryKey: ['fichas'], queryFn: () => fichaService.getAll(), staleTime: 60000 });
   const { data: projects = [] } = useQuery({ queryKey: ['projects', 'for-role', user?.id], queryFn: () => projectService.getAll(), staleTime: 60000, enabled: !!user?.id });
@@ -1547,7 +1934,10 @@ export const FichasPanel = () => {
 
   const createMutation = useMutation({
     mutationFn: fichaService.create,
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['fichas'] }); setMainTab('todas'); },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['fichas'] });
+      setMainTab('todas');
+    },
   });
 
   const deleteMutation = useMutation({
@@ -1555,14 +1945,8 @@ export const FichasPanel = () => {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['fichas'] }),
   });
 
-  const solicitarMutation = useMutation({
-    mutationFn: fichaService.solicitarCrear,
-    onSuccess: () => { setSolicitudEnviada(true); setSolicitudError(null); },
-    onError: (err: any) => { const msg = err?.response?.data?.message; setSolicitudError(Array.isArray(msg) ? msg.join(', ') : (msg || 'Error al enviar la solicitud')); },
-  });
-
   const isCoordinador = user?.rol === 'coordinador';
-  const isInstructor  = user?.rol === 'instructor';
+  const isInstructor = user?.rol === 'instructor';
 
   const displayedFichas = useMemo(() => {
     if (!user) return [];
@@ -1578,8 +1962,8 @@ export const FichasPanel = () => {
 
   const filteredFichas = useMemo(() => {
     let result = displayedFichas;
-    if (statusFilter === 'con_proyectos')  result = result.filter(f => fichasConProyectos.has(f.id));
-    if (statusFilter === 'sin_proyectos')  result = result.filter(f => !fichasConProyectos.has(f.id));
+    if (statusFilter === 'con_proyectos') result = result.filter(f => fichasConProyectos.has(f.id));
+    if (statusFilter === 'sin_proyectos') result = result.filter(f => !fichasConProyectos.has(f.id));
     if (search.trim()) {
       const q = search.toLowerCase().trim();
       result = result.filter(f =>
@@ -1598,8 +1982,11 @@ export const FichasPanel = () => {
   }, [setSearchParams]);
 
   // Navegar a un proyecto dentro de una ficha — empuja historial
-  const goToProyecto = useCallback((id: number) => {
-    setSearchParams({ s: 'fichas', ficha: String(selectedFichaId), proyecto: String(id) });
+  // trimestreId: contexto del trimestre desde el que se navega (para el backlog)
+  const goToProyecto = useCallback((id: number, trimestreId?: number) => {
+    const params: Record<string, string> = { s: 'fichas', ficha: String(selectedFichaId), proyecto: String(id) };
+    if (trimestreId) params.trimestre = String(trimestreId);
+    setSearchParams(params);
   }, [setSearchParams, selectedFichaId]);
 
   // Volver desde un proyecto → ficha (empuja historial)
@@ -1614,11 +2001,11 @@ export const FichasPanel = () => {
 
   // ProyectoDetalle — reemplaza el contenido del panel
   if (selectedProyectoId) {
-    return <ProyectoDetalle proyectoId={selectedProyectoId} onBack={backFromProyecto} />;
+    return <ProyectoDetalle proyectoId={selectedProyectoId} onBack={backFromProyecto} trimestreId={selectedTrimId ?? undefined} />;
   }
 
   return (
-    <div className="w-full text-zinc-100 bg-zinc-900 min-h-screen">
+    <div className="w-full text-zinc-100 bg-zinc-900 min-h-full overflow-y-auto">
       {/* ── Header principal (siempre visible) ── */}
       <div className="flex items-left bg-zinc-900 pt-10 pl-10 gap-4 flex-col border-b border-zinc-600/60">
         <div>
@@ -1636,8 +2023,8 @@ export const FichasPanel = () => {
             </TabBtn>
           )}
           {isInstructor && (
-            <TabBtn active={mainTab === 'solicitar'} onClick={() => { setMainTab('solicitar'); backFromFicha(); setSolicitudEnviada(false); setSolicitudError(null); }}>
-              <Send size={14} /> Solicitar nueva ficha
+            <TabBtn active={mainTab === 'solicitar'} onClick={() => { setMainTab('solicitar'); backFromFicha(); }}>
+              <Plus size={14} /> Nueva ficha
             </TabBtn>
           )}
         </div>
@@ -1646,60 +2033,30 @@ export const FichasPanel = () => {
       {/* ── Contenido ── */}
 
       {/* Nueva ficha (coordinador) */}
+      {/* Nueva ficha (coordinador) — mismo componente que el instructor, con
+          selector de instructor encargado adicional. */}
       {mainTab === 'nueva' && (
-        <div className="px-6 py-6 bg-zinc-900 flex flex-col gap-6 animate-[fadeIn_0.2s_ease-out]">
-          <div className="border-b border-zinc-600/80 pb-3">
-            <h2 className="text-lg font-black text-white tracking-tight flex items-center gap-2"><Plus className="text-[#3b82f6]" size={18} /> Registrar Nueva Ficha</h2>
-            <p className="text-[13px] text-zinc-400 font-medium mt-0.5">Crea una ficha de formación y asigna el instructor encargado.</p>
-          </div>
-          <form onSubmit={e => { e.preventDefault(); const fd = new FormData(e.currentTarget); createMutation.mutate({ codigo: fd.get('codigo') as string, programa: fd.get('programa') as string, fecha_inicio: fd.get('fecha_inicio') as string, fecha_fin: fd.get('fecha_fin') as string, instructor_id: fd.get('instructor_id') ? Number(fd.get('instructor_id')) : undefined } as any); (e.target as HTMLFormElement).reset(); }} className="space-y-5 max-w-xl bg-zinc-900 p-6 rounded-md">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <FormField label="Código de la ficha"><input name="codigo" required placeholder="Ej: 2670687" className="w-full bg-zinc-900 border border-zinc-600 rounded-md px-3 py-2 text-[13px] text-zinc-100 outline-none hover:bg-zinc-800 focus:bg-zinc-800 focus:border-blue-600 transition-colors placeholder-zinc-600" /></FormField>
-              <FormField label="Instructor encargado"><select name="instructor_id" required className="w-full bg-zinc-900 border border-zinc-600 rounded-md px-3 py-2 text-[13px] text-zinc-300 outline-none hover:bg-zinc-800 focus:bg-zinc-800 focus:border-blue-600 transition-colors cursor-pointer"><option value="">Selecciona un instructor</option>{instructors.map((ins:any) => <option key={ins.id} value={ins.id}>{ins.nombre}</option>)}</select></FormField>
-            </div>
-            <FormField label="Programa de formación"><input name="programa" required placeholder="Ej: Análisis y Desarrollo de Software" className="w-full bg-zinc-900 border border-zinc-600 rounded-md px-3 py-2 text-[13px] text-zinc-100 outline-none hover:bg-zinc-800 focus:bg-zinc-800 focus:border-blue-600 transition-colors placeholder-zinc-600" /></FormField>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <FormField label="Fecha de inicio"><input name="fecha_inicio" type="date" required className="w-full bg-zinc-900 border border-zinc-600 rounded-md px-3 py-2 text-[13px] text-zinc-300 outline-none focus:border-blue-600 transition-colors" /></FormField>
-              <FormField label="Fecha de fin"><input name="fecha_fin" type="date" required className="w-full bg-zinc-900 border border-zinc-600 rounded-md px-3 py-2 text-[13px] text-zinc-300 outline-none focus:border-blue-600 transition-colors" /></FormField>
-            </div>
-            <div className="flex items-center gap-3">
-              <button type="submit" disabled={createMutation.isPending} className="px-6 py-3 bg-[#3b82f6] hover:bg-[#2563eb] disabled:opacity-50 text-white font-bold rounded-xl transition-all flex items-center gap-2 shadow-lg shadow-[#3b82f6]/20">{createMutation.isPending ? <><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Guardando...</> : 'Guardar Ficha →'}</button>
-              <button type="button" onClick={() => setMainTab('todas')} className="px-6 py-3 border border-zinc-600 text-zinc-400 hover:text-zinc-200 font-bold rounded-xl transition-colors">Cancelar</button>
-            </div>
-          </form>
-        </div>
+        <InstructorCrearFichaForm
+          userId={user?.id}
+          instructors={instructors.map((i: any) => ({ id: i.id, nombre: i.nombre }))}
+          onCancel={() => setMainTab('todas')}
+          onCreated={() => { qc.invalidateQueries({ queryKey: ['fichas'] }); setMainTab('todas'); }}
+        />
       )}
 
-      {/* Solicitar nueva ficha (instructor) */}
+      {/* ════════════════════════════════════════════════════════════════════
+          NUEVA FICHA (instructor) — el instructor crea directamente sin
+          pedir permiso al coordinador. Selecciona tipo de formación
+          (tecnólogo=7 trimestres / técnico=3 trimestres) y fecha de inicio
+          (default: hoy). El backend genera automáticamente los trimestres
+          de la etapa lectiva siguiendo la plantilla SDLC.
+          ═══════════════════════════════════════════════════════════════════ */}
       {mainTab === 'solicitar' && (
-        <div className="px-6 md:px-10 py-8 max-w-lg animate-[fadeIn_0.2s_ease-out]">
-          <div className="border-b border-zinc-600/80 pb-3 mb-6">
-            <h2 className="text-lg font-black text-white tracking-tight flex items-center gap-2"><Send size={18} className="text-blue-400" /> Solicitar permiso para crear una ficha</h2>
-            <p className="text-[13px] text-zinc-400 font-medium mt-0.5">Al enviar la solicitud, el coordinador recibirá una notificación y podrá concederte acceso al formulario.</p>
-          </div>
-
-          {solicitudEnviada ? (
-            <div className="bg-emerald-500/10 border border-emerald-500/25 rounded-2xl p-6 text-center space-y-3">
-              <CheckCircle2 size={36} className="mx-auto text-emerald-400" />
-              <p className="text-base font-black text-emerald-300">¡Solicitud enviada!</p>
-              <p className="text-[13px] text-emerald-400/80">El coordinador recibirá tu solicitud y te notificará cuando sea aprobada. Mantente pendiente de tus notificaciones.</p>
-              <button onClick={() => setSolicitudEnviada(false)} className="mt-2 text-[11px] text-zinc-500 hover:text-zinc-300 font-bold hover:underline">Enviar otra solicitud</button>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              <div className="bg-zinc-800/50 border border-zinc-700/50 rounded-2xl p-5 space-y-3">
-                <div className="flex items-start gap-3">
-                  <div className="w-10 h-10 bg-blue-500/10 border border-blue-500/20 rounded-xl flex items-center justify-center shrink-0"><Clock size={18} className="text-blue-400" /></div>
-                  <div><p className="text-sm font-black text-zinc-200">¿Cómo funciona?</p><p className="text-[12px] text-zinc-400 mt-1 leading-relaxed">Tu solicitud llegará al coordinador como notificación. Una vez aprobada, podrás crear la ficha directamente desde aquí.</p></div>
-                </div>
-              </div>
-              {solicitudError && <div className="px-4 py-3 bg-rose-500/10 border border-rose-500/20 rounded-2xl flex items-center gap-2"><AlertTriangle size={14} className="text-rose-400" /><p className="text-xs text-rose-400 font-bold">{solicitudError}</p></div>}
-              <button onClick={() => solicitarMutation.mutate()} disabled={solicitarMutation.isPending} className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-black uppercase tracking-widest rounded-xl text-sm transition-all flex items-center justify-center gap-2">
-                {solicitarMutation.isPending ? <><span className="animate-spin w-4 h-4 border-2 border-white/30 border-t-white rounded-full" /> Enviando...</> : <><Send size={15} /> Enviar solicitud al coordinador</>}
-              </button>
-            </div>
-          )}
-        </div>
+        <InstructorCrearFichaForm
+          userId={user?.id}
+          onCancel={() => setMainTab('todas')}
+          onCreated={() => { qc.invalidateQueries({ queryKey: ['fichas'] }); setMainTab('todas'); }}
+        />
       )}
 
       {/* Todas las fichas */}
@@ -1727,9 +2084,9 @@ export const FichasPanel = () => {
                 </div>
                 <div className="flex mx-10 gap-6 p-1">
                   {([
-                    { key: 'todas',          label: 'Todas' },
-                    { key: 'con_proyectos',  label: 'Con proyectos' },
-                    { key: 'sin_proyectos',  label: 'Sin proyectos' },
+                    { key: 'todas', label: 'Todas' },
+                    { key: 'con_proyectos', label: 'Con proyectos' },
+                    { key: 'sin_proyectos', label: 'Sin proyectos' },
                   ] as const).map(({ key, label }) => (
                     <button key={key} onClick={() => setStatusFilter(key)}
                       className={`px-3 py-1 rounded-md border border-zinc-600 font-bold transition-all ${statusFilter === key ? 'hover:bg-zinc-500 text-zinc-300 shadow-sm bg-zinc-800' : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50'}`}>
@@ -1747,7 +2104,7 @@ export const FichasPanel = () => {
               {/* Tabla de fichas */}
               <div className="pb-12 mx-4">
                 {isLoading ? (
-                  <div className="space-y-1">{[1,2,3].map(n => <SkeletonRow key={n} />)}</div>
+                  <div className="space-y-1">{[1, 2, 3].map(n => <SkeletonRow key={n} />)}</div>
                 ) : filteredFichas.length === 0 ? (
                   <div className="py-12 text-center text-[12px] font-medium text-zinc-500 italic bg-zinc-900 border border-zinc-600/60 rounded-md">
                     {search ? 'No se encontraron fichas ni proyectos que coincidan con la búsqueda.' : 'No hay fichas registradas.'}

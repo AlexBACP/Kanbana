@@ -11,13 +11,17 @@ import {
   ChevronLeft, Search, BookOpen, Code2,
   Calendar, CheckCircle2, Plus, AlertCircle, Layers,
 } from 'lucide-react';
-import { projectService } from '../services/project.service';
-import { ticketService }  from '../services/ticket.service';
-import { useAuthStore }   from '../store/auth.store';
+import { projectService }   from '../services/project.service';
+import { ticketService }    from '../services/ticket.service';
+import { useAuthStore }     from '../store/auth.store';
+import { useBoardSocket }   from '../hooks/useBoardSocket';
+import { PresenceAvatars }  from '../components/PresenceAvatars';
 import { KanbanBoard }    from '../components/KanbanBoard';
 import { Modal }          from '../components/Modal';
-import { TicketStatus }   from '../types/ticket.types';
-import { Trimestre }      from '../types/trimestre.types';
+import { RejectModal }    from '../components/RejectModal';
+import { DateTimeInput }  from '../components/DateTimeInput';
+import type { TicketStatus } from '../types/ticket.types';
+import type { Trimestre }    from '../types/trimestre.types';
 
 const FormField = ({ label, children }: { label: string; children: React.ReactNode }) => (
   <div className="space-y-1.5">
@@ -41,12 +45,16 @@ export const TrimestreKanbanPage = () => {
   const qc          = useQueryClient();
   const { user }    = useAuthStore();
 
-  const canManage  = user?.rol === 'coordinador' || user?.rol === 'instructor'
-                     || (user?.rol === 'aprendiz' && (user as any).es_lider_tecnico);
-  const esAprendiz = user?.rol === 'aprendiz' && !(user as any).es_lider_tecnico;
+  const canManage    = user?.rol === 'coordinador' || user?.rol === 'instructor'
+                       || (user?.rol === 'aprendiz' && (user as any).es_lider_tecnico);
+  const esAprendiz   = user?.rol === 'aprendiz' && !(user as any).es_lider_tecnico;
+  const esInstructor = user?.rol === 'instructor' || user?.rol === 'coordinador';
+  const esLider      = user?.rol === 'aprendiz' && (user as any)?.es_lider_tecnico;
+  const kanbanRole   = esInstructor ? user!.rol : esLider ? 'lider_tecnico' : 'aprendiz';
 
   const [search,          setSearch]          = useState('');
   const [showTicketModal, setShowTicketModal] = useState(false);
+  const [rejectingTicket, setRejectingTicket] = useState<{ id: number; titulo?: string } | null>(null);
 
   // ── Queries ────────────────────────────────────────────────────────────────
   const { data: project } = useQuery({
@@ -90,6 +98,30 @@ export const TrimestreKanbanPage = () => {
     onError:   (e: any) => alert(e?.response?.data?.message ?? 'No se pudo actualizar'),
   });
 
+  // Aprendiz: finalizar su tarea → pasa a testing (aparece como "En revisión" en el tablero del líder)
+  const markCompleteMut = useMutation({
+    mutationFn: (ticketId: number) => ticketService.markCompleteByAprendiz(ticketId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['tickets', 'trimestre', trimId] }),
+    onError:   (e: any) => alert(e?.response?.data?.message ?? 'No se pudo finalizar la tarea.'),
+  });
+
+  // Líder técnico: aprobar/rechazar tareas en revisión (testing)
+  const liderApproveMut = useMutation({
+    mutationFn: (ticketId: number) => ticketService.approveCompletion(ticketId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['tickets', 'trimestre', trimId] }),
+    onError:   (e: any) => alert(e?.response?.data?.message ?? 'No se pudo aprobar la tarea.'),
+  });
+
+  const liderRejectMut = useMutation({
+    mutationFn: ({ id, motivo }: { id: number; motivo?: string }) =>
+      ticketService.rejectCompletion(id, motivo),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['tickets', 'trimestre', trimId] });
+      setRejectingTicket(null);
+    },
+    onError:   (e: any) => alert(e?.response?.data?.message ?? 'No se pudo rechazar la tarea.'),
+  });
+
   const createTicketMut = useMutation({
     mutationFn: (dto: any) => ticketService.create({ ...dto, proyecto_id: proyectoId }),
     onSuccess:  () => {
@@ -97,6 +129,13 @@ export const TrimestreKanbanPage = () => {
       setShowTicketModal(false);
     },
     onError: (e: any) => alert(e?.response?.data?.message ?? 'Error al crear tarea'),
+  });
+
+  // ── Real-time: tablero en vivo + presencia ────────────────────────────────
+  const { presence } = useBoardSocket({
+    proyectoId: proyectoId,
+    user:       user ? { id: user.id, nombre: user.nombre, avatar_url: (user as any).avatar_url } : undefined,
+    queryKeys:  [['tickets', 'trimestre', trimId]],
   });
 
   // ── Derivados ──────────────────────────────────────────────────────────────
@@ -160,6 +199,9 @@ export const TrimestreKanbanPage = () => {
           </div>
         </div>
 
+        {/* Presencia en tiempo real */}
+        <PresenceAvatars users={presence} currentUser={user?.id} />
+
         {/* Progress bar compacta */}
         {tickets.length > 0 && (
           <div className="hidden md:flex items-center gap-2">
@@ -185,6 +227,15 @@ export const TrimestreKanbanPage = () => {
             className="pl-8 pr-3 py-1.5 bg-zinc-800 border border-zinc-700 rounded-xl text-xs text-zinc-200 outline-none focus:border-primary-500/50 w-40 placeholder:text-zinc-600 transition-colors"
           />
         </div>
+
+        {/* Cola de trabajo — igual que en los demás tableros */}
+        <button
+          onClick={() => navigate(`/projects/${proyectoId}/backlog?trimestreId=${trimId}`)}
+          title="Abrir la cola de trabajo de este trimestre"
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-zinc-800 border border-zinc-700 text-zinc-400 hover:text-zinc-200 hover:border-zinc-600 rounded-xl text-xs font-bold transition-all"
+        >
+          <Layers size={13} /> Cola de trabajo
+        </button>
 
         {/* Nueva tarea */}
         {canManage && modulos.length > 0 && !trim?.esta_finalizado && (
@@ -223,11 +274,27 @@ export const TrimestreKanbanPage = () => {
             <KanbanBoard
               tickets={filteredTickets as any}
               onStatusChange={(ticketId, status) => updateStatusMut.mutate({ ticketId, status })}
-              readonly={esAprendiz}
+              readonly={false}
+              role={kanbanRole}
+              currentUserId={user?.id}
+              onMarkComplete={esAprendiz ? (id) => markCompleteMut.mutate(id) : undefined}
+              onApprove={esLider ? (id) => liderApproveMut.mutate(id) : undefined}
+              onReject={esLider ? (id) => {
+                const t = (filteredTickets as any[]).find(x => x.id === id);
+                setRejectingTicket({ id, titulo: t?.titulo });
+              } : undefined}
             />
           </div>
         )}
       </div>
+
+      {/* ── Modal: Rechazo de tarea ────────────────────────────────────────── */}
+      <RejectModal
+        ticket={rejectingTicket}
+        onClose={() => setRejectingTicket(null)}
+        onReject={(id, motivo) => liderRejectMut.mutate({ id, motivo: motivo || undefined })}
+        isPending={liderRejectMut.isPending}
+      />
 
       {/* ── Modal nueva tarea ──────────────────────────────────────────────── */}
       <Modal isOpen={showTicketModal} onClose={() => setShowTicketModal(false)} title="Nueva Tarea">
@@ -279,7 +346,14 @@ export const TrimestreKanbanPage = () => {
               </select>
             </FormField>
             <FormField label="Fecha límite">
-              <input name="fecha_limite" type="date" className={inputCls} />
+              <DateTimeInput
+                name="fecha_limite"
+                withTime={true}
+                timeName="hora_limite"
+                min={trim?.fecha_inicio?.toString().slice(0, 10)}
+                max={trim?.fecha_fin?.toString().slice(0, 10)}
+                rangeLabel={trim ? `Dentro del ${(trim as any).nombre ?? `T${(trim as any).numero}`}` : undefined}
+              />
             </FormField>
           </div>
           <button

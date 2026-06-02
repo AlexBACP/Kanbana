@@ -23,7 +23,7 @@ export const Header = () => {
             <p className="text-xs font-bold text-dark-text">{user?.nombre}</p>
             <p className="text-[10px] text-dark-muted font-bold capitalize">{user?.rol?.replace('_', ' ')}</p>
           </div>
-          <Avatar nombre={user?.nombre || ''} size="sm" />
+          <Avatar nombre={user?.nombre || ''} size="sm" avatarUrl={user?.avatar_url} />
         </div>
       </div>
     </header>

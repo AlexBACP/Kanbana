@@ -31,6 +31,11 @@ export class Trimestre {
   @Column({ nullable: true })
   nombre: string;
 
+  // ── Descripción semántica del trimestre (etapa del SDLC que cubre) ────────
+  // Se rellena automáticamente desde la plantilla SDLC al crear la ficha.
+  @Column({ type: 'text', nullable: true })
+  descripcion: string | null;
+
   @Column({
     type: 'enum',
     enum: TipoTrimestre,

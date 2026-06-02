@@ -140,7 +140,7 @@ export const AttachmentUploader = ({ ticketId, requiereAdjunto, tieneAdjuntos }:
           transition-all duration-200 select-none
           ${isDragging
             ? 'border-primary-500 bg-primary-500/10 scale-[1.01]'
-            : 'border-dark-border hover:border-primary-500/50 hover:bg-dark-bg/50'
+            : 'border-zinc-800 hover:border-primary-500/50 hover:bg-zinc-950/50'
           }
           ${isUploading ? 'opacity-60 cursor-not-allowed pointer-events-none' : ''}
         `}
@@ -155,15 +155,15 @@ export const AttachmentUploader = ({ ticketId, requiereAdjunto, tieneAdjuntos }:
 
         <div className="flex flex-col items-center gap-3">
           <div className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-colors
-            ${isDragging ? 'bg-primary-500/20 text-primary-400' : 'bg-dark-bg text-dark-muted'}`}
+            ${isDragging ? 'bg-primary-500/20 text-primary-400' : 'bg-zinc-950 text-zinc-500'}`}
           >
             <Upload size={22} />
           </div>
           <div>
-            <p className="text-sm font-black text-dark-text">
+            <p className="text-sm font-black text-zinc-100">
               {isDragging ? 'Suelta el archivo aquí' : 'Arrastra un archivo o haz clic para seleccionar'}
             </p>
-            <p className="text-xs text-dark-muted mt-1">
+            <p className="text-xs text-zinc-500 mt-1">
               PDF · Word · PPT · Excel · PNG · JPG · SVG · ZIP · RAR · TXT — máx {MAX_SIZE_MB} MB
             </p>
           </div>
@@ -172,13 +172,13 @@ export const AttachmentUploader = ({ ticketId, requiereAdjunto, tieneAdjuntos }:
         {/* Barra de progreso durante la subida */}
         {isUploading && progress !== null && (
           <div className="mt-4 space-y-2">
-            <div className="flex items-center justify-between text-xs font-black text-dark-muted uppercase tracking-widest">
+            <div className="flex items-center justify-between text-xs font-black text-zinc-500 uppercase tracking-widest">
               <span className="flex items-center gap-2">
                 <FileText size={12} /> Subiendo...
               </span>
               <span>{progress}%</span>
             </div>
-            <div className="h-1.5 bg-dark-border rounded-full overflow-hidden">
+            <div className="h-1.5 bg-zinc-800 rounded-full overflow-hidden">
               <div
                 className="h-full bg-primary-500 rounded-full transition-all duration-200"
                 style={{ width: `${progress}%` }}

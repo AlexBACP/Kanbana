@@ -15,7 +15,9 @@ import * as path            from 'path';
 import * as fs              from 'fs';
 
 async function bootstrap() {
-  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  // rawBody: true → expone req.rawBody (Buffer) para verificar la firma HMAC
+  // del webhook de GitHub (X-Hub-Signature-256) sin perder el parseo JSON normal.
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, { rawBody: true });
 
   // ─── Prefijo global de la API (sin cambios) ──────────────────────────
   app.setGlobalPrefix('api');

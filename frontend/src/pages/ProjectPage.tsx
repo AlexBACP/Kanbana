@@ -18,14 +18,16 @@ import {
 } from 'lucide-react';
 import { projectService } from '../services/project.service';
 import { useAuthStore }   from '../store/auth.store';
-import { Trimestre }      from '../types/trimestre.types';
-import { Project }        from '../types/project.types';
+import type { Trimestre } from '../types/trimestre.types';
+import type { Project }   from '../types/project.types';
 import { Modal }          from '../components/Modal';
 import { Button }         from '../components/Button';
+import { GithubRepoPanel } from '../components/GithubRepoPanel';
+
 
 const FormField = ({ label, children }: { label: string; children: React.ReactNode }) => (
   <div className="space-y-1.5">
-    <label className="text-[10px] font-black text-dark-muted uppercase tracking-widest">{label}</label>
+    <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">{label}</label>
     {children}
   </div>
 );
@@ -123,6 +125,19 @@ export const ProjectPage = () => {
     onError: (e: any) => alert(e?.response?.data?.message ?? 'Error al generar trimestres'),
   });
 
+  // ── Módulos: total existente y generación desde plantilla ─────────────────
+  const totalSprints = trimestres.reduce((acc, t) => acc + (t.sprints?.length ?? 0), 0) + sinTrimestre.length;
+  const sinModulos    = trimestres.length > 0 && totalSprints === 0;
+
+  const generarModulosMut = useMutation({
+    mutationFn: () => projectService.generarModulos(proyectoId, false),
+    onSuccess: (res: any) => {
+      invalidate();
+      if (res?.omitido) alert(res.motivo ?? 'No se generaron módulos.');
+    },
+    onError: (e: any) => alert(e?.response?.data?.message ?? 'No se pudieron generar los módulos'),
+  });
+
   // ── Colores por tipo ──────────────────────────────────────────────────────
   const colorTrim = (t: Trimestre) => {
     if (t.esta_finalizado)       return 'border-zinc-700/50 bg-zinc-800/30 opacity-70';
@@ -164,13 +179,24 @@ export const ProjectPage = () => {
           >
             <Layers size={14} /> Cola de trabajo
           </button>
-          {/* Kanban completo */}
+          {/* Tablero completo del proyecto */}
           <button
             onClick={() => navigate(`/projects/${proyectoId}/kanban`)}
+            title="Abrir el tablero completo del proyecto"
             className="flex items-center gap-2 px-3 py-2 rounded-xl border border-zinc-700 text-xs font-bold text-zinc-400 hover:text-zinc-200 hover:border-primary-500/40 transition-all"
           >
-            <KanbanSquare size={14} /> Kanban
+            <KanbanSquare size={14} /> Tablero
           </button>
+          {isAdmin && sinModulos && (
+            <button
+              onClick={() => generarModulosMut.mutate()}
+              disabled={generarModulosMut.isPending}
+              className="flex items-center gap-2 px-3 py-2 rounded-xl bg-primary-600 hover:bg-primary-500 text-xs font-bold text-white transition-all disabled:opacity-50"
+            >
+              <Plus size={14} />
+              {generarModulosMut.isPending ? 'Generando...' : 'Generar módulos'}
+            </button>
+          )}
           {isAdmin && (
             <button
               onClick={() => setShowGenerate(true)}
@@ -184,7 +210,36 @@ export const ProjectPage = () => {
       </div>
 
       {/* Contenido */}
-      <div className="flex-1 p-6 bg-zinc-950">
+      <div className="flex-1 p-6 bg-zinc-950 space-y-6">
+
+        {/* Repositorios GitHub del proyecto — gestiona admin o el líder de ESTE proyecto */}
+        <GithubRepoPanel
+          proyectoId={proyectoId}
+          canManage={isAdmin || (user?.rol === 'aprendiz' && (user as any)?.es_lider_tecnico === true && (project as any)?.liderId === user?.id)}
+        />
+
+        {/* Aviso: proyecto sin módulos (creado antes de la auto-generación) */}
+        {sinModulos && (
+          <div className="flex items-center gap-3 p-4 rounded-xl bg-primary-500/8 border border-primary-500/20">
+            <AlertTriangle size={18} className="text-primary-400 shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-bold text-zinc-200">Este proyecto no tiene módulos todavía</p>
+              <p className="text-xs text-zinc-500 mt-0.5">
+                Genera los módulos automáticamente desde la plantilla SDLC de la ficha ({trimestres.length} trimestres).
+              </p>
+            </div>
+            {isAdmin && (
+              <button
+                onClick={() => generarModulosMut.mutate()}
+                disabled={generarModulosMut.isPending}
+                className="shrink-0 flex items-center gap-2 px-4 py-2 rounded-lg bg-primary-600 hover:bg-primary-500 text-xs font-bold text-white transition-all disabled:opacity-50"
+              >
+                <Plus size={14} />
+                {generarModulosMut.isPending ? 'Generando...' : 'Generar módulos'}
+              </button>
+            )}
+          </div>
+        )}
 
         {isLoading ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -293,7 +348,7 @@ export const ProjectPage = () => {
                   </span>
                 </div>
                 <p className="text-xs text-zinc-500">
-                  Estos módulos no están vinculados a ningún trimestre. Puedes reorganizarlos desde el kanban completo.
+                  Estos módulos no están vinculados a ningún trimestre. Puedes reorganizarlos desde el tablero completo.
                 </p>
               </div>
             )}
@@ -329,7 +384,7 @@ export const ProjectPage = () => {
               />
               <span className="text-2xl font-black text-primary-400 w-8 text-center">{numT}</span>
             </div>
-            <p className="text-[10px] text-dark-muted mt-1">
+            <p className="text-[10px] text-zinc-500 mt-1">
               Cada trimestre dura 3 meses desde la fecha de inicio del proyecto.
             </p>
           </FormField>

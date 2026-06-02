@@ -77,7 +77,7 @@ export const LeadersPanel = () => {
                     </span>
                   </div>
                 </div>
-                <Eye size={14} className="text-dark-muted opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+                <Eye size={14} className="text-zinc-500 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
               </div>
 
               <div className="space-y-2 pt-3 border-t border-surface-border">

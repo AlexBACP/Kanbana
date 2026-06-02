@@ -17,14 +17,16 @@
 //  canDelete → si true, muestra el botón de borrar (admin/instructor/quien subió)
 // ─────────────────────────────────────────────────────────────────────────────
 
+import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   FileText, Image, Archive, FileSpreadsheet,
-  Presentation, Download, Trash2, Paperclip,
+  Presentation, Download, Trash2, Paperclip, Eye,
 } from 'lucide-react';
 import { ticketService }    from '../services/ticket.service';
-import { TicketAttachment } from '../types/trimestre.types';
+import type { TicketAttachment } from '../types/trimestre.types';
 import { formatDate }       from '../utils/date.utils';
+import { FileViewerModal }  from './FileViewerModal';
 
 // ── Ícono según tipo MIME ─────────────────────────────────────────────────────
 function MimeIcon({ mime }: { mime: string }) {
@@ -64,6 +66,7 @@ interface Props {
 
 export const AttachmentGallery = ({ ticketId, canDelete }: Props) => {
   const queryClient = useQueryClient();
+  const [viewerIndex, setViewerIndex] = useState<number | null>(null);
 
   const { data: adjuntos = [], isLoading } = useQuery<TicketAttachment[]>({
     queryKey: ['attachments', ticketId],
@@ -90,7 +93,7 @@ export const AttachmentGallery = ({ ticketId, canDelete }: Props) => {
     return (
       <div className="space-y-2">
         {[1, 2].map(i => (
-          <div key={i} className="h-16 bg-dark-bg/50 rounded-2xl animate-pulse border border-dark-border" />
+          <div key={i} className="h-16 bg-zinc-950/50 rounded-2xl animate-pulse border border-zinc-800" />
         ))}
       </div>
     );
@@ -98,9 +101,9 @@ export const AttachmentGallery = ({ ticketId, canDelete }: Props) => {
 
   if (adjuntos.length === 0) {
     return (
-      <div className="py-10 text-center bg-dark-bg/20 rounded-2xl border-2 border-dashed border-dark-border">
-        <Paperclip size={28} className="mx-auto mb-3 text-dark-muted opacity-20" />
-        <p className="text-xs font-black text-dark-muted/40 uppercase tracking-widest">
+      <div className="py-10 text-center bg-zinc-950/20 rounded-2xl border-2 border-dashed border-zinc-800">
+        <Paperclip size={28} className="mx-auto mb-3 text-zinc-500 opacity-20" />
+        <p className="text-xs font-black text-zinc-500/40 uppercase tracking-widest">
           Sin archivos adjuntos
         </p>
       </div>
@@ -109,11 +112,13 @@ export const AttachmentGallery = ({ ticketId, canDelete }: Props) => {
 
   return (
     <div className="space-y-2">
-      {adjuntos.map((adj) => (
+      {adjuntos.map((adj, i) => (
         <div
           key={adj.id}
-          className="flex items-center gap-4 p-4 bg-dark-bg/40 hover:bg-dark-bg
-                     border border-dark-border rounded-2xl transition-all group"
+          onClick={() => setViewerIndex(i)}
+          className="flex items-center gap-4 p-4 bg-zinc-950/40 hover:bg-zinc-950
+                     border border-zinc-800 rounded-2xl transition-all group cursor-pointer"
+          title="Previsualizar"
         >
           {/* Ícono tipo de archivo */}
           <div className={`w-10 h-10 rounded-xl flex items-center justify-center border shrink-0 ${mimeBg(adj.tipo_mime)}`}>
@@ -122,21 +127,21 @@ export const AttachmentGallery = ({ ticketId, canDelete }: Props) => {
 
           {/* Info del archivo */}
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-black text-dark-text truncate">{adj.nombre_original}</p>
+            <p className="text-sm font-black text-zinc-100 truncate group-hover:text-primary-300 transition-colors">{adj.nombre_original}</p>
             <div className="flex items-center gap-3 mt-0.5">
-              <span className="text-[10px] font-bold text-dark-muted uppercase tracking-widest">
+              <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">
                 {formatSize(adj.tamano_bytes)}
               </span>
               {adj.subido_por && (
                 <>
-                  <span className="text-dark-border">·</span>
-                  <span className="text-[10px] font-bold text-dark-muted truncate">
+                  <span className="text-zinc-700">·</span>
+                  <span className="text-[10px] font-bold text-zinc-500 truncate">
                     {adj.subido_por.nombre}
                   </span>
                 </>
               )}
-              <span className="text-dark-border">·</span>
-              <span className="text-[10px] font-bold text-dark-muted">
+              <span className="text-zinc-700">·</span>
+              <span className="text-[10px] font-bold text-zinc-500">
                 {formatDate(adj.creado_en)}
               </span>
             </div>
@@ -144,13 +149,25 @@ export const AttachmentGallery = ({ ticketId, canDelete }: Props) => {
 
           {/* Acciones */}
           <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+            {/* Previsualizar */}
+            <button
+              onClick={(e) => { e.stopPropagation(); setViewerIndex(i); }}
+              className="p-2 rounded-xl bg-zinc-900 border border-zinc-800
+                         text-zinc-500 hover:text-primary-400 hover:border-primary-500/30
+                         transition-all"
+              title="Previsualizar"
+            >
+              <Eye size={15} />
+            </button>
+
             {/* Descargar: abre la URL pública en nueva pestaña */}
             <a
               href={adj.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="p-2 rounded-xl bg-dark-card border border-dark-border
-                         text-dark-muted hover:text-primary-400 hover:border-primary-500/30
+              onClick={(e) => e.stopPropagation()}
+              className="p-2 rounded-xl bg-zinc-900 border border-zinc-800
+                         text-zinc-500 hover:text-primary-400 hover:border-primary-500/30
                          transition-all"
               title="Descargar"
             >
@@ -160,10 +177,10 @@ export const AttachmentGallery = ({ ticketId, canDelete }: Props) => {
             {/* Borrar: solo si canDelete */}
             {canDelete && (
               <button
-                onClick={() => handleDelete(adj)}
+                onClick={(e) => { e.stopPropagation(); handleDelete(adj); }}
                 disabled={deleteMutation.isPending}
-                className="p-2 rounded-xl bg-dark-card border border-dark-border
-                           text-dark-muted hover:text-rose-400 hover:border-rose-500/30
+                className="p-2 rounded-xl bg-zinc-900 border border-zinc-800
+                           text-zinc-500 hover:text-rose-400 hover:border-rose-500/30
                            transition-all disabled:opacity-50"
                 title="Eliminar adjunto"
               >
@@ -173,6 +190,16 @@ export const AttachmentGallery = ({ ticketId, canDelete }: Props) => {
           </div>
         </div>
       ))}
+
+      {/* ── Visor de archivos ─────────────────────────────────────────────── */}
+      {viewerIndex !== null && (
+        <FileViewerModal
+          attachments={adjuntos}
+          index={viewerIndex}
+          onClose={() => setViewerIndex(null)}
+          onIndexChange={setViewerIndex}
+        />
+      )}
     </div>
   );
 };

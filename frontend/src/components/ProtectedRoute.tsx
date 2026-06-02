@@ -24,7 +24,7 @@ const EmailContextBanner = () => {
     const cleanSearch = params.toString();
     const cleanPath   = location.pathname + (cleanSearch ? `?${cleanSearch}` : '');
 
-    navigate(`/login?redirect=${encodeURIComponent(cleanPath)}`, { replace: true });
+    navigate(`/?redirect=${encodeURIComponent(cleanPath)}`, { replace: true });
   };
 
   return (
@@ -86,17 +86,17 @@ export const ProtectedRoute = ({
   allowedRoles,
   allowLiderTecnico = false,
   denyLiderTecnico  = false,
-  redirectTo = '/login',
+  redirectTo = '/',
 }: ProtectedRouteProps) => {
   const { isAuthenticated, isLoading, user } = useAuthStore();
   const location = useLocation();
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-dark-bg">
+      <div className="min-h-screen flex items-center justify-center bg-zinc-950">
         <div className="flex flex-col items-center gap-3">
-          <div className="w-8 h-8 border-2 border-dark-border border-t-primary-500 rounded-full animate-spin" />
-          <p className="text-dark-muted text-xs">Verificando sesión...</p>
+          <div className="w-8 h-8 border-2 border-zinc-800 border-t-blue-500 rounded-full animate-spin" />
+          <p className="text-zinc-500 text-xs">Verificando sesión...</p>
         </div>
       </div>
     );
@@ -110,10 +110,18 @@ export const ProtectedRoute = ({
     const cleanPath   = location.pathname + (cleanSearch ? `?${cleanSearch}` : '');
 
     const loginDest = cleanPath !== '/'
-      ? `${redirectTo}?redirect=${encodeURIComponent(cleanPath)}`
+      ? `${redirectTo}${redirectTo.includes('?') ? '&' : '?'}redirect=${encodeURIComponent(cleanPath)}`
       : redirectTo;
 
     return <Navigate to={loginDest} replace />;
+  }
+
+  // ── Guard de vinculación para aprendices ──────────────────────────────
+  // Un aprendiz sin fichaId que NO está en /solicitar-vinculacion debe ir ahí.
+  // Esto incluye los estados: 'none' (nunca solicitó), 'pendiente' y 'rechazado'.
+  if (user && user.rol === 'aprendiz' && !user.fichaId
+      && location.pathname !== '/solicitar-vinculacion') {
+    return <Navigate to="/solicitar-vinculacion" replace />;
   }
 
   if (user && allowedRoles) {

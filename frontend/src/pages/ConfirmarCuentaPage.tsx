@@ -69,7 +69,7 @@ export const ConfirmarCuentaPage = () => {
             </div>
 
             <Link
-              to="/login"
+              to="/"
               className="mt-1 w-full inline-flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white text-sm font-black rounded-xl transition-colors active:scale-95"
             >
               <LogIn size={15} /> Ir a iniciar sesión
@@ -88,7 +88,7 @@ export const ConfirmarCuentaPage = () => {
               <p className="text-sm text-zinc-400 leading-relaxed mt-2">{message}</p>
             </div>
             <Link
-              to="/login"
+              to="/"
               className="mt-1 w-full inline-flex items-center justify-center gap-2 px-6 py-3 border border-zinc-700 hover:border-zinc-500 text-zinc-400 hover:text-zinc-100 text-sm font-bold rounded-xl transition-colors"
             >
               Volver al inicio de sesión

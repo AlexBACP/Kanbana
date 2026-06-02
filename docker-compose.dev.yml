@@ -1,0 +1,121 @@
+# ══════════════════════════════════════════════════════════════════════════════
+# Kanbana — MODO DESARROLLO (hot-reload, sin --build cada vez)
+#
+# Monta tu código dentro de los contenedores y corre los servidores en watch:
+#   backend  → nest start --watch  (recarga al guardar)
+#   frontend → vite dev server     (HMR instantáneo)
+#
+# Uso:
+#   docker compose down                          # detén el modo producción si está activo
+#   docker compose -f docker-compose.dev.yml up  # arranca en modo dev
+#
+#   Frontend: http://localhost:5173   ·   Backend: http://localhost:3000/api/docs
+#
+# Notas:
+#   - La 1ª vez instala dependencias dentro del contenedor (tarda); luego es rápido.
+#   - Comparte la MISMA base de datos (volumen mysql_data) que el modo producción.
+#   - Si AÑADES una dependencia (cambias package.json): reinicia ese servicio
+#     ->  docker compose -f docker-compose.dev.yml restart backend
+# ══════════════════════════════════════════════════════════════════════════════
+services:
+
+  mysql:
+    image: mysql:8.0
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: kanbana_root_2026
+      MYSQL_DATABASE: kanbana_db
+      MYSQL_USER: kanbana_user
+      MYSQL_PASSWORD: kanbana2026
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-pkanbana_root_2026"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    networks: [kanbana]
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    networks: [kanbana]
+
+  backend:
+    image: node:20-slim
+    working_dir: /app
+    # Instala deps (si faltan) y arranca en modo watch
+    command: sh -c "npm install && npm run start:dev"
+    env_file: ./backend/.env
+    environment:
+      NODE_ENV: development
+      PORT: "3000"
+      DB_HOST: mysql
+      DB_PORT: "3306"
+      DB_USER: kanbana_user
+      DB_PASSWORD: kanbana2026
+      DB_NAME: kanbana_db
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      # Watch por polling: necesario cuando el código vive en /mnt/c (Windows)
+      CHOKIDAR_USEPOLLING: "true"
+      WATCHPACK_POLLING: "true"
+    volumes:
+      - ./backend:/app                 # tu código en vivo
+      - /app/node_modules              # conserva node_modules del contenedor (no lo pisa el host)
+      - backend_uploads:/app/uploads
+    ports:
+      - "3000:3000"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    networks: [kanbana]
+
+  frontend:
+    image: node:20-alpine
+    working_dir: /app
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0 --port 5173"
+    environment:
+      CHOKIDAR_USEPOLLING: "true"
+    volumes:
+      - ./frontend:/app                # tu código en vivo
+      - /app/node_modules
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
+    networks: [kanbana]
+
+  # ── n8n — automatización de flujos (modo dev) ──────────────────────────────
+  # UI: http://localhost:5678 (admin / kanbana2026)
+  # Desde los workflows, llega al backend con: http://backend:3000/api
+  n8n:
+    image: n8nio/n8n:latest
+    restart: unless-stopped
+    ports:
+      - "5678:5678"
+    environment:
+      N8N_BASIC_AUTH_ACTIVE: "true"
+      N8N_BASIC_AUTH_USER: admin
+      N8N_BASIC_AUTH_PASSWORD: kanbana2026
+      N8N_HOST: localhost
+      N8N_PORT: "5678"
+      N8N_PROTOCOL: http
+      WEBHOOK_URL: http://localhost:5678/
+      GENERIC_TIMEZONE: America/Bogota
+    volumes:
+      - n8n_data:/home/node/.n8n
+    depends_on:
+      - backend
+    networks: [kanbana]
+
+volumes:
+  mysql_data:
+  backend_uploads:
+  n8n_data:
+
+networks:
+  kanbana:
+    driver: bridge

@@ -175,7 +175,7 @@ export const TareasPanel = () => {
                   className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-bold whitespace-nowrap transition-all border ${
                     active
                       ? isPool
-                        ? 'bg-primary-600/15 text-primary-400 border-primary-600/30'
+                        ? 'bg-blue-600/15 text-blue-400 border-blue-600/30'
                         : 'bg-blue-600/15 text-blue-400 border-blue-600/30'
                       : 'text-zinc-500 border-zinc-800 hover:border-zinc-700 hover:text-zinc-300 bg-zinc-900'
                   }`}
@@ -185,7 +185,7 @@ export const TareasPanel = () => {
                   <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-black ${
                     active
                       ? isPool
-                        ? 'bg-primary-600/20 text-primary-300'
+                        ? 'bg-blue-600/20 text-blue-300'
                         : 'bg-blue-600/20 text-blue-300'
                       : 'bg-zinc-800 text-zinc-600'
                   }`}>
@@ -241,9 +241,9 @@ export const TareasPanel = () => {
             ) : (
               <>
                 {/* Banner informativo */}
-                <div className="mx-6 mt-5 mb-3 flex items-start gap-3 p-3.5 bg-primary-500/5 border border-primary-500/15 rounded-md">
-                  <Zap size={14} className="text-primary-400 shrink-0 mt-0.5" />
-                  <p className="text-xs text-primary-300 leading-relaxed">
+                <div className="mx-6 mt-5 mb-3 flex items-start gap-3 p-3.5 bg-blue-500/5 border border-blue-500/15 rounded-md">
+                  <Zap size={14} className="text-blue-400 shrink-0 mt-0.5" />
+                  <p className="text-xs text-blue-300 leading-relaxed">
                     Estas tareas están disponibles para todo el equipo. Al tomarla, se asignará a ti
                     y pasará a <span className="font-black">En desarrollo</span>. Solo toma las que puedas completar.
                   </p>
@@ -302,7 +302,7 @@ export const TareasPanel = () => {
                           <button
                             onClick={() => claimMut.mutate(t.id)}
                             disabled={claimMut.isPending}
-                            className="flex items-center gap-1.5 px-3 py-1.5 bg-primary-600/20 hover:bg-primary-600/40 border border-primary-500/30 text-primary-400 text-[11px] font-black rounded-md transition-all disabled:opacity-50"
+                            className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600/20 hover:bg-blue-600/40 border border-blue-500/30 text-blue-400 text-[11px] font-black rounded-md transition-all disabled:opacity-50"
                           >
                             <Zap size={11} />
                             Tomar tarea

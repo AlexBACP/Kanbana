@@ -1,0 +1,266 @@
+<?xml version="1.0" encoding="utf-8"?>
+<p:sldLayout xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" type="twoObj" preserve="1">
+  <p:cSld name="Dos objetos">
+    <p:spTree>
+      <p:nvGrpSpPr>
+        <p:cNvPr id="1" name=""/>
+        <p:cNvGrpSpPr/>
+        <p:nvPr/>
+      </p:nvGrpSpPr>
+      <p:grpSpPr>
+        <a:xfrm>
+          <a:off x="0" y="0"/>
+          <a:ext cx="0" cy="0"/>
+          <a:chOff x="0" y="0"/>
+          <a:chExt cx="0" cy="0"/>
+        </a:xfrm>
+      </p:grpSpPr>
+      <p:sp>
+        <p:nvSpPr>
+          <p:cNvPr id="2" name="Título 1">
+            <a:extLst>
+              <a:ext uri="{FF2B5EF4-FFF2-40B4-BE49-F238E27FC236}">
+                <a16:creationId xmlns:a16="http://schemas.microsoft.com/office/drawing/2014/main" id="{7F0119BB-39AA-4B48-BB60-3EE344FF24B4}"/>
+              </a:ext>
+            </a:extLst>
+          </p:cNvPr>
+          <p:cNvSpPr>
+            <a:spLocks noGrp="1"/>
+          </p:cNvSpPr>
+          <p:nvPr>
+            <p:ph type="title"/>
+          </p:nvPr>
+        </p:nvSpPr>
+        <p:spPr/>
+        <p:txBody>
+          <a:bodyPr/>
+          <a:lstStyle/>
+          <a:p>
+            <a:r>
+              <a:rPr lang="es-ES"/>
+              <a:t>Haga clic para modificar el estilo de título del patrón</a:t>
+            </a:r>
+            <a:endParaRPr lang="es-CO"/>
+          </a:p>
+        </p:txBody>
+      </p:sp>
+      <p:sp>
+        <p:nvSpPr>
+          <p:cNvPr id="3" name="Marcador de contenido 2">
+            <a:extLst>
+              <a:ext uri="{FF2B5EF4-FFF2-40B4-BE49-F238E27FC236}">
+                <a16:creationId xmlns:a16="http://schemas.microsoft.com/office/drawing/2014/main" id="{58E8365F-8201-9D4B-85A4-E53E8819A86D}"/>
+              </a:ext>
+            </a:extLst>
+          </p:cNvPr>
+          <p:cNvSpPr>
+            <a:spLocks noGrp="1"/>
+          </p:cNvSpPr>
+          <p:nvPr>
+            <p:ph sz="half" idx="1"/>
+          </p:nvPr>
+        </p:nvSpPr>
+        <p:spPr>
+          <a:xfrm>
+            <a:off x="838200" y="1825625"/>
+            <a:ext cx="5181600" cy="4351338"/>
+          </a:xfrm>
+        </p:spPr>
+        <p:txBody>
+          <a:bodyPr/>
+          <a:lstStyle/>
+          <a:p>
+            <a:pPr lvl="0"/>
+            <a:r>
+              <a:rPr lang="es-ES"/>
+              <a:t>Haga clic para modificar los estilos de texto del patrón</a:t>
+            </a:r>
+          </a:p>
+          <a:p>
+            <a:pPr lvl="1"/>
+            <a:r>
+              <a:rPr lang="es-ES"/>
+              <a:t>Segundo nivel</a:t>
+            </a:r>
+          </a:p>
+          <a:p>
+            <a:pPr lvl="2"/>
+            <a:r>
+              <a:rPr lang="es-ES"/>
+              <a:t>Tercer nivel</a:t>
+            </a:r>
+          </a:p>
+          <a:p>
+            <a:pPr lvl="3"/>
+            <a:r>
+              <a:rPr lang="es-ES"/>
+              <a:t>Cuarto nivel</a:t>
+            </a:r>
+          </a:p>
+          <a:p>
+            <a:pPr lvl="4"/>
+            <a:r>
+              <a:rPr lang="es-ES"/>
+              <a:t>Quinto nivel</a:t>
+            </a:r>
+            <a:endParaRPr lang="es-CO"/>
+          </a:p>
+        </p:txBody>
+      </p:sp>
+      <p:sp>
+        <p:nvSpPr>
+          <p:cNvPr id="4" name="Marcador de contenido 3">
+            <a:extLst>
+              <a:ext uri="{FF2B5EF4-FFF2-40B4-BE49-F238E27FC236}">
+                <a16:creationId xmlns:a16="http://schemas.microsoft.com/office/drawing/2014/main" id="{C674364B-4945-0A4D-A279-35519E3F46DE}"/>
+              </a:ext>
+            </a:extLst>
+          </p:cNvPr>
+          <p:cNvSpPr>
+            <a:spLocks noGrp="1"/>
+          </p:cNvSpPr>
+          <p:nvPr>
+            <p:ph sz="half" idx="2"/>
+          </p:nvPr>
+        </p:nvSpPr>
+        <p:spPr>
+          <a:xfrm>
+            <a:off x="6172200" y="1825625"/>
+            <a:ext cx="5181600" cy="4351338"/>
+          </a:xfrm>
+        </p:spPr>
+        <p:txBody>
+          <a:bodyPr/>
+          <a:lstStyle/>
+          <a:p>
+            <a:pPr lvl="0"/>
+            <a:r>
+              <a:rPr lang="es-ES"/>
+              <a:t>Haga clic para modificar los estilos de texto del patrón</a:t>
+            </a:r>
+          </a:p>
+          <a:p>
+            <a:pPr lvl="1"/>
+            <a:r>
+              <a:rPr lang="es-ES"/>
+              <a:t>Segundo nivel</a:t>
+            </a:r>
+          </a:p>
+          <a:p>
+            <a:pPr lvl="2"/>
+            <a:r>
+              <a:rPr lang="es-ES"/>
+              <a:t>Tercer nivel</a:t>
+            </a:r>
+          </a:p>
+          <a:p>
+            <a:pPr lvl="3"/>
+            <a:r>
+              <a:rPr lang="es-ES"/>
+              <a:t>Cuarto nivel</a:t>
+            </a:r>
+          </a:p>
+          <a:p>
+            <a:pPr lvl="4"/>
+            <a:r>
+              <a:rPr lang="es-ES"/>
+              <a:t>Quinto nivel</a:t>
+            </a:r>
+            <a:endParaRPr lang="es-CO"/>
+          </a:p>
+        </p:txBody>
+      </p:sp>
+      <p:sp>
+        <p:nvSpPr>
+          <p:cNvPr id="5" name="Marcador de fecha 4">
+            <a:extLst>
+              <a:ext uri="{FF2B5EF4-FFF2-40B4-BE49-F238E27FC236}">
+                <a16:creationId xmlns:a16="http://schemas.microsoft.com/office/drawing/2014/main" id="{2868BFB1-0C38-A141-AB7B-22CD10FF3F3D}"/>
+              </a:ext>
+            </a:extLst>
+          </p:cNvPr>
+          <p:cNvSpPr>
+            <a:spLocks noGrp="1"/>
+          </p:cNvSpPr>
+          <p:nvPr>
+            <p:ph type="dt" sz="half" idx="10"/>
+          </p:nvPr>
+        </p:nvSpPr>
+        <p:spPr/>
+        <p:txBody>
+          <a:bodyPr/>
+          <a:lstStyle/>
+          <a:p>
+            <a:fld id="{BD986248-06F7-A441-A47A-264EBD310E11}" type="datetimeFigureOut">
+              <a:rPr lang="es-CO" smtClean="0"/>
+              <a:t>5/05/2026</a:t>
+            </a:fld>
+            <a:endParaRPr lang="es-CO"/>
+          </a:p>
+        </p:txBody>
+      </p:sp>
+      <p:sp>
+        <p:nvSpPr>
+          <p:cNvPr id="6" name="Marcador de pie de página 5">
+            <a:extLst>
+              <a:ext uri="{FF2B5EF4-FFF2-40B4-BE49-F238E27FC236}">
+                <a16:creationId xmlns:a16="http://schemas.microsoft.com/office/drawing/2014/main" id="{9FF6516E-C104-3E4A-BC0F-DC137BD98C42}"/>
+              </a:ext>
+            </a:extLst>
+          </p:cNvPr>
+          <p:cNvSpPr>
+            <a:spLocks noGrp="1"/>
+          </p:cNvSpPr>
+          <p:nvPr>
+            <p:ph type="ftr" sz="quarter" idx="11"/>
+          </p:nvPr>
+        </p:nvSpPr>
+        <p:spPr/>
+        <p:txBody>
+          <a:bodyPr/>
+          <a:lstStyle/>
+          <a:p>
+            <a:endParaRPr lang="es-CO"/>
+          </a:p>
+        </p:txBody>
+      </p:sp>
+      <p:sp>
+        <p:nvSpPr>
+          <p:cNvPr id="7" name="Marcador de número de diapositiva 6">
+            <a:extLst>
+              <a:ext uri="{FF2B5EF4-FFF2-40B4-BE49-F238E27FC236}">
+                <a16:creationId xmlns:a16="http://schemas.microsoft.com/office/drawing/2014/main" id="{F2C08597-16B2-3B42-B59A-8815DD747357}"/>
+              </a:ext>
+            </a:extLst>
+          </p:cNvPr>
+          <p:cNvSpPr>
+            <a:spLocks noGrp="1"/>
+          </p:cNvSpPr>
+          <p:nvPr>
+            <p:ph type="sldNum" sz="quarter" idx="12"/>
+          </p:nvPr>
+        </p:nvSpPr>
+        <p:spPr/>
+        <p:txBody>
+          <a:bodyPr/>
+          <a:lstStyle/>
+          <a:p>
+            <a:fld id="{63E15DF6-230E-2E43-B847-68755106EC6D}" type="slidenum">
+              <a:rPr lang="es-CO" smtClean="0"/>
+              <a:t>‹Nº›</a:t>
+            </a:fld>
+            <a:endParaRPr lang="es-CO"/>
+          </a:p>
+        </p:txBody>
+      </p:sp>
+    </p:spTree>
+    <p:extLst>
+      <p:ext uri="{BB962C8B-B14F-4D97-AF65-F5344CB8AC3E}">
+        <p14:creationId xmlns:p14="http://schemas.microsoft.com/office/powerpoint/2010/main" val="2142547302"/>
+      </p:ext>
+    </p:extLst>
+  </p:cSld>
+  <p:clrMapOvr>
+    <a:masterClrMapping/>
+  </p:clrMapOvr>
+</p:sldLayout>

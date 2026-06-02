@@ -1,5 +1,6 @@
 import {
-  Controller, Get, Patch, Delete, Param, UseGuards, Request, ParseIntPipe
+  Controller, Get, Patch, Delete, Param, UseGuards, Request, ParseIntPipe,
+  ForbiddenException,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { NotificationsService } from './notifications.service';
@@ -17,18 +18,24 @@ export class NotificationsController {
     return this.notificationsService.findAllForUser(req.user.id);
   }
 
-  @Patch(':id/read')
-  markAsRead(@Param('id', ParseIntPipe) id: number, @Request() req: any) {
-    return this.notificationsService.markAsRead(id, req.user.id);
-  }
-
   @Patch('read-all')
   markAllAsRead(@Request() req: any) {
     return this.notificationsService.markAllAsRead(req.user.id);
   }
 
+  @Patch(':id/read')
+  markAsRead(@Param('id', ParseIntPipe) id: number, @Request() req: any) {
+    return this.notificationsService.markAsRead(id, req.user.id);
+  }
+
   @Delete(':id')
-  delete(@Param('id', ParseIntPipe) id: number) {
+  async delete(@Param('id', ParseIntPipe) id: number, @Request() req: any) {
+    const notif = await this.notificationsService.findById(id);
+    if (!notif) return;
+    // Solo el destinatario puede borrar su propia notificación
+    if (notif.usuario_id !== req.user.id) {
+      throw new ForbiddenException('No tienes permiso para eliminar esta notificación');
+    }
     return this.notificationsService.delete(id);
   }
 }

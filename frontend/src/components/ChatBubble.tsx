@@ -18,9 +18,14 @@
  *   - Markdown inline: **negrita**, *cursiva*, `código`
  *   - Resize del panel arrastrando el borde izquierdo
  */
-import { useRef, useEffect, useState, useCallback } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Bot, X, Send, Maximize2, Minimize2, Trash2, Cpu, Zap } from 'lucide-react';
+import { useRef, useEffect, useState, useCallback, useMemo } from 'react';
+import { motion, AnimatePresence }  from 'framer-motion';
+import { useLocation, useNavigate } from 'react-router-dom';
+import {
+  Bot, X, Send, Maximize2, Minimize2, Trash2, Cpu, Zap,
+  KanbanSquare, Layers, Calendar, User, LayoutGrid, ArrowRight,
+  MessageSquare, Folder, BookOpen, ListTodo, HelpCircle,
+} from 'lucide-react';
 import { useChatStore, ChatMessage, ChatProvider } from '../store/chat.store';
 import { chatService, ChatTurn }                  from '../services/chat.service';
 import { useAuthStore }                           from '../store/auth.store';
@@ -45,15 +50,197 @@ function renderMarkdown(text: string): React.ReactNode[] {
   });
 }
 
-// ── Preguntas rápidas ─────────────────────────────────────────────────────────
-const QUICK_PROMPTS = [
-  '¿Cuál es el estado de mi proyecto?',
-  '¿Qué tareas tengo pendientes?',
-  '¿Cuántos días quedan para el módulo activo?',
-  '¿Quién está trabajando en qué?',
-  '¿Cómo envío mi módulo a revisión?',
-  'Explícame el flujo de trabajo de Kanbana',
-];
+// ── Acciones rápidas inteligentes ────────────────────────────────────────────
+// Cada acción es o bien una navegación directa (type:'nav') o una pregunta
+// para el AI (type:'chat'). Se generan dinámicamente en base a la ruta actual
+// y al rol del usuario para ser siempre contextuales y útiles.
+
+type ActionKind = 'nav' | 'chat';
+
+interface QuickAction {
+  label:   string;
+  desc:    string;
+  icon:    React.ElementType;
+  kind:    ActionKind;
+  to?:     string;     // kind === 'nav'
+  prompt?: string;     // kind === 'chat'
+  color:   string;     // clase Tailwind de color del acento izquierdo
+}
+
+function buildQuickActions(user: any, pathname: string): QuickAction[] {
+  const rol     = user?.rol ?? '';
+  const esLider = rol === 'aprendiz' && user?.es_lider_tecnico;
+
+  // Extrae el proyecto ID de la ruta si existe (/projects/:id/...)
+  const projMatch = pathname.match(/\/projects\/(\d+)/);
+  const projId    = projMatch ? projMatch[1] : null;
+
+  const actions: QuickAction[] = [];
+
+  // ── Acciones contextuales de RUTA ───────────────────────────────────────
+
+  // Dentro de un proyecto
+  if (projId) {
+    if (!pathname.endsWith('/kanban')) {
+      actions.push({
+        label: 'Tablero Kanban',
+        desc:  'Ver las tareas del módulo activo',
+        icon:  KanbanSquare,
+        kind:  'nav',
+        to:    `/projects/${projId}/kanban`,
+        color: 'border-blue-500/60 bg-blue-500/5',
+      });
+    }
+    if (!pathname.endsWith('/backlog')) {
+      actions.push({
+        label: 'Cola de trabajo',
+        desc:  'Ver y gestionar el backlog del proyecto',
+        icon:  Layers,
+        kind:  'nav',
+        to:    `/projects/${projId}/backlog`,
+        color: 'border-indigo-500/60 bg-indigo-500/5',
+      });
+    }
+    if (!pathname.endsWith(`/projects/${projId}`)) {
+      actions.push({
+        label: 'Vista del proyecto',
+        desc:  'Trimestres, módulos y progreso general',
+        icon:  Folder,
+        kind:  'nav',
+        to:    `/projects/${projId}`,
+        color: 'border-blue-500/60 bg-blue-500/5',
+      });
+    }
+  }
+
+  // Ruta de ticket — sugiere volver al tablero
+  if (pathname.startsWith('/tickets/') && projId === null) {
+    actions.push({
+      label: 'Ir al dashboard',
+      desc:  'Volver a tu panel principal',
+      icon:  LayoutGrid,
+      kind:  'nav',
+      to:    rol === 'aprendiz' && !esLider ? '/kanban' : '/dashboard',
+      color: 'border-primary-500/60 bg-primary-500/5',
+    });
+  }
+
+  // ── Acciones globales según el rol ───────────────────────────────────────
+
+  if (rol === 'aprendiz' && !esLider) {
+    // Aprendiz: acceso rápido a su tablero personal
+    if (pathname !== '/kanban') {
+      actions.push({
+        label: 'Mi tablero',
+        desc:  'Tus tareas y módulo activo',
+        icon:  KanbanSquare,
+        kind:  'nav',
+        to:    '/kanban',
+        color: 'border-emerald-500/60 bg-emerald-500/5',
+      });
+    }
+    actions.push({
+      label: '¿Cómo marco mi tarea como lista?',
+      desc:  'Flujo de revisión del líder técnico',
+      icon:  MessageSquare,
+      kind:  'chat',
+      prompt: '¿Cómo marco una tarea como lista para revisión y qué pasa después?',
+      color: 'border-zinc-600/60',
+    });
+    actions.push({
+      label: 'Tengo una tarea bloqueada',
+      desc:  'Qué hacer cuando una tarea es rechazada',
+      icon:  HelpCircle,
+      kind:  'chat',
+      prompt: 'Mi tarea aparece en rojo como rechazada. ¿Qué debo hacer?',
+      color: 'border-zinc-600/60',
+    });
+  }
+
+  if (esLider) {
+    if (!projId) {
+      actions.push({
+        label: 'Mi proyecto',
+        desc:  'Ir al dashboard de líder técnico',
+        icon:  LayoutGrid,
+        kind:  'nav',
+        to:    '/dashboard',
+        color: 'border-blue-500/60 bg-blue-500/5',
+      });
+    }
+    actions.push({
+      label: '¿Puedo enviar el módulo a revisión?',
+      desc:  'Condiciones para cerrar el sprint',
+      icon:  MessageSquare,
+      kind:  'chat',
+      prompt: '¿Cuándo y cómo envío el módulo a revisión del instructor?',
+      color: 'border-zinc-600/60',
+    });
+    actions.push({
+      label: 'Tareas en revisión',
+      desc:  'Ver qué tareas esperan tu aprobación',
+      icon:  ListTodo,
+      kind:  'chat',
+      prompt: '¿Cuántas tareas están en estado "En revisión" esperando mi aprobación?',
+      color: 'border-amber-500/60 bg-amber-500/5',
+    });
+  }
+
+  if (rol === 'instructor' || rol === 'coordinador') {
+    if (pathname !== '/dashboard') {
+      actions.push({
+        label: 'Dashboard',
+        desc:  'Ver proyectos, fichas y equipo',
+        icon:  LayoutGrid,
+        kind:  'nav',
+        to:    '/dashboard',
+        color: 'border-primary-500/60 bg-primary-500/5',
+      });
+    }
+    actions.push({
+      label: '¿Hay módulos pendientes de revisión?',
+      desc:  'Sprints esperando que los cierres',
+      icon:  BookOpen,
+      kind:  'chat',
+      prompt: '¿Hay módulos enviados por líderes que estén esperando mi revisión o aprobación?',
+      color: 'border-amber-500/60 bg-amber-500/5',
+    });
+    actions.push({
+      label: '¿Qué proyectos están atrasados?',
+      desc:  'Estado de avance del equipo',
+      icon:  MessageSquare,
+      kind:  'chat',
+      prompt: '¿Cuáles proyectos tienen módulos vencidos o con bajo porcentaje de avance?',
+      color: 'border-zinc-600/60',
+    });
+  }
+
+  // ── Acciones universales (si no están ya en la lista) ────────────────────
+
+  if (pathname !== '/calendar') {
+    actions.push({
+      label: 'Calendario',
+      desc:  'Ver tareas y fechas límite',
+      icon:  Calendar,
+      kind:  'nav',
+      to:    '/calendar',
+      color: 'border-emerald-500/60 bg-emerald-500/5',
+    });
+  }
+  if (pathname !== '/profile') {
+    actions.push({
+      label: 'Mi perfil',
+      desc:  'Datos, avatar y seguridad',
+      icon:  User,
+      kind:  'nav',
+      to:    '/profile',
+      color: 'border-zinc-600/60',
+    });
+  }
+
+  // Limitar a 6 acciones máximo para no saturar la pantalla
+  return actions.slice(0, 6);
+}
 
 // ── Config visual por proveedor ───────────────────────────────────────────────
 const PROVIDER_CFG = {
@@ -70,10 +257,10 @@ const PROVIDER_CFG = {
     label:      'Ollama',
     sublabel:   'Llama · local',
     icon:       Cpu,
-    activeClass: 'bg-violet-600 text-white',
-    dotClass:    'bg-violet-500',
-    gradFrom:    'from-violet-600',
-    gradTo:      'to-fuchsia-700',
+    activeClass: 'bg-indigo-600 text-white',
+    dotClass:    'bg-indigo-500',
+    gradFrom:    'from-indigo-600',
+    gradTo:      'to-blue-700',
   },
 } as const;
 
@@ -149,8 +336,16 @@ const ChatPanel = ({
     addMessage, resolveLastMessage, errorLastMessage,
     clearMessages, setIsStreaming, setProvider,
   } = useChatStore();
-  const { user } = useAuthStore();
+  const { user }  = useAuthStore();
+  const navigate  = useNavigate();
+  const location  = useLocation();
   const { canSend, record, msUntilNext, remaining } = useRateLimit();
+
+  // Acciones rápidas generadas dinámicamente según ruta + rol
+  const quickActions = useMemo(
+    () => buildQuickActions(user, location.pathname),
+    [user, location.pathname],
+  );
 
   const [input,         setInput]         = useState('');
   const [rateLimitMsg,  setRateLimitMsg]  = useState('');
@@ -311,7 +506,7 @@ const ChatPanel = ({
               )}
               {/* Timer Ollama */}
               {isStreaming && provider === 'ollama' && elapsedSecs > 0 && (
-                <span className="text-violet-400/70 text-[9px] ml-1">
+                <span className="text-indigo-400/70 text-[9px] ml-1">
                   {elapsedSecs}s…
                 </span>
               )}
@@ -359,31 +554,68 @@ const ChatPanel = ({
       {/* ── Mensajes ────────────────────────────────────────────────────── */}
       <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4 scroll-smooth">
         {messages.length === 0 && (
-          <div className="flex flex-col items-center justify-center h-full text-center py-6">
-            <div className={`w-14 h-14 rounded-2xl bg-gradient-to-br ${cfg.gradFrom}/20 ${cfg.gradTo}/20 border border-blue-500/20 flex items-center justify-center mb-4`}>
-              <Bot size={26} className="text-blue-400" />
+          <div className="flex flex-col h-full py-4">
+            {/* Saludo */}
+            <div className="flex items-center gap-3 px-1 mb-4">
+              <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${cfg.gradFrom}/20 ${cfg.gradTo}/20 border border-blue-500/20 flex items-center justify-center shrink-0`}>
+                <Bot size={20} className="text-blue-400" />
+              </div>
+              <div>
+                <p className="text-[13px] font-black text-zinc-200 leading-tight">
+                  ¡Hola, {user?.nombre?.split(' ')[0] ?? 'usuario'}!
+                </p>
+                <p className="text-[10px] text-zinc-500 mt-0.5 leading-snug">
+                  ¿A dónde quieres ir o qué quieres saber?
+                </p>
+              </div>
             </div>
-            <p className="text-[13px] font-black text-zinc-300 mb-1">
-              ¡Hola, {user?.nombre?.split(' ')[0] ?? 'usuario'}!
-            </p>
-            <p className="text-[11px] text-zinc-500 max-w-[220px] leading-relaxed mb-1">
-              Soy KanbanaAI ({cfg.sublabel}).
-            </p>
-            <p className="text-[10px] text-zinc-600 max-w-[220px] leading-relaxed mb-5">
-              Pregúntame sobre tu proyecto, módulo activo o tareas del equipo.
-            </p>
 
-            {/* 6 preguntas rápidas */}
-            <div className="space-y-1.5 w-full max-w-[290px]">
-              {QUICK_PROMPTS.map((prompt) => (
-                <button
-                  key={prompt}
-                  onClick={() => { setInput(prompt); inputRef.current?.focus(); }}
-                  className="w-full text-left px-3 py-2 bg-zinc-800/60 border border-zinc-700/50 rounded-xl text-[11px] text-zinc-400 hover:text-zinc-200 hover:border-zinc-600 transition-all leading-snug"
-                >
-                  {prompt}
-                </button>
-              ))}
+            {/* Acciones rápidas inteligentes */}
+            <div className="space-y-1.5 flex-1 overflow-y-auto pr-0.5">
+              {quickActions.map((action) => {
+                const Icon = action.icon;
+                const isNav = action.kind === 'nav';
+                return (
+                  <button
+                    key={action.label}
+                    onClick={() => {
+                      if (isNav && action.to) {
+                        navigate(action.to);
+                        // No cerramos el chat — persiste al navegar
+                      } else if (action.prompt) {
+                        setInput(action.prompt);
+                        inputRef.current?.focus();
+                      }
+                    }}
+                    className={`w-full text-left flex items-center gap-3 px-3 py-2.5 bg-zinc-800/40 hover:bg-zinc-800/80 border-l-2 rounded-r-xl rounded-l-sm transition-all group ${action.color}`}
+                  >
+                    <div className={`shrink-0 w-7 h-7 rounded-lg flex items-center justify-center ${
+                      isNav ? 'bg-zinc-700/60 group-hover:bg-zinc-700' : 'bg-zinc-800 group-hover:bg-zinc-700'
+                    } transition-colors`}>
+                      <Icon size={13} className={isNav ? 'text-zinc-300' : 'text-zinc-500'} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[12px] font-black text-zinc-300 group-hover:text-white transition-colors truncate">
+                        {action.label}
+                      </p>
+                      <p className="text-[10px] text-zinc-600 group-hover:text-zinc-500 transition-colors truncate">
+                        {action.desc}
+                      </p>
+                    </div>
+                    {isNav
+                      ? <ArrowRight size={11} className="shrink-0 text-zinc-600 group-hover:text-zinc-400 transition-colors" />
+                      : <MessageSquare size={10} className="shrink-0 text-zinc-700 group-hover:text-zinc-500 transition-colors" />
+                    }
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Separador */}
+            <div className="flex items-center gap-2 mt-4 mb-1 px-1">
+              <div className="flex-1 h-px bg-zinc-800" />
+              <span className="text-[9px] uppercase tracking-widest text-zinc-700 font-black">o escribe tu pregunta</span>
+              <div className="flex-1 h-px bg-zinc-800" />
             </div>
           </div>
         )}
@@ -403,7 +635,7 @@ const ChatPanel = ({
         )}
         {/* Aviso Ollama */}
         {provider === 'ollama' && messages.length === 0 && (
-          <p className="text-[9px] text-violet-400/70 text-center mb-1.5 uppercase tracking-widest">
+          <p className="text-[9px] text-indigo-400/70 text-center mb-1.5 uppercase tracking-widest">
             Requiere <span className="font-black">ollama serve</span> corriendo localmente
           </p>
         )}

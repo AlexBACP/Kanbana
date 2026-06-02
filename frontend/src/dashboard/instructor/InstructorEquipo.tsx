@@ -58,32 +58,32 @@ const BulkUnlinkModal = ({
         animate={{ opacity: 1, scale: 1 }}
         exit={{ opacity: 0, scale: 0.95 }}
         transition={{ duration: 0.15 }}
-        className="bg-dark-card border border-dark-border rounded-2xl w-full max-w-md shadow-2xl"
+        className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-md shadow-2xl"
       >
-        <div className="flex items-center justify-between px-5 py-4 border-b border-dark-border">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-800">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-center">
               <AlertTriangle size={15} className="text-rose-400" />
             </div>
-            <h3 className="text-sm font-semibold text-dark-text">Confirmar desvinculación</h3>
+            <h3 className="text-sm font-semibold text-zinc-100">Confirmar desvinculación</h3>
           </div>
-          <button onClick={onClose} className="text-dark-muted hover:text-dark-text transition-colors">
+          <button onClick={onClose} className="text-zinc-500 hover:text-zinc-100 transition-colors">
             <X size={16} />
           </button>
         </div>
 
         <div className="p-5 space-y-4">
-          <p className="text-sm text-dark-muted">
+          <p className="text-sm text-zinc-500">
             Se van a desvincular{' '}
-            <span className="text-dark-text font-semibold">{selected.length} aprendice{selected.length !== 1 ? 's' : ''}</span>
+            <span className="text-zinc-100 font-semibold">{selected.length} aprendice{selected.length !== 1 ? 's' : ''}</span>
             {' '}de la ficha{' '}
             <span className="text-primary-400 font-semibold">#{fichaCode}</span>.
             Sus cuentas no serán eliminadas.
           </p>
 
-          <div className="bg-dark-bg border border-dark-border rounded-xl overflow-hidden max-h-44 overflow-y-auto">
+          <div className="bg-zinc-950 border border-zinc-800 rounded-xl overflow-hidden max-h-44 overflow-y-auto">
             {selected.map(u => (
-              <div key={u.id} className="flex items-center gap-3 px-3 py-2 border-b border-dark-border/40 last:border-0">
+              <div key={u.id} className="flex items-center gap-3 px-3 py-2 border-b border-zinc-800/40 last:border-0">
                 <div className="w-6 h-6 rounded-full bg-primary-600/20 flex items-center justify-center shrink-0">
                   {u.avatar_url
                     ? <img src={userService.getAvatarUrl(u.avatar_url) || ''} className="w-full h-full object-cover rounded-full" alt="" />
@@ -91,8 +91,8 @@ const BulkUnlinkModal = ({
                   }
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs font-medium text-dark-text truncate">{u.nombre}</p>
-                  <p className="text-[10px] text-dark-muted truncate">{u.correo}</p>
+                  <p className="text-xs font-medium text-zinc-100 truncate">{u.nombre}</p>
+                  <p className="text-[10px] text-zinc-500 truncate">{u.correo}</p>
                 </div>
                 {/* ── muestra si es líder técnico ── */}
                 {u.es_lider_tecnico && (
@@ -115,7 +115,7 @@ const BulkUnlinkModal = ({
             <button
               onClick={onClose}
               disabled={isPending}
-              className="flex-1 py-2.5 text-xs font-bold border border-dark-border rounded-xl text-dark-muted hover:text-dark-text transition-colors"
+              className="flex-1 py-2.5 text-xs font-bold border border-zinc-800 rounded-xl text-zinc-500 hover:text-zinc-100 transition-colors"
             >
               Cancelar
             </button>
@@ -143,13 +143,13 @@ const UserTable = ({
 }: any) => (
   <table className="w-full text-sm">
     <thead>
-      <tr className="border-b border-dark-border/50">
+      <tr className="border-b border-zinc-800/50">
         <th className="px-4 py-2.5 w-8"></th>
-        <th className="text-left px-4 py-2.5 text-xs font-medium text-dark-muted">Nombre</th>
-        <th className="text-left px-4 py-2.5 text-xs font-medium text-dark-muted">Correo</th>
-        <th className="text-left px-4 py-2.5 text-xs font-medium text-dark-muted">Sub-rol</th>
-        <th className="text-left px-4 py-2.5 text-xs font-medium text-dark-muted">Estado</th>
-        <th className="text-right px-4 py-2.5 text-xs font-medium text-dark-muted">Acciones</th>
+        <th className="text-left px-4 py-2.5 text-xs font-medium text-zinc-500">Nombre</th>
+        <th className="text-left px-4 py-2.5 text-xs font-medium text-zinc-500">Correo</th>
+        <th className="text-left px-4 py-2.5 text-xs font-medium text-zinc-500">Sub-rol</th>
+        <th className="text-left px-4 py-2.5 text-xs font-medium text-zinc-500">Estado</th>
+        <th className="text-right px-4 py-2.5 text-xs font-medium text-zinc-500">Acciones</th>
       </tr>
     </thead>
     <tbody>
@@ -159,14 +159,14 @@ const UserTable = ({
         return (
           <tr
             key={u.id}
-            className={`border-b border-dark-border/30 last:border-0 transition-colors group ${
-              isSelected ? 'bg-primary-500/5' : 'hover:bg-dark-bg/30'
+            className={`border-b border-zinc-800/30 last:border-0 transition-colors group ${
+              isSelected ? 'bg-primary-500/5' : 'hover:bg-zinc-950/30'
             }`}
           >
             <td className="px-4 py-2.5">
               <button
                 onClick={() => onToggleUser(u.id, !isSelected)}
-                className="text-dark-muted hover:text-primary-400 transition-colors"
+                className="text-zinc-500 hover:text-primary-400 transition-colors"
               >
                 {isSelected
                   ? <CheckSquare size={14} className="text-primary-400" />
@@ -184,13 +184,13 @@ const UserTable = ({
                 </div>
                 <button
                   onClick={() => onViewProfile(u.id)}
-                  className="font-medium text-dark-text text-sm hover:text-primary-400 transition-colors text-left"
+                  className="font-medium text-zinc-100 text-sm hover:text-primary-400 transition-colors text-left"
                 >
                   {u.nombre}
                 </button>
               </div>
             </td>
-            <td className="px-4 py-2.5 text-xs text-dark-muted">{u.correo}</td>
+            <td className="px-4 py-2.5 text-xs text-zinc-500">{u.correo}</td>
             <td className="px-4 py-2.5">
               {esLider ? (
                 <span className="flex items-center gap-1 text-xs px-2 py-0.5 rounded-md border font-medium bg-emerald-500/10 text-emerald-400 border-emerald-500/20 w-fit">
@@ -216,7 +216,7 @@ const UserTable = ({
                   <button
                     onClick={() => onResend(u.id)}
                     disabled={resendingId === u.id}
-                    className="text-xs text-dark-muted hover:text-sky-400 border border-dark-border hover:border-sky-500/30 rounded-lg px-2.5 py-1 transition-colors flex items-center gap-1 disabled:opacity-50"
+                    className="text-xs text-zinc-500 hover:text-sky-400 border border-zinc-800 hover:border-sky-500/30 rounded-lg px-2.5 py-1 transition-colors flex items-center gap-1 disabled:opacity-50"
                   >
                     {resendingId === u.id
                       ? <Loader2 size={11} className="animate-spin" />
@@ -227,13 +227,13 @@ const UserTable = ({
                 )}
                 <button
                   onClick={() => onViewProfile(u.id)}
-                  className="text-xs text-dark-muted hover:text-primary-400 border border-dark-border hover:border-primary-500/30 rounded-lg px-2.5 py-1 transition-colors flex items-center gap-1"
+                  className="text-xs text-zinc-500 hover:text-primary-400 border border-zinc-800 hover:border-primary-500/30 rounded-lg px-2.5 py-1 transition-colors flex items-center gap-1"
                 >
                   <Eye size={11} /> Perfil
                 </button>
                 <button
                   onClick={() => onBulkUnlink(ficha, [u])}
-                  className="text-xs text-dark-muted hover:text-rose-400 border border-dark-border hover:border-rose-500/30 rounded-lg px-2.5 py-1 transition-colors flex items-center gap-1"
+                  className="text-xs text-zinc-500 hover:text-rose-400 border border-zinc-800 hover:border-rose-500/30 rounded-lg px-2.5 py-1 transition-colors flex items-center gap-1"
                 >
                   <Trash2 size={11} /> Desvincular
                 </button>
@@ -243,7 +243,7 @@ const UserTable = ({
                       confirm(`¿Asignar a ${u.nombre} como Líder Técnico de esta ficha?`) &&
                       onPromote(ficha.id, u.id)
                     }
-                    className="text-xs text-dark-muted hover:text-emerald-400 border border-dark-border hover:border-emerald-500/30 rounded-lg px-2.5 py-1 transition-colors flex items-center gap-1"
+                    className="text-xs text-zinc-500 hover:text-emerald-400 border border-zinc-800 hover:border-emerald-500/30 rounded-lg px-2.5 py-1 transition-colors flex items-center gap-1"
                   >
                     <Crown size={11} /> Hacer líder
                   </button>
@@ -253,7 +253,7 @@ const UserTable = ({
                       confirm(`¿Quitar el sub-rol de Líder Técnico a ${u.nombre}?`) &&
                       onDemote(ficha.id, u.id)
                     }
-                    className="text-xs text-dark-muted hover:text-amber-400 border border-dark-border hover:border-amber-500/30 rounded-lg px-2.5 py-1 transition-colors flex items-center gap-1"
+                    className="text-xs text-zinc-500 hover:text-amber-400 border border-zinc-800 hover:border-amber-500/30 rounded-lg px-2.5 py-1 transition-colors flex items-center gap-1"
                   >
                     <Crown size={11} /> Quitar líder
                   </button>
@@ -319,18 +319,18 @@ const FichaBlock = ({
   const pendientesCount = users.filter((u: any) => !u.cuenta_confirmada).length;
 
   return (
-    <div className="bg-dark-card border border-dark-border rounded-xl overflow-hidden">
+    <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
       <button
         onClick={() => setOpen(o => !o)}
-        className="w-full flex items-center justify-between px-4 py-3 hover:bg-dark-bg/40 transition-colors"
+        className="w-full flex items-center justify-between px-4 py-3 hover:bg-zinc-950/40 transition-colors"
       >
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 rounded-lg bg-primary-500/10 border border-primary-500/20 flex items-center justify-center shrink-0">
             <Hash size={14} className="text-primary-400" />
           </div>
           <div className="text-left">
-            <p className="text-sm font-semibold text-dark-text">Ficha {ficha.codigo}</p>
-            <p className="text-[10px] text-dark-muted">{ficha.programa}</p>
+            <p className="text-sm font-semibold text-zinc-100">Ficha {ficha.codigo}</p>
+            <p className="text-[10px] text-zinc-500">{ficha.programa}</p>
           </div>
         </div>
         <div className="flex items-center gap-3">
@@ -345,13 +345,13 @@ const FichaBlock = ({
               <Trash2 size={10} /> Desvincular ({fichaSelectedIds.length})
             </button>
           )}
-          <span className="text-xs text-dark-muted">
+          <span className="text-xs text-zinc-500">
             {aprendizCount} aprendice{aprendizCount !== 1 ? 's' : ''} · {lideresCount} líder{lideresCount !== 1 ? 'es' : ''}
             {pendientesCount > 0 && (
               <span className="ml-2 text-amber-400">· {pendientesCount} pendiente{pendientesCount !== 1 ? 's' : ''}</span>
             )}
           </span>
-          <ChevronRight size={14} className={`text-dark-muted transition-transform ${open ? 'rotate-90' : ''}`} />
+          <ChevronRight size={14} className={`text-zinc-500 transition-transform ${open ? 'rotate-90' : ''}`} />
         </div>
       </button>
 
@@ -360,24 +360,24 @@ const FichaBlock = ({
           <motion.div
             initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.18 }}
-            className="overflow-hidden border-t border-dark-border"
+            className="overflow-hidden border-t border-zinc-800"
           >
             {/* Barra de búsqueda local + select-all */}
-            <div className="px-4 py-2.5 border-b border-dark-border/50 flex items-center gap-3 bg-dark-bg/20">
+            <div className="px-4 py-2.5 border-b border-zinc-800/50 flex items-center gap-3 bg-zinc-950/20">
               <div className="relative flex-1 max-w-xs">
-                <Search size={11} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-dark-muted" />
+                <Search size={11} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-500" />
                 <input
                   value={localSearch}
                   onChange={e => setLocalSearch(e.target.value)}
                   placeholder="Filtrar en esta ficha..."
-                  className="w-full bg-dark-card border border-dark-border rounded-lg pl-7 pr-3 py-1.5 text-xs text-dark-text outline-none focus:border-primary-500/40 transition-colors placeholder:text-dark-muted/40"
+                  className="w-full bg-zinc-900 border border-zinc-800 rounded-lg pl-7 pr-3 py-1.5 text-xs text-zinc-100 outline-none focus:border-primary-500/40 transition-colors placeholder:text-zinc-500/40"
                   onClick={e => e.stopPropagation()}
                 />
               </div>
               {filtered.length > 0 && (
                 <button
                   onClick={e => { e.stopPropagation(); toggleAll(); }}
-                  className="flex items-center gap-1.5 text-[10px] text-dark-muted hover:text-primary-400 transition-colors whitespace-nowrap"
+                  className="flex items-center gap-1.5 text-[10px] text-zinc-500 hover:text-primary-400 transition-colors whitespace-nowrap"
                 >
                   {allFilteredSelected
                     ? <CheckSquare size={13} className="text-primary-400" />
@@ -389,7 +389,7 @@ const FichaBlock = ({
             </div>
 
             {filtered.length === 0 ? (
-              <div className="py-6 text-center text-xs text-dark-muted">Sin coincidencias</div>
+              <div className="py-6 text-center text-xs text-zinc-500">Sin coincidencias</div>
             ) : (
               <>
                 {/* ── Pendientes de confirmación ── */}
@@ -573,16 +573,16 @@ export const InstructorEquipo = () => {
       {/* Filtros */}
       <div className="flex items-center gap-3 flex-wrap">
         <div className="relative">
-          <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-dark-muted" />
+          <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
           <input
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="Buscar aprendiz..."
-            className="bg-dark-card border border-dark-border rounded-lg pl-9 pr-3 py-2 text-sm text-dark-text outline-none focus:border-primary-500/40 transition-colors w-60 placeholder:text-dark-muted/50"
+            className="bg-zinc-900 border border-zinc-800 rounded-lg pl-9 pr-3 py-2 text-sm text-zinc-100 outline-none focus:border-primary-500/40 transition-colors w-60 placeholder:text-zinc-500/50"
           />
         </div>
         {/* ▼ CAMBIO: tabs filtran por sub-rol (es_lider_tecnico), no por rol base */}
-        <div className="flex gap-1 bg-dark-card border border-dark-border rounded-lg p-1">
+        <div className="flex gap-1 bg-zinc-900 border border-zinc-800 rounded-lg p-1">
           {([
             { key: 'all'      as const, label: `Todos (${soloAprendices.length})` },
             { key: 'aprendiz' as const, label: `Aprendices (${totalAprendices})` },
@@ -594,7 +594,7 @@ export const InstructorEquipo = () => {
               className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${
                 filterLider === key
                   ? 'bg-primary-600/15 text-primary-400'
-                  : 'text-dark-muted hover:text-dark-text'
+                  : 'text-zinc-500 hover:text-zinc-100'
               }`}
             >
               {label}
@@ -606,17 +606,17 @@ export const InstructorEquipo = () => {
       {/* Contenido */}
       {isLoading ? (
         <div className="space-y-3">
-          {[1, 2].map(n => <div key={n} className="h-16 bg-dark-card rounded-xl animate-pulse border border-dark-border" />)}
+          {[1, 2].map(n => <div key={n} className="h-16 bg-zinc-900 rounded-xl animate-pulse border border-zinc-800" />)}
         </div>
       ) : soloAprendices.length === 0 ? (
-        <div className="bg-dark-card border border-dark-border rounded-xl p-10 text-center">
-          <Users size={28} className="mx-auto text-dark-muted mb-3 opacity-30" />
-          <p className="text-sm text-dark-muted">No hay aprendices vinculados a tus fichas aún</p>
+        <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-10 text-center">
+          <Users size={28} className="mx-auto text-zinc-500 mb-3 opacity-30" />
+          <p className="text-sm text-zinc-500">No hay aprendices vinculados a tus fichas aún</p>
         </div>
       ) : fichaGroups.length === 0 ? (
-        <div className="bg-dark-card border border-dark-border rounded-xl p-10 text-center">
-          <Users size={28} className="mx-auto text-dark-muted mb-3 opacity-30" />
-          <p className="text-sm text-dark-muted">Sin resultados para este filtro</p>
+        <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-10 text-center">
+          <Users size={28} className="mx-auto text-zinc-500 mb-3 opacity-30" />
+          <p className="text-sm text-zinc-500">Sin resultados para este filtro</p>
         </div>
       ) : (
         <div className="space-y-3">

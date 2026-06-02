@@ -8,6 +8,9 @@ export const userService = {
 
   getMyContext: () => api.get('/users/me/context').then(r => r.data),
 
+  /** Dashboard context — info enriquecida de ficha, instructor, proyecto, sprint */
+  getMyDashboardContext: () => api.get('/users/me/dashboard-context').then(r => r.data),
+
   getByFicha: (fichaId: number) =>
     api.get(`/users/by-ficha/${fichaId}`).then(r => r.data),
 
@@ -28,6 +31,15 @@ export const userService = {
 
   toggleStatus: (id: number) => api.patch(`/users/${id}/toggle`).then(r => r.data),
 
+  // Confirma manualmente la cuenta de un usuario (solo coordinador)
+  // Útil cuando el usuario no tiene acceso al correo donde llegó la invitación
+  confirmAccountManual: (id: number) =>
+    api.patch(`/users/${id}/confirm-account`).then(r => r.data),
+
+  // Confirmación masiva — coordinador o instructor confirman varios a la vez
+  confirmBulk: (userIds: number[]): Promise<{ confirmed: number[]; errors: { id: number; reason: string }[] }> =>
+    api.post('/users/bulk-confirm', { userIds }).then(r => r.data),
+
   // Activa/desactiva el sub-rol de Líder Técnico (solo para aprendices, no cambia el rol base)
   toggleLiderTecnico: (id: number) =>
     api.patch(`/users/${id}/toggle-lider`).then(r => r.data),
@@ -41,6 +53,10 @@ export const userService = {
   // Cambiar contraseña propia (necesita contraseña actual)
   changeOwnPassword: (id: number, actual: string, nueva: string) =>
     api.patch(`/users/${id}/password/own`, { actual, nueva }).then(r => r.data),
+
+  // Crear contraseña por primera vez (usuarios Google/GitHub, sin contraseña actual)
+  setInitialPassword: (nueva: string) =>
+    api.post('/users/me/set-password', { nueva }).then(r => r.data),
 
   // Cambiar contraseña ajena (coordinador / instructor sobre sus aprendices)
   changePasswordAsAdmin: (targetId: number, nueva: string) =>
@@ -72,4 +88,25 @@ export const userService = {
     if (url.startsWith('http') || url.startsWith('data:')) return url;
     return `${BASE}${url}`;
   },
+
+  // ── VINCULACIÓN DE APRENDICES AUTO-REGISTRADOS A UNA FICHA ──────────────
+  /** Aprendiz solicita unirse a una ficha indicando código + jornada + documento */
+  solicitarVinculacion: (dto: { codigoFicha: string; jornada: 'mañana' | 'tarde' | 'noche'; documento: string }) =>
+    api.post('/users/me/solicitar-vinculacion', dto).then(r => r.data),
+
+  /** Instructor lista las solicitudes pendientes de su ficha */
+  getSolicitudesPendientes: (fichaId: number) =>
+    api.get(`/users/solicitudes-pendientes/ficha/${fichaId}`).then(r => r.data),
+
+  /** Instructor aprueba la solicitud */
+  aprobarVinculacion: (userId: number) =>
+    api.patch(`/users/${userId}/aprobar-vinculacion`).then(r => r.data),
+
+  /** Instructor rechaza la solicitud (motivo opcional) */
+  rechazarVinculacion: (userId: number, motivo?: string) =>
+    api.patch(`/users/${userId}/rechazar-vinculacion`, { motivo }).then(r => r.data),
+
+  /** Fuerza una revisión de rebotes de correo (lee la bandeja IMAP) */
+  revisarRebotes: (): Promise<{ revisados: number; rebotados: number; correos: string[] }> =>
+    api.post('/bounces/revisar').then(r => r.data),
 };

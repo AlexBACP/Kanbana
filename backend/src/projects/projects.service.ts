@@ -1,12 +1,13 @@
 import { Injectable, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, In } from 'typeorm';
+import { Repository, In, Not } from 'typeorm';
 import { Project, ProjectStatus } from './entities/project.entity';
 import { Sprint } from './entities/sprint.entity';
 import { User, UserRole } from '../users/entities/user.entity';
 import { Trimestre, TipoTrimestre } from './entities/trimestre.entity';
 import { NotificationsService } from '../notifications/notifications.service';
 import { EmailService }         from '../email/email.service';
+import { PLANTILLAS_POR_TIPO }  from '../fichas/plantillas-sdlc';
 
 @Injectable()
 export class ProjectsService {
@@ -82,15 +83,190 @@ export class ProjectsService {
   async findOne(id: number): Promise<Project> {
     const p = await this.projectsRepo.findOne({
       where:     { id },
-      relations: ['lider', 'instructor', 'miembros', 'ficha', 'tickets', 'tickets.asignado_a'],
+      relations: ['lider', 'instructor', 'miembros', 'ficha', 'ficha.instructor', 'tickets', 'tickets.asignado_a'],
     });
     if (!p) throw new NotFoundException('Proyecto no encontrado');
+
+    // Si el proyecto no tiene instructor asignado directamente pero pertenece a
+    // una ficha que sí tiene instructor, hereda el instructor de la ficha.
+    if (!p.instructor && (p as any).ficha?.instructor) {
+      (p as any).instructor = (p as any).ficha.instructor;
+    }
+
     return p;
   }
 
   async create(dto: any): Promise<Project> {
-    const p = this.projectsRepo.create(dto as object);
-    return this.projectsRepo.save(p as Project);
+    const data: any = { ...dto };
+
+    // ── Cargar la ficha una sola vez para reutilizarla ───────────────────────
+    let ficha: any = null;
+    if (data.fichaId) {
+      ficha = await this.projectsRepo.manager
+        .getRepository('Ficha')
+        .findOne({ where: { id: data.fichaId } });
+      if (ficha) {
+        // Auto-derivar fechas si no vienen en el DTO
+        data.fecha_inicio = data.fecha_inicio || ficha.fecha_inicio;
+        data.fecha_fin    = data.fecha_fin    || ficha.fecha_fin;
+      }
+    }
+
+    // ── descripcion es NOT NULL en la entidad: usar competencia como fallback ─
+    if (!data.descripcion) {
+      data.descripcion = data.competencia ?? data.resultado_aprendizaje ?? '';
+    }
+
+    const p = this.projectsRepo.create(data as object);
+    const saved = await this.projectsRepo.save(p as Project);
+
+    // ── Auto-generar módulos (sprints) desde la plantilla SDLC ───────────────
+    // Los trimestres ya existen en la ficha; aquí solo creamos los sprints
+    // vinculados al proyecto y a su trimestre correspondiente.
+    if (ficha?.tipo_formacion) {
+      await this.generarModulosDePlantilla(saved.id, ficha);
+    }
+
+    return this.findOne(saved.id);
+  }
+
+  /**
+   * Genera los sprints (módulos) de un proyecto recién creado siguiendo la
+   * plantilla SDLC del tipo de formación de su ficha. Cada módulo se vincula
+   * al trimestre de la ficha que le corresponde por posición y sus fechas se
+   * calculan distribuyendo las semanas dentro del rango del trimestre.
+   */
+  private async generarModulosDePlantilla(proyectoId: number, ficha: any): Promise<number> {
+    const tipo      = ficha.tipo_formacion === 'tecnico' ? 'tecnico' : 'tecnologo';
+    const plantilla = PLANTILLAS_POR_TIPO[tipo];
+    if (!plantilla?.length) return 0;
+
+    // Cargar trimestres de la ficha ordenados por numero
+    const trimestres = await this.trimestresRepo.find({
+      where: { ficha_id: ficha.id },
+      order: { numero: 'ASC' },
+    });
+    if (!trimestres.length) return 0;
+
+    // Módulos que el instructor desmarcó al crear la ficha ("<i>:<j>").
+    const excluidos = new Set<string>(
+      Array.isArray((ficha as any).modulos_excluidos) ? (ficha as any).modulos_excluidos : [],
+    );
+
+    let creados = 0;
+    for (let i = 0; i < plantilla.length; i++) {
+      const trimPlantilla = plantilla[i];
+      const trimestre     = trimestres[i]; // correspondencia 1-a-1 por posición
+      if (!trimestre) continue;
+
+      let cursor = new Date(trimestre.fecha_inicio);
+      cursor.setHours(0, 0, 0, 0);
+
+      for (let j = 0; j < trimPlantilla.modulos.length; j++) {
+        // Saltar los módulos deseleccionados (no se crean ni reservan fechas).
+        if (excluidos.has(`${i}:${j}`)) continue;
+        const modulo = trimPlantilla.modulos[j];
+        const fechaInicio = new Date(cursor);
+        const fechaFin    = new Date(cursor);
+        fechaFin.setDate(fechaFin.getDate() + modulo.semanas * 7 - 1);
+
+        const sprint = this.sprintsRepo.create({
+          nombre:       modulo.nombre,
+          descripcion:  modulo.descripcion,
+          proyecto_id:  proyectoId,
+          trimestre_id: trimestre.id,
+          fecha_inicio: fechaInicio.toISOString().slice(0, 10) as any,
+          fecha_fin:    fechaFin.toISOString().slice(0, 10) as any,
+          esta_activo:        false,
+          esta_finalizado:    false,
+          pendiente_revision: false,
+        } as object);
+
+        await this.sprintsRepo.save(sprint as unknown as Sprint);
+        creados++;
+
+        // Avanzar cursor al siguiente módulo
+        cursor = new Date(fechaFin);
+        cursor.setDate(cursor.getDate() + 1);
+      }
+    }
+    return creados;
+  }
+
+  /**
+   * Genera los módulos de la plantilla SDLC para un proyecto YA EXISTENTE.
+   * Pensado para proyectos creados antes de que la auto-generación existiera.
+   *
+   * Por seguridad NO duplica: si el proyecto ya tiene sprints, se omite
+   * (salvo force=true, que primero borra los sprints SIN finalizar y respeta
+   * los finalizados para no perder trabajo evaluado).
+   */
+  async generarModulosParaProyecto(
+    proyectoId: number,
+    opts: { force?: boolean } = {},
+  ): Promise<{ creados: number; omitido: boolean; motivo?: string }> {
+    const project = await this.projectsRepo.findOne({ where: { id: proyectoId } });
+    if (!project) throw new NotFoundException('Proyecto no encontrado');
+    if (!project.fichaId) {
+      return { creados: 0, omitido: true, motivo: 'El proyecto no tiene ficha asignada.' };
+    }
+
+    const ficha = await this.projectsRepo.manager
+      .getRepository('Ficha')
+      .findOne({ where: { id: project.fichaId } });
+    if (!ficha || !(ficha as any).tipo_formacion) {
+      return { creados: 0, omitido: true, motivo: 'La ficha no tiene tipo de formación.' };
+    }
+
+    const sprintsExistentes = await this.sprintsRepo.find({ where: { proyecto_id: proyectoId } });
+    if (sprintsExistentes.length > 0) {
+      if (!opts.force) {
+        return { creados: 0, omitido: true, motivo: 'El proyecto ya tiene módulos. Usa force para regenerarlos.' };
+      }
+      const tieneFinalizados = sprintsExistentes.some(s => s.esta_finalizado);
+      if (tieneFinalizados) {
+        return {
+          creados: 0, omitido: true,
+          motivo: 'No se regeneran: existen módulos ya finalizados (trabajo evaluado).',
+        };
+      }
+      // Borrar solo los no finalizados antes de regenerar
+      await this.sprintsRepo.delete({ proyecto_id: proyectoId });
+    }
+
+    const creados = await this.generarModulosDePlantilla(proyectoId, ficha);
+    return { creados, omitido: false };
+  }
+
+  /**
+   * Seed masivo (one-shot): genera módulos para TODOS los proyectos con ficha
+   * que aún no tienen ningún sprint. No toca proyectos que ya tienen módulos.
+   */
+  async seedModulosFaltantes(): Promise<{
+    revisados: number;
+    poblados: number;
+    sprints_creados: number;
+    detalle: { proyecto_id: number; nombre: string; creados: number; motivo?: string }[];
+  }> {
+    const proyectos = await this.projectsRepo.find();
+    const detalle: { proyecto_id: number; nombre: string; creados: number; motivo?: string }[] = [];
+    let poblados = 0;
+    let sprintsCreados = 0;
+
+    for (const p of proyectos) {
+      if (!p.fichaId) {
+        detalle.push({ proyecto_id: p.id, nombre: p.nombre, creados: 0, motivo: 'sin ficha' });
+        continue;
+      }
+      const res = await this.generarModulosParaProyecto(p.id, { force: false });
+      if (res.creados > 0) {
+        poblados++;
+        sprintsCreados += res.creados;
+      }
+      detalle.push({ proyecto_id: p.id, nombre: p.nombre, creados: res.creados, motivo: res.motivo });
+    }
+
+    return { revisados: proyectos.length, poblados, sprints_creados: sprintsCreados, detalle };
   }
 
   async update(id: number, dto: any): Promise<Project> {
@@ -120,28 +296,51 @@ export class ProjectsService {
       : null;
 
     // ── Quitar sub-rol al líder anterior si cambia ─────────────────────────
+    // IMPORTANTE: solo quitar es_lider_tecnico si el aprendiz NO lidera
+    // ningún otro proyecto (evita bug si por algún caso lidera varios).
     if (p.liderId && p.liderId !== liderId) {
       const oldLider = await this.usersRepo.findOne({ where: { id: p.liderId } });
       if (oldLider && oldLider.rol === UserRole.APRENDIZ) {
-        oldLider.es_lider_tecnico = false;
-        await this.usersRepo.save(oldLider);
+        const otrosProyectos = await this.projectsRepo.count({
+          where: { liderId: oldLider.id, id: Not(id) },
+        });
+        if (otrosProyectos === 0) {
+          oldLider.es_lider_tecnico = false;
+          await this.usersRepo.save(oldLider);
+        }
       }
     }
 
     if (!liderId) {
-      // Quitar líder completamente
-      p.lider   = null as any;
-      p.liderId = null as any;
+      // Quitar líder completamente — escritura EXPLÍCITA de la columna FK
+      await this.projectsRepo.update(id, { liderId: null as any });
     } else {
       const u = await this.usersRepo.findOne({ where: { id: liderId } });
       if (!u) throw new NotFoundException('Usuario no encontrado');
-      p.lider   = u;
-      p.liderId = liderId;
+
+      // ── Escritura EXPLÍCITA de la columna liderId ────────────────────────
+      // Antes se hacía p.lider = u + p.liderId = liderId + save(p). Al venir 'p'
+      // de findOne() con relaciones (miembros ManyToMany), TypeORM a veces no
+      // persistía la columna liderId → el líder no aparecía ni se reconocía.
+      // update() garantiza que la columna queda escrita.
+      await this.projectsRepo.update(id, { liderId });
 
       // ── Dar el sub-rol al nuevo líder ────────────────────────────────────
       if (u.rol === UserRole.APRENDIZ && !u.es_lider_tecnico) {
         u.es_lider_tecnico = true;
         await this.usersRepo.save(u);
+      }
+
+      // ── Garantizar que el líder también sea MIEMBRO del proyecto ──────────
+      // Mantiene consistencia: findForUser y los chequeos por membresía
+      // dependen de proyecto_usuarios. INSERT IGNORE evita duplicados.
+      try {
+        await this.projectsRepo.manager.query(
+          `INSERT IGNORE INTO proyecto_usuarios (project_id, user_id) VALUES (?, ?)`,
+          [id, liderId],
+        );
+      } catch (e) {
+        // No crítico: si falla la membresía, el liderId ya quedó escrito.
       }
 
       // ── Notificación in-app al nuevo líder ────────────────────────────────
@@ -164,11 +363,18 @@ export class ProjectsService {
       }
     }
 
-    return this.projectsRepo.save(p as Project);
+    // Devolver datos frescos. NO usar save(p): 'p' tiene en memoria el liderId
+    // anterior y sobrescribiría la columna que acabamos de escribir con update().
+    return this.findOne(id);
   }
 
   async remove(id: number): Promise<void> {
     const p = await this.findOne(id);
+    // Los sprints NO tienen ON DELETE CASCADE hacia el proyecto, así que la FK
+    // bloquea el borrado. Se eliminan primero (los tickets quedan con
+    // sprint_id = NULL por SET NULL y luego caen por el CASCADE del proyecto).
+    // tickets, recursos, sugerencias y repos GitHub sí tienen CASCADE.
+    await this.sprintsRepo.delete({ proyecto_id: id });
     await this.projectsRepo.remove(p);
   }
 
@@ -397,18 +603,44 @@ export class ProjectsService {
   // Devuelve todos los trimestres de un proyecto, ordenados por número (1→2→3).
   // Cada trimestre incluye sus sprints con sus tickets.
   async findTrimestres(proyecto_id: number): Promise<Trimestre[]> {
-    // ── MODIFICADO: los trimestres ahora pertenecen a la ficha, no al proyecto.
-    // Buscamos el fichaId del proyecto y traemos los trimestres de esa ficha.
+    // Trimestres pertenecen a la FICHA; filtramos sprints por proyecto_id.
     const proyecto = await this.projectsRepo.findOne({
       where: { id: proyecto_id },
       select: ['id', 'fichaId'],
     });
     if (!proyecto?.fichaId) return [];
-    return this.trimestresRepo.find({
-      where:     { ficha_id: proyecto.fichaId },
-      relations: ['sprints', 'sprints.tickets', 'sprints.tickets.asignado_a'],
-      order:     { numero: 'ASC' },
+
+    // 1. Cargar trimestres de la ficha (sin relación sprints para evitar mezcla entre proyectos)
+    const trimestres = await this.trimestresRepo.find({
+      where:  { ficha_id: proyecto.fichaId },
+      order:  { numero: 'ASC' },
     });
+
+    // 2. Cargar TODOS los sprints de ESTE proyecto con sus tickets
+    const todosSprints = await this.sprintsRepo.find({
+      where:     { proyecto_id },
+      relations: ['tickets', 'tickets.asignado_a'],
+    });
+
+    // 3. Distribuir sprints en trimestres:
+    //    a) Sprint con trimestre_id asignado → va al trimestre correspondiente
+    //    b) Sprint huérfano (trimestre_id = null) → va al trimestre cuyo rango
+    //       de fechas cubre la fecha_inicio del sprint
+    for (const trim of trimestres) {
+      const trimStart = new Date(trim.fecha_inicio).getTime();
+      const trimEnd   = new Date(trim.fecha_fin).getTime();
+
+      (trim as any).sprints = todosSprints.filter(s => {
+        if (s.trimestre_id === trim.id) return true;
+        if (!s.trimestre_id) {
+          const sprintStart = new Date(s.fecha_inicio).getTime();
+          return sprintStart >= trimStart && sprintStart <= trimEnd;
+        }
+        return false;
+      });
+    }
+
+    return trimestres;
   }
 
   // Crear un trimestre adicional manualmente (por si el instructor necesita ajustar).
@@ -615,9 +847,27 @@ export class ProjectsService {
     if (!sprint) throw new NotFoundException('Módulo no encontrado.');
 
     const proyecto = (sprint as any).proyecto;
+    const actorId  = Number(liderId);
 
-    // Solo el líder del proyecto puede solicitar revisión
-    if (proyecto?.liderId !== liderId) {
+    // ── Permiso: ¿es el líder técnico de ESTE proyecto? ──────────────────────
+    // 1) Vía liderId (fuente principal). Number() en ambos lados para evitar
+    //    falso negativo por string vs number (MySQL / JWT).
+    // 2) Fallback por membresía en proyecto_usuarios: si liderId quedó NULL por
+    //    inconsistencia de datos, igual permitimos a un aprendiz con
+    //    es_lider_tecnico=true que sea miembro del proyecto. (Mismo criterio que
+    //    usa TicketsService.create para no bloquear al líder legítimo.)
+    let permitido = Number(proyecto?.liderId) === actorId;
+    if (!permitido) {
+      const actor = await this.usersRepo.findOne({ where: { id: actorId } });
+      if ((actor as any)?.es_lider_tecnico === true) {
+        const rows = await this.sprintsRepo.manager.query(
+          `SELECT COUNT(*) as cnt FROM proyecto_usuarios WHERE project_id = ? AND user_id = ?`,
+          [proyecto?.id, actorId],
+        );
+        permitido = Number(rows?.[0]?.cnt) > 0;
+      }
+    }
+    if (!permitido) {
       throw new ForbiddenException('Solo el líder técnico del proyecto puede enviar el módulo a revisión.');
     }
 
@@ -750,5 +1000,62 @@ export class ProjectsService {
       relations: ['proyecto', 'proyecto.lider', 'tickets'],
       order:     { creado_en: 'DESC' },
     });
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // FLUJO DE SOLICITUD DE MÓDULO (SPRINT) POR EL LÍDER TÉCNICO
+  // Cuando el instructor acepta: se crea el sprint automáticamente.
+  // Cuando rechaza: se notifica al líder con el motivo.
+  // ══════════════════════════════════════════════════════════════════════════
+
+  async acceptSprintSolicitud(notifId: number, instructorId: number): Promise<{ mensaje: string; sprint: Sprint }> {
+    const notif = await this.notificationsService.findById(notifId);
+    if (!notif) throw new NotFoundException('Notificación no encontrada');
+    if (notif.usuario_id !== instructorId) throw new ForbiddenException('No autorizado para responder esta solicitud');
+
+    const data = JSON.parse(notif.action_data || '{}');
+
+    // Crear el sprint con los datos que envió el líder
+    const sprint = await this.createSprint(data.proyecto_id, {
+      nombre:       data.nombre,
+      fecha_inicio: data.fecha_inicio || undefined,
+      fecha_fin:    data.fecha_fin    || undefined,
+    });
+
+    // Eliminar la notificación del instructor (ya fue procesada)
+    await this.notificationsService.delete(notifId);
+
+    // Notificar al líder que su solicitud fue aprobada
+    await this.notificationsService.create({
+      usuario_id: data.lider_id,
+      titulo:     'Módulo aprobado ✓',
+      mensaje:    `Tu solicitud de módulo "${data.nombre}" fue aprobada por el instructor. El módulo ya está disponible en el proyecto.`,
+      tipo:       'success' as any,
+    });
+
+    return { mensaje: 'Módulo creado correctamente.', sprint };
+  }
+
+  async rejectSprintSolicitud(notifId: number, instructorId: number, motivo?: string): Promise<{ mensaje: string }> {
+    const notif = await this.notificationsService.findById(notifId);
+    if (!notif) throw new NotFoundException('Notificación no encontrada');
+    if (notif.usuario_id !== instructorId) throw new ForbiddenException('No autorizado para responder esta solicitud');
+
+    const data = JSON.parse(notif.action_data || '{}');
+
+    // Eliminar la notificación del instructor (ya fue procesada)
+    await this.notificationsService.delete(notifId);
+
+    // Notificar al líder que su solicitud fue rechazada
+    await this.notificationsService.create({
+      usuario_id: data.lider_id,
+      titulo:     'Solicitud de módulo rechazada',
+      mensaje:    `Tu solicitud del módulo "${data.nombre}" fue rechazada por el instructor.${
+        motivo ? ` Motivo: ${motivo}` : ''
+      }`,
+      tipo: 'warning' as any,
+    });
+
+    return { mensaje: 'Solicitud rechazada correctamente.' };
   }
 }

@@ -20,8 +20,8 @@ export const AuthLayout = () => {
   // CLAVE: mientras AuthInit trabaja, no redirigir
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-dark-bg">
-        <div className="w-6 h-6 border-2 border-dark-border border-t-primary-500 rounded-full animate-spin" />
+      <div className="min-h-screen flex items-center justify-center bg-zinc-950">
+        <div className="w-6 h-6 border-2 border-zinc-800 border-t-blue-500 rounded-full animate-spin" />
       </div>
     );
   }
@@ -32,8 +32,8 @@ export const AuthLayout = () => {
     return <Navigate to={dest} replace />;
   }
 
-  // Mostrar el formulario de login o registro
-  // El LoginPage y RegisterPage tienen su propio fondo completo,
-  // así que AuthLayout solo wrappea el Outlet sin estilos extra.
+  // Páginas de auth restantes (forgot/reset/confirmar-cuenta).
+  // Login y registro ya NO son páginas: viven en el panel lateral (LoginAside).
+  // Cada página tiene su propio fondo, así que solo envolvemos el Outlet.
   return <Outlet />;
 };

@@ -12,6 +12,7 @@ import { ticketService }  from '../../services/ticket.service';
 import { projectService } from '../../services/project.service';
 import { recursoService } from '../../services/recurso.service';
 import { GitHubWidget }   from '../../components/GitHubWidget';
+import { MiContextoCard } from '../../components/MiContextoCard';
 import { Ticket } from '../../types/ticket.types';
 
 // ── Sugerencias rotativas (específicas para aprendiz) ────────────────────────
@@ -64,11 +65,11 @@ export const AprendizOverview = () => {
 
   // Reloj en tiempo real
   const [time, setTime] = useState(() =>
-    new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+    new Date().toLocaleTimeString('es-CO', { hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: true }).toLowerCase()
   );
   useEffect(() => {
     const id = setInterval(() => {
-      setTime(new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+      setTime(new Date().toLocaleTimeString('es-CO', { hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: true }).toLowerCase());
     }, 1000);
     return () => clearInterval(id);
   }, []);
@@ -152,7 +153,7 @@ export const AprendizOverview = () => {
     <div className="space-y-6">
 
       {/* ── Banner ─────────────────────────────────────────────────────── */}
-      <div className="relative overflow-hidden m-6 rounded-md p-8 text-white shadow-lg bg-gradient-to-br from-cyan-700 via-sky-800 to-sky-950">
+      <div className="relative overflow-hidden m-6 rounded-md p-8 text-white shadow-lg" style={{ background: 'linear-gradient(135deg, #1a1d3d 0%, #2d3075 50%, #0d0f20 100%)' }}>
         {/* SVG decorativo: línea de progreso ascendente con nodos */}
         <div className="absolute top-0 right-0 w-2/5 h-full opacity-15 pointer-events-none">
           <svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
@@ -191,7 +192,7 @@ export const AprendizOverview = () => {
             <h1 className="text-3xl font-bold tracking-tight">
               Hola, {user?.nombre?.split(' ')[0]} {user?.nombre?.split(' ')[1] || ''}
             </h1>
-            <p className="text-cyan-200 font-medium text-sm">
+            <p className="text-indigo-200 font-medium text-sm">
               {miProyecto
                 ? `Proyecto activo: ${miProyecto.nombre}`
                 : 'Sin proyecto asignado aún'}
@@ -210,15 +211,28 @@ export const AprendizOverview = () => {
               <span className="text-xs font-semibold uppercase tracking-wider opacity-80">Mi avance</span>
             </div>
             {!isLoading && counts.in_progress > 0 && (
-              <div className="flex items-center gap-1.5 bg-cyan-500/20 border border-cyan-400/30 rounded-md px-3 py-1.5">
-                <Layers size={11} className="text-cyan-300" />
-                <span className="text-xs font-bold text-cyan-200">
+              <div className="flex items-center gap-1.5 bg-indigo-500/20 border border-indigo-400/30 rounded-md px-3 py-1.5">
+                <Layers size={11} className="text-indigo-300" />
+                <span className="text-xs font-bold text-indigo-200">
                   {counts.in_progress} en progreso
+                </span>
+              </div>
+            )}
+            {!isLoading && poolTickets.length > 0 && (
+              <div className="flex items-center gap-1.5 bg-emerald-500/20 border border-emerald-400/30 rounded-md px-3 py-1.5">
+                <Inbox size={11} className="text-emerald-300" />
+                <span className="text-xs font-bold text-emerald-200">
+                  {poolTickets.length} disponible{poolTickets.length !== 1 ? 's' : ''}
                 </span>
               </div>
             )}
           </div>
         </div>
+      </div>
+
+      {/* ── Mi contexto en el sistema (ficha, instructor, proyecto, módulo) */}
+      <div className="mx-6">
+        <MiContextoCard />
       </div>
 
       {/* ── Módulo activo ─────────────────────────────────────────────── */}
