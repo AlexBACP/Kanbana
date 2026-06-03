@@ -2,76 +2,75 @@
  * LandingPage — ruta pública "/"
  */
 import { useEffect, useState, useRef } from 'react';
+import { useForm } from 'react-hook-form';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuthStore } from '../store/auth.store';
 import { LoginAside } from '../components/LoginAside';
 import { KanbanaLogo } from '../components/KanbanaLogo';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
   ArrowRight, Kanban, Users, FileText, BarChart2, Bell, ShieldCheck,
-  ChevronLeft, ChevronRight, Sun, Moon, Contrast,
+  Send, CheckCircle2,
 } from 'lucide-react';
+import { authService } from '../services/auth.service';
+import { SystemShowcase } from '../components/landing/SystemShowcase';
+import { RoleCards3D } from '../components/landing/RoleCards3D';
 
-/** Cicla entre los 3 modos de tema */
-const ThemeToggle = () => {
-  const { settings, updateSettings } = useAuthStore();
-  const mode = settings.themeMode ?? 'dark';
-  const next  = mode === 'dark' ? 'light' : mode === 'light' ? 'dim' : 'dark';
-  const Icon  = mode === 'dark' ? Moon : mode === 'light' ? Sun : Contrast;
-  const label = mode === 'dark' ? 'Oscuro' : mode === 'light' ? 'Claro' : 'Atenuado';
-  return (
-    <button
-      onClick={() => updateSettings({ themeMode: next })}
-      title={`Tema actual: ${label} — clic para cambiar`}
-      className="flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-zinc-200 bg-zinc-50 text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 text-xs font-bold transition-all"
-    >
-      <Icon size={13} />
-      <span className="hidden sm:inline">{label}</span>
-    </button>
-  );
-};
 
 // ─────────────────────────────────────────────────────────────────────────────
-// CollageImage — crossfade suave entre imágenes (sin scale ni border-radius)
-// ANTES: scale-0 + rounded-full → parecía girar/encogerse en círculo
-// AHORA: fade de opacidad simple, profesional
+// Collage vivo — lienzo libre (sin caja): cada imagen flota, cambia de tamaño,
+// posición, rotación y de foto, con su propio ritmo. Los bordes se difuminan
+// con una máscara radial para que no parezca un rectángulo recortado.
 // ─────────────────────────────────────────────────────────────────────────────
-const CollageImage = ({ images, className }: { images: string[]; className: string }) => {
-  const [current, setCurrent] = useState(0);
-  const [fading,  setFading]  = useState(false);
-  const initialized = useRef(false);
+const rand = (a: number, b: number) => a + Math.random() * (b - a);
+const pick = <T,>(arr: T[]): T => arr[Math.floor(Math.random() * arr.length)];
+
+interface TileBase {
+  top: string; left: string; w: number; h: number; bright: number; z: number;
+}
+
+// FloatingTile — una imagen del collage que flota, cambia de tamaño, posición,
+// rotación y de foto, con su propio ritmo aleatorio.
+const FloatingTile = ({ pool, base, delay }: { pool: string[]; base: TileBase; delay: number }) => {
+  const [img, setImg] = useState(() => pick(pool));
+  const [t,   setT]   = useState({ x: 0, y: 0, scale: 1, rotate: rand(-5, 5) });
 
   useEffect(() => {
-    // Delay inicial aleatorio para que no todas las imágenes cambien a la vez
-    const initialDelay = initialized.current ? 0 : Math.random() * 3000;
-    initialized.current = true;
-
-    const start = () => {
-      const cycleTime = 5000 + Math.random() * 4000;   // 5–9 s entre cambios
-      return setInterval(() => {
-        setFading(true);                                 // fade out (500 ms)
-        setTimeout(() => {
-          setCurrent(p => (p + 1) % images.length);
-          setFading(false);                              // fade in
-        }, 500);
-      }, cycleTime);
+    let timer: ReturnType<typeof setTimeout>;
+    const tick = () => {
+      setImg(pick(pool));                          // nueva imagen
+      setT({
+        x:      rand(-38, 38),                     // deriva horizontal
+        y:      rand(-30, 30),                     // deriva vertical
+        scale:  rand(0.8, 1.25),                   // cambia de tamaño
+        rotate: rand(-7, 7),                       // ligera rotación
+      });
+      timer = setTimeout(tick, rand(3800, 7400));  // ritmo propio
     };
-
-    let id: ReturnType<typeof setInterval>;
-    const tid = setTimeout(() => { id = start(); }, initialDelay);
-
-    return () => { clearTimeout(tid); clearInterval(id); };
-  }, [images.length]);
+    timer = setTimeout(tick, delay);               // arranque escalonado
+    return () => clearTimeout(timer);
+  }, [pool, delay]);
 
   return (
-    <div className={`relative overflow-hidden rounded-md ${className}`}>
-      <img
-        src={images[current]}
-        alt="Ecosistema de Desarrollo"
-        className={`w-full h-full object-cover transition-opacity duration-500 ease-in-out ${
-          fading ? 'opacity-0' : 'opacity-100'
-        }`}
-      />
-    </div>
+    <motion.div
+      className="absolute rounded-2xl overflow-hidden shadow-2xl shadow-black/40 ring-1 ring-white/10"
+      style={{ top: base.top, left: base.left, width: base.w, height: base.h, zIndex: base.z, filter: `brightness(${base.bright})` }}
+      animate={{ x: t.x, y: t.y, scale: t.scale, rotate: t.rotate }}
+      transition={{ duration: 2.4, ease: [0.4, 0, 0.2, 1] }}
+    >
+      <AnimatePresence>
+        <motion.img
+          key={img}
+          src={img}
+          alt=""
+          className="absolute inset-0 h-full w-full object-cover"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 1 }}
+        />
+      </AnimatePresence>
+    </motion.div>
   );
 };
 
@@ -97,6 +96,36 @@ const poolSlot5 = [
   'https://images.unsplash.com/photo-1504384308090-c894fdcc538d?auto=format&fit=crop&w=900&q=80',
 ];
 
+// Banco completo (para las baldosas "comodín" que pueden mostrar cualquier foto)
+const COLLAGE_POOL = [...poolSlot1, ...poolSlot2, ...poolSlot3, ...poolSlot4, ...poolSlot5];
+
+// LiveCollage — 7 imágenes flotando libremente sobre un lienzo sin caja.
+// Posiciones base repartidas + solape ligero; el ritmo y los tamaños son
+// aleatorios e independientes por baldosa.
+const LiveCollage = () => {
+  const tiles: { pool: string[]; base: TileBase; delay: number }[] = [
+    { pool: poolSlot1,    base: { top: '2%',  left: '3%',  w: 240, h: 175, bright: 0.95, z: 6 }, delay: 200  },
+    { pool: poolSlot3,    base: { top: '6%',  left: '46%', w: 185, h: 135, bright: 0.85, z: 4 }, delay: 900  },
+    { pool: COLLAGE_POOL, base: { top: '0%',  left: '70%', w: 165, h: 205, bright: 0.9,  z: 8 }, delay: 2600 },
+    { pool: poolSlot2,    base: { top: '40%', left: '18%', w: 160, h: 160, bright: 0.8,  z: 7 }, delay: 1300 },
+    { pool: poolSlot4,    base: { top: '50%', left: '52%', w: 205, h: 150, bright: 0.78, z: 5 }, delay: 2000 },
+    { pool: poolSlot5,    base: { top: '58%', left: '2%',  w: 150, h: 125, bright: 0.82, z: 3 }, delay: 1700 },
+    { pool: COLLAGE_POOL, base: { top: '38%', left: '76%', w: 135, h: 125, bright: 0.75, z: 2 }, delay: 3300 },
+  ];
+
+  return (
+    // Sin máscara ni overflow-hidden: las imágenes se ven COMPLETAS aunque
+    // se salgan del área. overflow-visible permite que rebasen libremente.
+    <div className="relative h-[420px] overflow-visible sm:h-[480px] md:h-[560px]">
+      {/* Resplandor azul de fondo */}
+      <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(circle_at_42%_42%,rgba(37,99,235,0.18),transparent_70%)]" />
+      {tiles.map((t, i) => (
+        <FloatingTile key={i} pool={t.pool} base={t.base} delay={t.delay} />
+      ))}
+    </div>
+  );
+};
+
 export const LandingPage = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -114,15 +143,56 @@ export const LandingPage = () => {
     }
   }, [isAuthenticated, isLoading, user, navigate]);
 
-  // La landing siempre se muestra en azul sin importar el tema del usuario
+  // La landing siempre se muestra en azul Y en modo OSCURO, sin importar el
+  // tema del usuario. La landing está diseñada sobre fondos oscuros (hero,
+  // carrusel, imágenes con texto blanco); si se aplicara el modo claro, los
+  // overrides html.light volverían blancos esos fondos y el texto/imagen
+  // quedarían ilegibles. Restauramos el tema y modo del usuario al salir.
   useEffect(() => {
     const html = document.documentElement;
-    const prev = html.getAttribute('data-theme') ?? 'blue';
+    const prevTheme = html.getAttribute('data-theme') ?? 'blue';
+    const hadLight  = html.classList.contains('light');
+    const hadDim    = html.classList.contains('dim');
+
     html.setAttribute('data-theme', 'blue');
-    return () => { html.setAttribute('data-theme', prev); };
+    html.classList.remove('light', 'dim');
+    html.classList.add('dark');
+
+    return () => {
+      html.setAttribute('data-theme', prevTheme);
+      // Restaurar el modo que tenía el usuario
+      html.classList.remove('dark', 'light', 'dim');
+      if (hadLight)      html.classList.add('light');
+      else if (hadDim)   html.classList.add('dark', 'dim');
+      else               html.classList.add('dark');
+    };
   }, []);
 
   const [loginOpen,     setLoginOpen]     = useState(false);
+
+  // ── PQRS ──────────────────────────────────────────────────────────────────
+  type PqrsTipo = 'peticion' | 'queja' | 'reclamo' | 'sugerencia';
+  interface PqrsForm { nombre: string; correo: string; mensaje: string; }
+  const [pqrsTipo, setPqrsTipo] = useState<PqrsTipo>('sugerencia');
+  const [pqrsOk,   setPqrsOk]   = useState(false);
+  const pqrsForm = useForm<PqrsForm>({ defaultValues: { nombre: '', correo: '', mensaje: '' } });
+
+  const onPqrsSubmit = async (data: PqrsForm) => {
+    try {
+      await authService.sendPqrs({
+        nombre:  data.nombre.trim(),
+        correo:  data.correo.trim().toLowerCase(),
+        tipo:    pqrsTipo,
+        mensaje: data.mensaje.trim(),
+      });
+      setPqrsOk(true);
+      pqrsForm.reset();
+    } catch (err: any) {
+      pqrsForm.setError('root', {
+        message: err?.response?.data?.message || 'No se pudo enviar el mensaje. Intenta de nuevo.',
+      });
+    }
+  };
 
   // Abrir el panel de acceso automáticamente si llegamos con redirect/error
   useEffect(() => {
@@ -131,7 +201,6 @@ export const LandingPage = () => {
 
   const [currentSlide,  setCurrentSlide]  = useState(0);
   const [slideVisible,  setSlideVisible]  = useState(true);  // para fade del contenido
-  const [featureOffset, setFeatureOffset] = useState(0);
 
   const goToLogin = () => setLoginOpen(true);
 
@@ -183,15 +252,7 @@ export const LandingPage = () => {
     { icon: ShieldCheck, title: 'Control de acceso',  desc: 'Cada rol ve solo lo que necesita. Seguridad basada en JWT con tokens de acceso y refresco.' },
   ];
 
-  const roles = [
-    { label: 'Coordinador',   desc: 'Gestiona fichas, usuarios y todos los proyectos del programa.' },
-    { label: 'Instructor',    desc: 'Supervisa los proyectos de sus fichas asignadas y aprendices.' },
-    { label: 'Líder técnico', desc: 'Dirige el equipo de desarrollo, gestiona backlog y sprints.' },
-    { label: 'Aprendiz',      desc: 'Trabaja sus tickets asignados desde el tablero Kanban personal.' },
-  ];
 
-  const handlePrevFeature = () => setFeatureOffset(p => Math.max(p - 1, 0));
-  const handleNextFeature  = () => setFeatureOffset(p => Math.min(p + 1, features.length - 3));
 
   return (
     <div className="min-h-screen bg-zinc-900 text-zinc-100 font-sans overflow-x-hidden selection:bg-blue-600 selection:text-white">
@@ -214,7 +275,9 @@ export const LandingPage = () => {
               <a className="hover:text-zinc-700 transition-colors" href="#contact">Soporte</a>
             </nav>
             <div className="flex items-center gap-2">
-              <ThemeToggle />
+              {/* El selector de tema vive en Configuración (post-login). La landing
+                  es siempre azul + oscuro por diseño; tener el toggle aquí hacía que
+                  al cambiar de modo el acento saltara al color guardado del usuario. */}
               <button
                 onClick={goToLogin}
                 className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-md transition-all shadow-sm active:scale-95"
@@ -302,26 +365,16 @@ export const LandingPage = () => {
         </div>
       </header>
 
-      {/* ── COLLAGE ASIMÉTRICO ─────────────────────────────────────────────── */}
-      <section className="mx-auto max-w-[1100px] px-4 py-16 md:py-24">
-        <div className="grid gap-12 md:grid-cols-[1.2fr_.8fr] md:items-center">
+      {/* ── COLLAGE VIVO ───────────────────────────────────────────────────── */}
+      <section className="mx-auto max-w-[1100px] px-4 py-16 md:py-24 overflow-visible">
+        <div className="grid gap-12 md:grid-cols-[1.25fr_.75fr] md:items-center">
 
-          <div className="relative grid grid-cols-3 gap-3 auto-rows-[110px] md:auto-rows-[135px]">
-            {/* Adornos estáticos — sin animate-pulse en el punto para no añadir movimiento */}
-            <div className="absolute -top-4 left-[10%] h-3 w-3 rounded-full bg-blue-600/60 z-20" />
-            <div className="absolute right-[-10px] bottom-[-10px] h-12 w-12 rounded-full border-2 border-zinc-800 pointer-events-none" />
-
-            {/* Slots del collage — todos usan crossfade ahora */}
-            <CollageImage images={poolSlot1} className="col-span-2 row-span-2 brightness-90 contrast-105 shadow-xl" />
-            <CollageImage images={poolSlot2} className="col-span-1 row-span-1 brightness-75 shadow-lg" />
-            <CollageImage images={poolSlot3} className="col-span-1 row-span-1 brightness-75 shadow-lg" />
-            <CollageImage images={poolSlot4} className="col-span-1 row-span-1 brightness-75 shadow-lg" />
-            <CollageImage images={poolSlot5} className="col-span-2 row-span-1 brightness-80 shadow-lg" />
-          </div>
+          {/* Lienzo libre — imágenes flotando sin caja */}
+          <LiveCollage />
 
           <div className="relative pl-0 md:pl-6">
-            <h2 className="text-[36px] font-extrabold tracking-[-0.05em] text-blue-400 md:text-[46px]">Estructura Ágil</h2>
-            <p className="mt-4 max-w-[440px] text-[13px] leading-6 text-zinc-400">
+            <h2 className="text-[36px] font-extrabold tracking-[-0.05em] text-blue-400 md:text-[54px]">Estructura Ágil</h2>
+            <p className="mt-4 max-w-[440px] text-[20px] leading-6 text-zinc-400">
               Nuestra metodología transforma el seguimiento pedagógico tradicional en un ecosistema de desarrollo ágil.
               Facilita la asignación transparente de actividades, reduce la fricción operativa y permite un control
               completo de entregables de software.
@@ -330,59 +383,17 @@ export const LandingPage = () => {
         </div>
       </section>
 
-      {/* ── CARRUSEL DE FUNCIONALIDADES ────────────────────────────────────── */}
-      <section id="features" className="bg-zinc-900 border-y border-zinc-800 py-16">
-        <div className="mx-auto max-w-[1100px] px-4">
-          <div className="flex items-end justify-between mb-8">
-            <div>
-              <h2 className="text-[36px] font-extrabold tracking-[-0.05em] text-blue-400 md:text-[46px]">Funcionalidades</h2>
-              <p className="text-zinc-400 text-xs mt-1">Explora los módulos integrados y automatizados del ecosistema.</p>
-            </div>
-            <div className="flex gap-2">
-              <button
-                onClick={handlePrevFeature}
-                disabled={featureOffset === 0}
-                className="w-10 h-10 border border-zinc-700 bg-zinc-800 rounded-full flex items-center justify-center text-zinc-300 hover:bg-zinc-700 hover:text-white transition-all disabled:opacity-30 disabled:pointer-events-none"
-              >
-                <ChevronLeft size={18} />
-              </button>
-              <button
-                onClick={handleNextFeature}
-                disabled={featureOffset >= features.length - 3}
-                className="w-10 h-10 border border-zinc-700 bg-zinc-800 rounded-full flex items-center justify-center text-zinc-300 hover:bg-zinc-700 hover:text-white transition-all disabled:opacity-30 disabled:pointer-events-none"
-              >
-                <ChevronRight size={18} />
-              </button>
-            </div>
+      {/* ── FUNCIONALIDADES — mockup animado del sistema con callouts ───────── */}
+      <section id="features" className="bg-zinc-900 border-y border-zinc-800 py-20">
+        <div className="mx-auto max-w-[1180px] px-4">
+          <div className="mb-14 text-center">
+            <h2 className="text-[36px] font-extrabold tracking-[-0.05em] text-blue-400 md:text-[46px]">Funcionalidades</h2>
+            <p className="mx-auto mt-2 max-w-xl text-xs text-zinc-400">
+              Un solo ecosistema: tablero en vivo, equipos, fichas, métricas, notificaciones y seguridad — todo conectado.
+            </p>
           </div>
 
-          <div className="overflow-hidden relative px-1 py-4">
-            <div
-              className="flex gap-5 transition-transform duration-500 ease-in-out"
-              style={{ transform: `translateX(-${featureOffset * (265 + 20)}px)` }}
-            >
-              {features.map(({ icon: Icon, title, desc }) => (
-                <article key={title} className="min-w-[265px] max-w-[265px] rounded-md bg-zinc-950 border border-zinc-800 shadow-xl flex flex-col justify-between hover:-translate-y-1 hover:border-zinc-700 transition-transform duration-200">
-                  <div className="p-6">
-                    <div className="w-10 h-10 bg-blue-600/10 text-blue-400 border border-blue-600/20 rounded-md flex items-center justify-center mb-5">
-                      <Icon size={18} />
-                    </div>
-                    <h3 className="text-[15px] font-bold text-zinc-100 tracking-tight mb-2.5">{title}</h3>
-                    <p className="text-[12px] text-zinc-400 leading-relaxed">{desc}</p>
-                  </div>
-                  <div className="flex items-center justify-between bg-zinc-900 border-t border-zinc-800/80 px-5 py-3 text-white rounded-b-[16px]">
-                    <span className="text-[10px] font-bold text-zinc-500 tracking-wider uppercase">Módulo ADSO</span>
-                    <button
-                      onClick={goToLogin}
-                      className="grid h-7 w-7 place-items-center rounded-full bg-blue-600 text-xs font-bold text-white hover:bg-blue-700 transition-colors"
-                    >
-                      ➜
-                    </button>
-                  </div>
-                </article>
-              ))}
-            </div>
-          </div>
+          <SystemShowcase features={features} />
         </div>
       </section>
 
@@ -410,70 +421,19 @@ export const LandingPage = () => {
         </div>
       </section>
 
-      {/* ─────────────────────────────────────────────────────────────────────
-          ROLES DEL SISTEMA — marquee infinito
-          FIX: en lugar de gap-5 (que no incluye trailing space), cada tarjeta
-          lleva mr-5 (margin-right = 20px). Así el ancho total es exactamente
-          N × (230px + 20px) = N × 250px y translateX(-50%) = -[N/2 × 250px]
-          que es exactamente la anchura del primer set → loop sin salto.
-      ───────────────────────────────────────────────────────────────────── */}
-      <section id="roles" className="bg-zinc-900 border-t border-zinc-800 py-16 overflow-hidden">
+      {/* ── ROLES DEL SISTEMA — tarjetas 3D con tilt ───────────────────────── */}
+      <section id="roles" className="bg-zinc-900 border-t border-zinc-800 py-20">
         <div className="mx-auto max-w-[1100px] px-4">
-          <h2 className="text-[36px] font-extrabold tracking-[-0.05em] text-blue-400 md:text-[46px]">
-            Roles del Sistema
-          </h2>
-
-          <div className="relative mt-10">
-            {/* Decoración lateral */}
-            <div className="absolute right-[-18px] top-[18%] hidden text-blue-400 text-[160px] leading-none md:block opacity-10 select-none pointer-events-none">
-              ∿
-            </div>
-
-            {/* Track del marquee
-                group: al hacer hover, pause the animation via CSS class  */}
-            <div className="group overflow-hidden">
-              {/*
-                MATH: 4 roles × (230px + mr-5/20px) = 4 × 250px = 1000px por set
-                La animación mueve -1000px exactos → el segundo set cae
-                justo donde estaba el primero → loop 100% sin salto visible.
-              */}
-              <div className="flex w-max animate-marquee group-hover:[animation-play-state:paused]">
-                {[...roles, ...roles].map(({ label, desc }, index) => (
-                  <article
-                    key={`${label}-${index}`}
-                    className="
-                      relative min-w-[230px] max-w-[230px] mr-5
-                      overflow-hidden rounded-md bg-blue-600 shadow-xl
-                      flex flex-col justify-between
-                      cursor-default select-none
-                    "
-                  >
-                    {/* Header con imagen */}
-                    <div className="relative h-[140px] overflow-hidden">
-                      <img
-                        src="https://images.unsplash.com/photo-1516321318423-f06f85e504b3?q=80&w=1200&auto=format&fit=crop"
-                        alt=""
-                        className="absolute inset-0 h-full w-full object-cover scale-110"
-                      />
-                      <div className="absolute inset-0 bg-black/65" />
-                      <div className="absolute inset-0 bg-gradient-to-tr from-blue-600/40 to-transparent" />
-                      <div className="relative z-10 flex h-full items-center justify-center p-5">
-                        <span className="text-white font-black text-[15px] tracking-[0.18em] uppercase text-center drop-shadow-lg">
-                          {label}
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Contenido */}
-                    <div className="px-5 py-5 text-white flex-1 flex flex-col justify-between">
-                      <p className="text-[12px] text-white/90 leading-relaxed mb-5">{desc}</p>
-                      <div className="flex gap-2 text-[10px] opacity-50 select-none">◔ ◔ ◔</div>
-                    </div>
-                  </article>
-                ))}
-              </div>
-            </div>
+          <div className="mb-12 text-center">
+            <h2 className="text-[36px] font-extrabold tracking-[-0.05em] text-blue-400 md:text-[46px]">
+              Roles del Sistema
+            </h2>
+            <p className="mx-auto mt-2 max-w-lg text-xs text-zinc-400">
+              Cada perfil ve y hace exactamente lo que le corresponde. Pasa el cursor sobre cada tarjeta.
+            </p>
           </div>
+
+          <RoleCards3D />
         </div>
       </section>
 
@@ -505,41 +465,155 @@ export const LandingPage = () => {
         </div>
       </section>
 
-      {/* ── CONTACTO ───────────────────────────────────────────────────────── */}
-      <section id="contact" className="relative overflow-hidden bg-zinc-900 border-t border-zinc-800 py-16">
+      {/* ── PQRS ───────────────────────────────────────────────────────────── */}
+      <section id="contact" className="relative overflow-hidden bg-zinc-900 border-t border-zinc-800 py-20">
         <div className="absolute left-0 top-0 text-blue-400 text-[88px] font-black leading-none -translate-y-4 opacity-10 select-none pointer-events-none">∿∿∿</div>
         <div className="mx-auto max-w-[1100px] px-4">
-          <div className="grid gap-8 md:grid-cols-[1.15fr_.85fr] md:items-start">
+
+          {/* Encabezado */}
+          <div className="mb-10">
+            <p className="text-[10px] font-black uppercase tracking-[0.25em] text-blue-400 mb-1">
+              Peticiones · Quejas · Reclamos · Sugerencias
+            </p>
+            <h2 className="text-[36px] font-extrabold tracking-[-0.05em] text-white md:text-[46px]">PQRS</h2>
+            <p className="mt-1 text-[12px] text-zinc-400 max-w-md">
+              Escríbenos directamente. Revisamos cada mensaje y respondemos a tu correo a la brevedad.
+            </p>
+          </div>
+
+          <div className="grid gap-10 md:grid-cols-[1.4fr_.6fr] md:items-start">
+
+            {/* Formulario */}
             <div>
-              <h2 className="text-[36px] font-extrabold tracking-[-0.05em] text-blue-400 md:text-[46px]">¿Tienes Dudas?</h2>
-              <p className="mt-1 text-[12px] text-zinc-400">Comunícate con la mesa de administración técnica del sistema.</p>
-              <form className="mt-8 space-y-6">
-                <div>
-                  <label className="mb-2 block text-[10px] uppercase tracking-[0.25em] text-zinc-500 font-black">Nombre del Instructor o Aprendiz</label>
-                  <div className="h-[1px] bg-gradient-to-r from-zinc-800 via-zinc-700 to-zinc-800" />
+              {pqrsOk ? (
+                <div className="flex flex-col items-center justify-center gap-4 py-16 text-center">
+                  <div className="w-14 h-14 rounded-full bg-emerald-500/15 border border-emerald-500/25 flex items-center justify-center">
+                    <CheckCircle2 size={28} className="text-emerald-400" />
+                  </div>
+                  <div>
+                    <p className="text-base font-bold text-white">¡Mensaje enviado!</p>
+                    <p className="text-sm text-zinc-400 mt-1">Te responderemos al correo que indicaste.</p>
+                  </div>
+                  <button
+                    onClick={() => { setPqrsOk(false); setPqrsTipo('sugerencia'); }}
+                    className="mt-2 text-xs text-blue-400 hover:text-blue-300 font-bold transition-colors"
+                  >
+                    Enviar otro mensaje
+                  </button>
                 </div>
-                <div>
-                  <label className="mb-2 block text-[10px] uppercase tracking-[0.25em] text-zinc-500 font-black">Correo Electrónico MiSena</label>
-                  <div className="h-[1px] bg-gradient-to-r from-zinc-800 via-zinc-700 to-zinc-800" />
-                </div>
-                <button
-                  type="button"
-                  onClick={goToLogin}
-                  className="grid h-11 w-24 place-items-center rounded-full bg-blue-600 text-white hover:bg-blue-700 transition-all shadow-md active:scale-95"
-                >
-                  ➜
-                </button>
-              </form>
+              ) : (
+                <form onSubmit={pqrsForm.handleSubmit(onPqrsSubmit)} className="space-y-5">
+
+                  {/* Tipo */}
+                  <div className="space-y-2">
+                    <p className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-500">Tipo de solicitud</p>
+                    <div className="flex flex-wrap gap-2">
+                      {([
+                        ['peticion',   'Petición'],
+                        ['queja',      'Queja'],
+                        ['reclamo',    'Reclamo'],
+                        ['sugerencia', 'Sugerencia'],
+                      ] as [PqrsTipo, string][]).map(([val, label]) => (
+                        <button
+                          key={val}
+                          type="button"
+                          onClick={() => setPqrsTipo(val)}
+                          className={`px-4 py-1.5 rounded-full text-xs font-black border transition-all ${
+                            pqrsTipo === val
+                              ? 'bg-blue-600 border-blue-600 text-white'
+                              : 'bg-transparent border-zinc-700 text-zinc-400 hover:border-zinc-500 hover:text-zinc-200'
+                          }`}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Nombre + Correo en grid */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                      <label className="block text-[10px] font-black uppercase tracking-[0.2em] text-zinc-500">
+                        Nombre
+                      </label>
+                      <input
+                        {...pqrsForm.register('nombre', {
+                          required: 'Campo obligatorio',
+                          minLength: { value: 3, message: 'Mínimo 3 caracteres' },
+                        })}
+                        type="text"
+                        placeholder="Tu nombre completo"
+                        className="w-full bg-zinc-950 border border-zinc-800 rounded-md px-4 py-3 text-sm text-zinc-100 placeholder:text-zinc-600 outline-none focus:border-blue-500/60 focus:ring-1 focus:ring-blue-500/20 transition-all"
+                      />
+                      {pqrsForm.formState.errors.nombre &&
+                        <p className="text-[11px] text-rose-400">{pqrsForm.formState.errors.nombre.message}</p>}
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="block text-[10px] font-black uppercase tracking-[0.2em] text-zinc-500">
+                        Correo electrónico
+                      </label>
+                      <input
+                        {...pqrsForm.register('correo', {
+                          required: 'Campo obligatorio',
+                          pattern: { value: /^[^\s@]+@[^\s@]+\.[^\s@]+$/, message: 'Formato inválido' },
+                        })}
+                        type="email"
+                        placeholder="tu@correo.com"
+                        className="w-full bg-zinc-950 border border-zinc-800 rounded-md px-4 py-3 text-sm text-zinc-100 placeholder:text-zinc-600 outline-none focus:border-blue-500/60 focus:ring-1 focus:ring-blue-500/20 transition-all"
+                      />
+                      {pqrsForm.formState.errors.correo &&
+                        <p className="text-[11px] text-rose-400">{pqrsForm.formState.errors.correo.message}</p>}
+                    </div>
+                  </div>
+
+                  {/* Mensaje */}
+                  <div className="space-y-1.5">
+                    <label className="block text-[10px] font-black uppercase tracking-[0.2em] text-zinc-500">
+                      Mensaje
+                    </label>
+                    <textarea
+                      {...pqrsForm.register('mensaje', {
+                        required: 'Campo obligatorio',
+                        minLength: { value: 10, message: 'Mínimo 10 caracteres' },
+                        maxLength: { value: 2000, message: 'Máximo 2000 caracteres' },
+                      })}
+                      rows={5}
+                      placeholder="Describe tu petición, queja, reclamo o sugerencia con el mayor detalle posible..."
+                      className="w-full bg-zinc-950 border border-zinc-800 rounded-md px-4 py-3 text-sm text-zinc-100 placeholder:text-zinc-600 outline-none focus:border-blue-500/60 focus:ring-1 focus:ring-blue-500/20 transition-all resize-none"
+                    />
+                    {pqrsForm.formState.errors.mensaje &&
+                      <p className="text-[11px] text-rose-400">{pqrsForm.formState.errors.mensaje.message}</p>}
+                  </div>
+
+                  {/* Error global */}
+                  {pqrsForm.formState.errors.root && (
+                    <p className="text-xs text-rose-400 bg-rose-500/10 border border-rose-500/20 rounded-md px-3 py-2">
+                      {pqrsForm.formState.errors.root.message}
+                    </p>
+                  )}
+
+                  <button
+                    type="submit"
+                    disabled={pqrsForm.formState.isSubmitting}
+                    className="flex items-center gap-2 px-7 py-3 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-black rounded-md transition-all shadow-lg shadow-blue-600/20 active:scale-[0.98]"
+                  >
+                    {pqrsForm.formState.isSubmitting
+                      ? <><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Enviando...</>
+                      : <><Send size={14} /> Enviar mensaje</>}
+                  </button>
+                </form>
+              )}
             </div>
-            <div className="relative pt-8 md:pt-0 md:pl-6 text-[13px] text-zinc-400">
-              <div className="absolute bottom-2 left-[22%] h-16 w-16 rounded-full border-2 border-zinc-800 opacity-50" />
-              <div className="space-y-5 pt-12">
-                <div>
-                  <div className="text-[10px] uppercase tracking-[0.25em] text-zinc-500 font-black">Canal Principal de Soporte</div>
-                  <div className="mt-1 font-semibold text-zinc-200">soporte.kanbana@sena.edu.co</div>
-                </div>
+
+            {/* Info lateral */}
+            <div className="space-y-6 pt-2 md:pt-1">
+             
+              <div className="space-y-1">
+                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-500">Soporte directo</p>
+                <p className="text-sm font-semibold text-blue-400"> <a href="https://mail.google.com/mail/u/0/#search/ofra1714%40gmail.com?compose=CllgCJlGTpjfWGlrJNTPfvkjPjVszXTHzDDlBGDJxKflwWWMfBhFXncXNJNzDcRwNTBLkXHKQRg">kanbana70@gmail.com</a></p>
               </div>
             </div>
+
           </div>
         </div>
       </section>

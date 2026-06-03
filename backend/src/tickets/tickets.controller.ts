@@ -130,8 +130,10 @@ export class TicketsController {
   }
 
   @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.ticketsService.findOne(+id);
+  findOne(@Param('id') id: string, @Request() req) {
+    // Pasar el actor para que el service valide privacidad
+    // (un aprendiz no puede leer tareas de otra ficha/proyecto).
+    return this.ticketsService.findOne(+id, req.user);
   }
 
   // MODIFICADO: ahora valida adjunto antes de pasar a done

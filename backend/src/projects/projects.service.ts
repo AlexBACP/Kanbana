@@ -4,7 +4,7 @@ import { Repository, In, Not } from 'typeorm';
 import { Project, ProjectStatus } from './entities/project.entity';
 import { Sprint } from './entities/sprint.entity';
 import { User, UserRole } from '../users/entities/user.entity';
-import { Trimestre, TipoTrimestre } from './entities/trimestre.entity';
+import { Trimestre, TipoTrimestre, EstadoTrimestre } from './entities/trimestre.entity';
 import { NotificationsService } from '../notifications/notifications.service';
 import { EmailService }         from '../email/email.service';
 import { PLANTILLAS_POR_TIPO }  from '../fichas/plantillas-sdlc';
@@ -436,6 +436,13 @@ export class ProjectsService {
       });
       if (!trimestre) {
         throw new BadRequestException('El trimestre no pertenece a este proyecto.');
+      }
+      // Bloquear creación de módulos en trimestres HISTÓRICOS: son solo
+      // referencia documental, no espacio de trabajo.
+      if (trimestre.estado === EstadoTrimestre.HISTORICO) {
+        throw new BadRequestException(
+          'No se pueden crear módulos en un trimestre histórico. Es solo referencia documental de un periodo ya cursado.',
+        );
       }
     }
 

@@ -90,6 +90,123 @@ export class AuthService {
     };
   }
 
+  /**
+   * Registro de APRENDIZ con ficha + jornada en un solo paso:
+   *   1. Valida datos y que la ficha exista (jornada coincidente) ANTES de crear.
+   *   2. Crea la cuenta de aprendiz (sin confirmar) y envía correo de confirmación.
+   *   3. Crea la solicitud de vinculación (estado pendiente) y notifica al instructor.
+   * Así, al confirmar el correo e iniciar sesión, el aprendiz ya aparece como
+   * "esperando aprobación" y el instructor ya recibió la solicitud.
+   */
+  async registerAprendiz(dto: {
+    nombre?: string; correo?: string; contrasena?: string;
+    codigoFicha?: string; jornada?: string; documento?: string;
+  }): Promise<{ id: number; requiere_confirmacion: boolean; mensaje: string }> {
+    const nombre = (dto?.nombre || '').trim();
+    const correo = (dto?.correo || '').trim().toLowerCase();
+    const contrasena = dto?.contrasena || '';
+    const documento = (dto?.documento || '').trim();
+
+    if (!nombre || !correo || !contrasena) {
+      throw new BadRequestException('Nombre, correo y contraseña son obligatorios.');
+    }
+    const gmailRe = /^[a-z0-9](\.?[a-z0-9]){5,29}@(gmail|googlemail)\.com$/i;
+    if (!gmailRe.test(correo)) {
+      throw new BadRequestException('Debes registrarte con un correo de Google válido (@gmail.com).');
+    }
+    if (!documento) throw new BadRequestException('Debes indicar tu número de documento.');
+    assertPasswordPolicy(contrasena);
+
+    const existing = await this.usersService.findByEmail(correo);
+    if (existing) {
+      throw new ConflictException('Ya existe una cuenta registrada con ese correo.');
+    }
+
+    // Validar la ficha ANTES de crear la cuenta (evita cuentas huérfanas).
+    await this.usersService.validarFichaVinculacion(dto.codigoFicha as any, dto.jornada as any);
+
+    // Crear la cuenta (sin confirmar) + correo de confirmación.
+    const user: any = await this.usersService.createSelfRegistered({ nombre, correo, contrasena });
+
+    // Crear la solicitud de vinculación (estado pendiente) + notificar instructor.
+    await this.usersService.solicitarVinculacion(user.id, {
+      codigoFicha: dto.codigoFicha as any,
+      jornada:     dto.jornada as any,
+      documento,
+    });
+
+    return {
+      id: user.id,
+      requiere_confirmacion: true,
+      mensaje: 'Cuenta creada y solicitud enviada a tu instructor. Confirma tu correo para iniciar sesión; luego verás el estado de tu vinculación.',
+    };
+  }
+
+  /**
+   * Lee la lista de dominios SENA aceptados desde la env. Soporta varios
+   * separados por comas. Cada uno debe empezar con '@' o se le añade.
+   * Ejemplo de env: SENA_INSTRUCTOR_DOMAINS="@sena.edu.co"
+   * Default: "@sena.edu.co" si la env no está definida.
+   */
+  private senaInstructorDomains(): string[] {
+    const raw = process.env.SENA_INSTRUCTOR_DOMAINS || '@sena.edu.co';
+    return raw.split(',')
+      .map(d => d.trim().toLowerCase())
+      .filter(Boolean)
+      .map(d => d.startsWith('@') ? d : `@${d}`);
+  }
+
+  /**
+   * Registro de INSTRUCTOR con correo institucional SENA.
+   *
+   * Dos capas de seguridad:
+   *   Capa 1: el correo termina en un dominio SENA permitido (env).
+   *   Capa 2: el instructor confirma su correo (cuenta_confirmada=true).
+   *
+   * Hasta que la Capa 2 no pase, el login está bloqueado con un mensaje claro.
+   */
+  async registerInstructor(dto: {
+    nombre?: string; correo?: string; contrasena?: string;
+  }): Promise<{ id: number; requiere_confirmacion: boolean; mensaje: string }> {
+    const nombre = (dto?.nombre || '').trim();
+    const correo = (dto?.correo || '').trim().toLowerCase();
+    const contrasena = dto?.contrasena || '';
+
+    if (!nombre || !correo || !contrasena) {
+      throw new BadRequestException('Nombre, correo y contraseña son obligatorios.');
+    }
+
+    // ── Capa 1: validar dominio SENA ──────────────────────────────────────
+    const allowedDomains = this.senaInstructorDomains();
+    const domainOk = allowedDomains.some(d => correo.endsWith(d));
+    if (!domainOk) {
+      throw new BadRequestException(
+        `El registro de instructor requiere un correo institucional SENA (${allowedDomains.join(', ')}). ` +
+        `Si eres aprendiz, regístrate desde la opción "Soy aprendiz".`,
+      );
+    }
+
+    assertPasswordPolicy(contrasena);
+
+    const existing = await this.usersService.findByEmail(correo);
+    if (existing) {
+      throw new ConflictException('Ya existe una cuenta registrada con ese correo.');
+    }
+
+    // El correo de confirmación se envía dentro de createSelfRegisteredInstructor.
+    const user: any = await this.usersService.createSelfRegisteredInstructor({
+      nombre, correo, contrasena,
+    });
+
+    return {
+      id: user.id,
+      requiere_confirmacion: true,
+      mensaje:
+        'Cuenta creada. Te enviamos un correo de confirmación a tu cuenta SENA. ' +
+        'Tras confirmarlo ya puedes iniciar sesión.',
+    };
+  }
+
   // ══════════════════════════════════════════════════════════════════════════
   // LOGIN CON GOOGLE (OAuth 2.0 / OIDC)
   // ══════════════════════════════════════════════════════════════════════════
@@ -480,6 +597,85 @@ export class AuthService {
       if (e instanceof BadRequestException) throw e;
       throw new BadRequestException('Token inválido o ya utilizado');
     }
+  }
+
+  // ════════════════════════════════════════════════════════════════════════════
+  // PQRS — Peticiones, Quejas, Reclamos y Sugerencias (endpoint público)
+  // ════════════════════════════════════════════════════════════════════════════
+  async sendPqrs(dto: {
+    nombre:  string;
+    correo:  string;
+    tipo:    'peticion' | 'queja' | 'reclamo' | 'sugerencia';
+    mensaje: string;
+  }): Promise<void> {
+    const tipoLabel: Record<string, string> = {
+      peticion:   'Petición',
+      queja:      'Queja',
+      reclamo:    'Reclamo',
+      sugerencia: 'Sugerencia',
+    };
+    const label = tipoLabel[dto.tipo] ?? dto.tipo;
+
+    const transporter = nodemailer.createTransport({
+      host:   process.env.MAIL_HOST   || 'smtp.gmail.com',
+      port:   Number(process.env.MAIL_PORT) || 587,
+      secure: process.env.MAIL_SECURE === 'true',
+      auth:   { user: process.env.MAIL_USER, pass: process.env.MAIL_PASS },
+    });
+
+    const destino = process.env.ADMIN_EMAIL || process.env.MAIL_USER;
+    const fecha   = new Date().toLocaleString('es-CO', { timeZone: 'America/Bogota' });
+
+    await transporter.sendMail({
+      from:    `"Kanbana PQRS" <${process.env.MAIL_USER}>`,
+      to:      destino,
+      replyTo: dto.correo,
+      subject: `[PQRS · ${label}] De: ${dto.nombre}`,
+      html: `
+        <!DOCTYPE html>
+        <html lang="es">
+        <head><meta charset="UTF-8"></head>
+        <body style="margin:0;padding:0;background:#09090b;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+          <table width="100%" cellpadding="0" cellspacing="0" style="background:#09090b;padding:40px 16px;">
+            <tr><td align="center">
+              <table width="100%" style="max-width:520px;background:#18181b;border:1px solid #3f3f46;border-radius:12px;padding:40px;">
+                <tr><td>
+                  <p style="margin:0 0 6px;font-size:10px;font-weight:900;letter-spacing:4px;text-transform:uppercase;color:#22d3ee;">KANBANA · PQRS</p>
+                  <h1 style="margin:0 0 4px;font-size:20px;font-weight:900;color:#f4f4f5;">${label}</h1>
+                  <p style="margin:0 0 28px;font-size:11px;color:#52525b;">${fecha}</p>
+
+                  <table width="100%" style="margin-bottom:20px;border:1px solid #3f3f46;border-radius:8px;overflow:hidden;">
+                    <tr style="background:#09090b;">
+                      <td style="padding:10px 14px;font-size:11px;font-weight:700;color:#71717a;text-transform:uppercase;letter-spacing:2px;width:90px;">Nombre</td>
+                      <td style="padding:10px 14px;font-size:13px;color:#f4f4f5;">${dto.nombre}</td>
+                    </tr>
+                    <tr>
+                      <td style="padding:10px 14px;font-size:11px;font-weight:700;color:#71717a;text-transform:uppercase;letter-spacing:2px;">Correo</td>
+                      <td style="padding:10px 14px;font-size:13px;color:#22d3ee;">${dto.correo}</td>
+                    </tr>
+                    <tr style="background:#09090b;">
+                      <td style="padding:10px 14px;font-size:11px;font-weight:700;color:#71717a;text-transform:uppercase;letter-spacing:2px;">Tipo</td>
+                      <td style="padding:10px 14px;font-size:13px;color:#f4f4f5;">${label}</td>
+                    </tr>
+                  </table>
+
+                  <div style="background:#09090b;border:1px solid #3f3f46;border-radius:8px;padding:16px;margin-bottom:24px;">
+                    <p style="margin:0 0 8px;font-size:10px;font-weight:700;color:#71717a;text-transform:uppercase;letter-spacing:2px;">Mensaje</p>
+                    <p style="margin:0;font-size:14px;line-height:1.7;color:#a1a1aa;white-space:pre-wrap;">${dto.mensaje}</p>
+                  </div>
+
+                  <p style="margin:0;font-size:11px;color:#52525b;">
+                    Responde directamente a este correo para contactar a ${dto.nombre}.
+                  </p>
+                </td></tr>
+              </table>
+            </td></tr>
+          </table>
+        </body>
+        </html>
+      `,
+      text: `PQRS · ${label}\nDe: ${dto.nombre} <${dto.correo}>\n\n${dto.mensaje}`,
+    });
   }
 
   // ── CAMBIO: método privado con nodemailer — lee credenciales del .env ───

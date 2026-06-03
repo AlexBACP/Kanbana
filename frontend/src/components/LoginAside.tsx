@@ -21,6 +21,7 @@ import { Link } from 'react-router-dom';
 import {
   Mail, Lock, Eye, EyeOff, AlertCircle, CheckCircle2, X, GripVertical,
   ArrowRight, ShieldCheck, ChevronLeft, User as UserIcon,
+  Layers, Clock, Hash, GraduationCap, BookOpen,
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { authService } from '../services/auth.service';
@@ -31,6 +32,14 @@ interface LoginCredentials {
   password: string;
 }
 interface RegisterForm {
+  nombre: string;
+  correo: string;
+  contrasena: string;
+  codigoFicha: string;
+  jornada: 'mañana' | 'tarde' | 'noche';
+  documento: string;
+}
+interface InstrRegisterForm {
   nombre: string;
   correo: string;
   contrasena: string;
@@ -73,7 +82,8 @@ export const LoginAside = ({
   const [savedCreds,  setSavedCreds]  = useState<{ email: string; password: string } | null>(null);
 
   // ── Estado del registro ─────────────────────────────────────────────────────
-  const [registerOk, setRegisterOk] = useState(false);
+  const [registerOk,   setRegisterOk]   = useState(false);
+  const [registerType, setRegisterType] = useState<'aprendiz' | 'instructor'>('aprendiz');
 
   const { login } = useAuth();
 
@@ -82,7 +92,8 @@ export const LoginAside = ({
   const startWidth = useRef(DEFAULT_WIDTH);
 
   const loginForm = useForm<LoginCredentials>({ defaultValues: { email: '', password: '' } });
-  const regForm   = useForm<RegisterForm>({ defaultValues: { nombre: '', correo: '', contrasena: '' } });
+  const regForm   = useForm<RegisterForm>({ defaultValues: { nombre: '', correo: '', contrasena: '', codigoFicha: '', jornada: 'mañana', documento: '' } });
+  const instrForm = useForm<InstrRegisterForm>({ defaultValues: { nombre: '', correo: '', contrasena: '' } });
 
   // Sincronizar error / modo iniciales cuando se (re)abre el drawer
   useEffect(() => {
@@ -96,9 +107,11 @@ export const LoginAside = ({
       setTotpCode('');
       setSavedCreds(null);
       setRegisterOk(false);
+      setRegisterType('aprendiz');
       setShowPassword(false);
       loginForm.reset();
       regForm.reset();
+      instrForm.reset();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, initialError, initialMode]);
@@ -176,15 +189,36 @@ export const LoginAside = ({
   const onRegisterSubmit = async (data: RegisterForm) => {
     try {
       setError(null);
-      await authService.register({
+      // Registro de aprendiz: crea la cuenta Y la solicitud de vinculación
+      // (ficha + jornada) en un solo paso. El instructor recibe la solicitud.
+      await authService.registerAprendiz({
+        nombre:      data.nombre.trim(),
+        correo:      data.correo.trim().toLowerCase(),
+        contrasena:  data.contrasena,
+        codigoFicha: data.codigoFicha.trim(),
+        jornada:     data.jornada,
+        documento:   data.documento.trim(),
+      });
+      setRegisterOk(true);
+      regForm.reset();
+      // Tras crear la cuenta, volver al login pasados unos segundos
+      setTimeout(() => { setMode('login'); }, 5500);
+    } catch (err: any) {
+      setError(err?.response?.data?.message || 'No se pudo crear la cuenta. Intenta de nuevo.');
+    }
+  };
+
+  const onInstrRegisterSubmit = async (data: InstrRegisterForm) => {
+    try {
+      setError(null);
+      await authService.registerInstructor({
         nombre:     data.nombre.trim(),
         correo:     data.correo.trim().toLowerCase(),
         contrasena: data.contrasena,
       });
       setRegisterOk(true);
-      regForm.reset();
-      // Tras crear la cuenta, volver al login pasados unos segundos
-      setTimeout(() => { setMode('login'); }, 4500);
+      instrForm.reset();
+      setTimeout(() => { setMode('login'); }, 5500);
     } catch (err: any) {
       setError(err?.response?.data?.message || 'No se pudo crear la cuenta. Intenta de nuevo.');
     }
@@ -265,13 +299,13 @@ export const LoginAside = ({
         </div>
 
         {/* ── Header ─────────────────────────────────────────────────── */}
-        <div className="relative overflow-hidden bg-zinc-900 border-b border-zinc-800 px-6 pt-5 pb-7 md:px-8 shrink-0">
+        <div className=" overflow-hidden bg-zinc-900 border-b border-zinc-800  pb-2 md:px-8 shrink-0">
           {/* Anillos decorativos sutiles (zinc) */}
-          <div className="absolute right-[-40px] top-[-30px] h-[200px] w-[200px] rounded-full border border-white/[0.03] pointer-events-none" />
-          <div className="absolute left-[-20px] bottom-[-20px] h-[120px] w-[120px] rounded-full border border-blue-500/[0.06] pointer-events-none" />
+          <div className="absolute right-[-40px] top-[-30px] h-[150px] w-[200px] rounded-full border border-white/[0.03] pointer-events-none shadow" />
+          <div className="absolute left-[-20px] bottom-[-20px] h-[80px] w-[120px] rounded-full border border-blue-500/[0.06] pointer-events-none" />
 
           {/* Cerrar */}
-          <div className="flex justify-end mb-5 relative z-10">
+          <div className="flex justify-end mb-2 relative z-10 mt-2">
             <button
               onClick={onClose}
               className="p-2 text-zinc-500 hover:text-zinc-200 bg-zinc-800/60 border border-zinc-700 rounded-md transition-colors active:scale-95"
@@ -281,9 +315,11 @@ export const LoginAside = ({
           </div>
 
           {/* Logo animado */}
-          <div className="flex flex-col items-center gap-3 relative z-10">
+          <div className="gap-2 z-10 -mt-5 flex flex-row">
+            <div>
             <KanbanaLogo size={60} iconBorder="ring-1 ring-zinc-700/80" />
-            <div className="text-center">
+            </div>
+            <div className="text-left mt-2">
               <h1 className="text-2xl font-black tracking-[-0.05em] text-white">Kanbana</h1>
               <p className="text-xs text-zinc-500 font-medium mt-0.5">
                 Sistema de gestión <span className="text-blue-400 font-bold">SENA · ADSO</span>
@@ -432,13 +468,13 @@ export const LoginAside = ({
               <OAuthButtons />
 
               <p className="text-xs text-zinc-400 text-center pt-1">
-                ¿No tienes cuenta?{' '}
+                ¿Eres aprendiz nuevo?{' '}
                 <button
                   type="button"
                   onClick={() => setMode('register')}
                   className="text-blue-400 hover:text-blue-300 font-bold transition-colors"
                 >
-                  Regístrate ahora
+                  Regístrate aquí
                 </button>
               </p>
             </div>
@@ -446,9 +482,42 @@ export const LoginAside = ({
           /* ════════ MODO REGISTRO ════════ */
           ) : (
             <div className="bg-zinc-900/60 border border-zinc-800 rounded-md p-6 space-y-5 shadow-inner">
+
+              {/* Toggle Aprendiz / Instructor */}
+              <div className="flex rounded-md overflow-hidden border border-zinc-700 p-0.5 bg-zinc-900 gap-0.5">
+                <button
+                  type="button"
+                  onClick={() => { setRegisterType('aprendiz'); setError(null); setRegisterOk(false); }}
+                  className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-black rounded transition-all ${
+                    registerType === 'aprendiz'
+                      ? 'bg-blue-600 text-white shadow'
+                      : 'text-zinc-500 hover:text-zinc-300'
+                  }`}
+                >
+                  <GraduationCap size={13} /> Soy aprendiz
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setRegisterType('instructor'); setError(null); setRegisterOk(false); }}
+                  className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-black rounded transition-all ${
+                    registerType === 'instructor'
+                      ? 'bg-blue-600 text-white shadow'
+                      : 'text-zinc-500 hover:text-zinc-300'
+                  }`}
+                >
+                  <BookOpen size={13} /> Soy instructor
+                </button>
+              </div>
+
               <div>
-                <h2 className="text-base font-bold tracking-tight text-white">Crear cuenta</h2>
-                <p className="text-[11px] text-zinc-500 mt-0.5">Las cuentas nuevas ingresan como aprendices.</p>
+                <h2 className="text-base font-bold tracking-tight text-white">
+                  {registerType === 'aprendiz' ? 'Registro de aprendiz' : 'Registro de instructor'}
+                </h2>
+                <p className="text-[11px] text-zinc-500 mt-0.5">
+                  {registerType === 'aprendiz'
+                    ? 'Crea tu cuenta y solicita unirte a tu ficha en un paso.'
+                    : 'Usa tu correo institucional SENA. Te llegará un correo de confirmación.'}
+                </p>
               </div>
 
               <ErrorBox />
@@ -457,105 +526,239 @@ export const LoginAside = ({
                 <div className="flex items-start gap-2 p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-md text-emerald-400 text-xs">
                   <CheckCircle2 size={14} className="shrink-0 mt-0.5" />
                   <span className="leading-relaxed">
-                    ¡Cuenta creada! Te enviamos un correo de confirmación. Ábrelo para activar tu cuenta antes de iniciar sesión.
+                    {registerType === 'aprendiz'
+                      ? '¡Cuenta creada! Te enviamos un correo de confirmación. Al confirmarlo, tu solicitud de vinculación quedará activa.'
+                      : '¡Cuenta creada! Revisa tu correo SENA y confirma tu cuenta para poder iniciar sesión.'}
                   </span>
                 </div>
               )}
 
-              <form onSubmit={regForm.handleSubmit(onRegisterSubmit)} className="space-y-4">
-                {/* Nombre */}
-                <div className="space-y-1.5">
-                  <label className={labelCls}>Nombre</label>
-                  <div className="relative">
-                    <UserIcon size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-600" />
-                    <input
-                      {...regForm.register('nombre', {
-                        required: 'Campo obligatorio',
-                        minLength: { value: 3, message: 'Mínimo 3 caracteres' },
-                      })}
-                      type="text"
-                      placeholder="Nombre completo"
-                      className={inputCls}
-                    />
+              {/* ════════ FORMULARIO APRENDIZ ════════ */}
+              {registerType === 'aprendiz' && (
+                <form onSubmit={regForm.handleSubmit(onRegisterSubmit)} className="space-y-4">
+                  <div className="space-y-1.5">
+                    <label className={labelCls}>Nombre</label>
+                    <div className="relative">
+                      <UserIcon size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-600" />
+                      <input
+                        {...regForm.register('nombre', {
+                          required: 'Campo obligatorio',
+                          minLength: { value: 3, message: 'Mínimo 3 caracteres' },
+                        })}
+                        type="text"
+                        placeholder="Nombre completo"
+                        className={inputCls}
+                      />
+                    </div>
+                    {regForm.formState.errors.nombre &&
+                      <p className="text-[11px] text-rose-400 ml-1">{regForm.formState.errors.nombre.message}</p>}
                   </div>
-                  {regForm.formState.errors.nombre &&
-                    <p className="text-[11px] text-rose-400 ml-1">{regForm.formState.errors.nombre.message}</p>}
-                </div>
 
-                {/* Correo */}
-                <div className="space-y-1.5">
-                  <label className={labelCls}>Correo electrónico</label>
-                  <div className="relative">
-                    <Mail size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-600" />
-                    <input
-                      {...regForm.register('correo', {
-                        required: 'Campo obligatorio',
-                        pattern: {
-                          value: /^[a-z0-9](\.?[a-z0-9]){5,29}@(gmail|googlemail)\.com$/i,
-                          message: 'No se pudo encontrar tu cuenta de Google',
-                        },
-                      })}
-                      type="email"
-                      placeholder="ejemplo@gmail.com"
-                      className={inputCls}
-                    />
+                  <div className="space-y-1.5">
+                    <label className={labelCls}>Correo electrónico</label>
+                    <div className="relative">
+                      <Mail size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-600" />
+                      <input
+                        {...regForm.register('correo', {
+                          required: 'Campo obligatorio',
+                          pattern: {
+                            value: /^[a-z0-9](\.?[a-z0-9]){5,29}@(gmail|googlemail)\.com$/i,
+                            message: 'No se pudo encontrar tu cuenta de Google',
+                          },
+                        })}
+                        type="email"
+                        placeholder="ejemplo@gmail.com"
+                        className={inputCls}
+                      />
+                    </div>
+                    {regForm.formState.errors.correo
+                      ? <p className="text-[11px] text-rose-400 ml-1">{regForm.formState.errors.correo.message}</p>
+                      : <p className="text-[11px] text-zinc-600 ml-1">Debe ser un correo de Google (@gmail.com).</p>}
                   </div>
-                  {regForm.formState.errors.correo
-                    ? <p className="text-[11px] text-rose-400 ml-1">{regForm.formState.errors.correo.message}</p>
-                    : <p className="text-[11px] text-zinc-600 ml-1">Debe ser un correo de Google (@gmail.com).</p>}
-                </div>
 
-                {/* Contraseña */}
-                <div className="space-y-1.5">
-                  <label className={labelCls}>Contraseña</label>
-                  <div className="relative">
-                    <Lock size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-600" />
-                    <input
-                      {...regForm.register('contrasena', {
-                        required: 'Campo obligatorio',
-                        validate: (v: string) => {
-                          if (v.length < 7)     return 'Mínimo 7 caracteres';
-                          if (!/[A-Z]/.test(v)) return 'Incluye al menos una letra mayúscula';
-                          if (!/[0-9]/.test(v)) return 'Incluye al menos un número';
-                          return true;
-                        },
-                      })}
-                      type={showPassword ? 'text' : 'password'}
-                      placeholder="Mín. 7, una mayúscula y un número"
-                      className={inputPwdCls}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword(v => !v)}
-                      className="absolute right-3.5 top-1/2 -translate-y-1/2 text-zinc-600 hover:text-zinc-400 transition-colors"
-                    >
-                      {showPassword ? <EyeOff size={14} /> : <Eye size={14} />}
-                    </button>
+                  <div className="space-y-1.5">
+                    <label className={labelCls}>Contraseña</label>
+                    <div className="relative">
+                      <Lock size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-600" />
+                      <input
+                        {...regForm.register('contrasena', {
+                          required: 'Campo obligatorio',
+                          validate: (v: string) => {
+                            if (v.length < 7)     return 'Mínimo 7 caracteres';
+                            if (!/[A-Z]/.test(v)) return 'Incluye al menos una letra mayúscula';
+                            if (!/[0-9]/.test(v)) return 'Incluye al menos un número';
+                            return true;
+                          },
+                        })}
+                        type={showPassword ? 'text' : 'password'}
+                        placeholder="Mín. 7, una mayúscula y un número"
+                        className={inputPwdCls}
+                      />
+                      <button type="button" onClick={() => setShowPassword(v => !v)}
+                        className="absolute right-3.5 top-1/2 -translate-y-1/2 text-zinc-600 hover:text-zinc-400 transition-colors">
+                        {showPassword ? <EyeOff size={14} /> : <Eye size={14} />}
+                      </button>
+                    </div>
+                    {regForm.formState.errors.contrasena
+                      ? <p className="text-[11px] text-rose-400 ml-1">{regForm.formState.errors.contrasena.message}</p>
+                      : <p className="text-[11px] text-zinc-600 ml-1">Mínimo 7 caracteres, una mayúscula y un número.</p>}
                   </div>
-                  {regForm.formState.errors.contrasena
-                    ? <p className="text-[11px] text-rose-400 ml-1">{regForm.formState.errors.contrasena.message}</p>
-                    : <p className="text-[11px] text-zinc-600 ml-1">Mínimo 7 caracteres, una mayúscula y un número.</p>}
-                </div>
 
-                <button
-                  type="submit"
-                  disabled={regForm.formState.isSubmitting || registerOk}
-                  className="w-full flex items-center justify-center gap-2 py-3 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed text-white text-sm font-black rounded-md transition-all shadow-lg shadow-blue-600/20 active:scale-[0.98]"
-                >
-                  {regForm.formState.isSubmitting
-                    ? <><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Creando cuenta...</>
-                    : 'Crear cuenta'}
-                </button>
-              </form>
+                  <div className="rounded-lg border border-blue-500/20 bg-blue-500/[0.04] p-3 space-y-3">
+                    <p className="flex items-center gap-1.5 text-[11px] font-black uppercase tracking-widest text-blue-400">
+                      <Layers size={12} /> Vinculación a tu ficha
+                    </p>
+                    <div className="space-y-1.5">
+                      <label className={labelCls}>Código de la ficha</label>
+                      <div className="relative">
+                        <Layers size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-600" />
+                        <input
+                          {...regForm.register('codigoFicha', { required: 'Campo obligatorio' })}
+                          type="text"
+                          placeholder="Ej: 2826503"
+                          className={inputCls}
+                        />
+                      </div>
+                      {regForm.formState.errors.codigoFicha &&
+                        <p className="text-[11px] text-rose-400 ml-1">{regForm.formState.errors.codigoFicha.message}</p>}
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <label className={labelCls}>Jornada</label>
+                        <div className="relative">
+                          <Clock size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-600 z-10" />
+                          <select {...regForm.register('jornada', { required: true })} className={inputCls}>
+                            <option value="mañana">Mañana</option>
+                            <option value="tarde">Tarde</option>
+                            <option value="noche">Noche</option>
+                          </select>
+                        </div>
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className={labelCls}>Documento</label>
+                        <div className="relative">
+                          <Hash size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-600" />
+                          <input
+                            {...regForm.register('documento', { required: 'Campo obligatorio' })}
+                            type="text"
+                            inputMode="numeric"
+                            placeholder="N° documento"
+                            className={inputCls}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                    <p className="text-[11px] text-zinc-500 ml-0.5">
+                      Tu instructor recibirá la solicitud y deberá aprobarla para que ingreses a la ficha.
+                    </p>
+                  </div>
 
-              {/* Separador */}
-              <div className="flex items-center gap-3">
-                <div className="flex-1 h-px bg-zinc-800" />
-                <span className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest">o</span>
-                <div className="flex-1 h-px bg-zinc-800" />
-              </div>
+                  <button
+                    type="submit"
+                    disabled={regForm.formState.isSubmitting || registerOk}
+                    className="w-full flex items-center justify-center gap-2 py-3 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed text-white text-sm font-black rounded-md transition-all shadow-lg shadow-blue-600/20 active:scale-[0.98]"
+                  >
+                    {regForm.formState.isSubmitting
+                      ? <><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Creando cuenta...</>
+                      : 'Crear cuenta y solicitar vinculación'}
+                  </button>
+                </form>
+              )}
 
-              <OAuthButtons />
+              {/* ════════ FORMULARIO INSTRUCTOR ════════ */}
+              {registerType === 'instructor' && (
+                <form onSubmit={instrForm.handleSubmit(onInstrRegisterSubmit)} className="space-y-4">
+                  <div className="space-y-1.5">
+                    <label className={labelCls}>Nombre</label>
+                    <div className="relative">
+                      <UserIcon size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-600" />
+                      <input
+                        {...instrForm.register('nombre', {
+                          required: 'Campo obligatorio',
+                          minLength: { value: 3, message: 'Mínimo 3 caracteres' },
+                        })}
+                        type="text"
+                        placeholder="Nombre completo"
+                        className={inputCls}
+                      />
+                    </div>
+                    {instrForm.formState.errors.nombre &&
+                      <p className="text-[11px] text-rose-400 ml-1">{instrForm.formState.errors.nombre.message}</p>}
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className={labelCls}>Correo institucional SENA</label>
+                    <div className="relative">
+                      <Mail size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-600" />
+                      <input
+                        {...instrForm.register('correo', {
+                          required: 'Campo obligatorio',
+                          pattern: {
+                            value: /^[^\s@]+@sena\.edu\.co$/i,
+                            message: 'Debe terminar en @sena.edu.co',
+                          },
+                        })}
+                        type="email"
+                        placeholder="nombre@sena.edu.co"
+                        className={inputCls}
+                      />
+                    </div>
+                    {instrForm.formState.errors.correo
+                      ? <p className="text-[11px] text-rose-400 ml-1">{instrForm.formState.errors.correo.message}</p>
+                      : <p className="text-[11px] text-zinc-600 ml-1">Solo se aceptan correos institucionales @sena.edu.co.</p>}
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className={labelCls}>Contraseña</label>
+                    <div className="relative">
+                      <Lock size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-600" />
+                      <input
+                        {...instrForm.register('contrasena', {
+                          required: 'Campo obligatorio',
+                          validate: (v: string) => {
+                            if (v.length < 7)     return 'Mínimo 7 caracteres';
+                            if (!/[A-Z]/.test(v)) return 'Incluye al menos una letra mayúscula';
+                            if (!/[0-9]/.test(v)) return 'Incluye al menos un número';
+                            return true;
+                          },
+                        })}
+                        type={showPassword ? 'text' : 'password'}
+                        placeholder="Mín. 7, una mayúscula y un número"
+                        className={inputPwdCls}
+                      />
+                      <button type="button" onClick={() => setShowPassword(v => !v)}
+                        className="absolute right-3.5 top-1/2 -translate-y-1/2 text-zinc-600 hover:text-zinc-400 transition-colors">
+                        {showPassword ? <EyeOff size={14} /> : <Eye size={14} />}
+                      </button>
+                    </div>
+                    {instrForm.formState.errors.contrasena
+                      ? <p className="text-[11px] text-rose-400 ml-1">{instrForm.formState.errors.contrasena.message}</p>
+                      : <p className="text-[11px] text-zinc-600 ml-1">Mínimo 7 caracteres, una mayúscula y un número.</p>}
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={instrForm.formState.isSubmitting || registerOk}
+                    className="w-full flex items-center justify-center gap-2 py-3 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed text-white text-sm font-black rounded-md transition-all shadow-lg shadow-blue-600/20 active:scale-[0.98]"
+                  >
+                    {instrForm.formState.isSubmitting
+                      ? <><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Creando cuenta...</>
+                      : 'Crear cuenta de instructor'}
+                  </button>
+                </form>
+              )}
+
+              {/* Separador + OAuth solo para aprendices */}
+              {registerType === 'aprendiz' && (
+                <>
+                  <div className="flex items-center gap-3">
+                    <div className="flex-1 h-px bg-zinc-800" />
+                    <span className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest">o</span>
+                    <div className="flex-1 h-px bg-zinc-800" />
+                  </div>
+                  <OAuthButtons />
+                </>
+              )}
 
               <p className="text-xs text-zinc-400 text-center pt-1">
                 ¿Ya tienes cuenta?{' '}

@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Notification } from './entities/notification.entity';
 import { N8nService } from '../integrations/n8n.service';
+import { KanbanGateway } from './kanban.gateway';
 
 @Injectable()
 export class NotificationsService {
@@ -10,6 +11,7 @@ export class NotificationsService {
     @InjectRepository(Notification)
     private notificationsRepository: Repository<Notification>,
     private readonly n8n: N8nService,
+    private readonly gateway: KanbanGateway,
   ) {}
 
   async findAllForUser(userId: number): Promise<Notification[]> {
@@ -23,6 +25,13 @@ export class NotificationsService {
   async create(data: Partial<Notification>): Promise<Notification> {
     const notification = this.notificationsRepository.create(data);
     const saved = await this.notificationsRepository.save(notification);
+
+    // ── TIEMPO REAL → push por WebSocket al usuario destinatario ─────────────
+    // Esto hace que aparezca el toast emergente al instante en su interfaz,
+    // para cualquier rol y cualquier evento que cree una notificación.
+    try {
+      if (saved.usuario_id) this.gateway.notifyUser(saved.usuario_id, saved);
+    } catch { /* el socket no debe romper la creación */ }
 
     // ── SALIENTE → n8n: espejamos cada notificación como evento ──────────────
     // Fire-and-forget; si n8n no está configurado, no hace nada.

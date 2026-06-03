@@ -30,7 +30,7 @@ import * as path from 'path';
 
 import { Ticket, TicketStatus }   from './entities/ticket.entity';
 import { TicketAttachment }        from './entities/ticket-attachment.entity';
-import { TipoTrimestre }           from '../projects/entities/trimestre.entity';
+import { TipoTrimestre, EstadoTrimestre, Trimestre } from '../projects/entities/trimestre.entity';
 import { Sprint }                  from '../projects/entities/sprint.entity';
 import { NotificationsService }    from '../notifications/notifications.service';
 import { EmailService }            from '../email/email.service';
@@ -119,6 +119,19 @@ export class TicketsService {
       }
     }
 
+    // ── Bloquear creación en trimestres HISTÓRICOS ──────────────────────────
+    // Si el trimestre destino está marcado como histórico, no se permiten tareas.
+    if (trimestre_id) {
+      const trim = await this.ticketsRepository.manager
+        .getRepository(Trimestre)
+        .findOne({ where: { id: trimestre_id } });
+      if (trim?.estado === EstadoTrimestre.HISTORICO) {
+        throw new BadRequestException(
+          'No se pueden crear tareas en un trimestre histórico. Es solo referencia documental.',
+        );
+      }
+    }
+
     const ticket = this.ticketsRepository.create({
       ...createTicketDto,
       requiere_adjunto,
@@ -147,6 +160,7 @@ export class TicketsService {
           titulo:     `Nueva tarea asignada: "${saved.titulo}"`,
           mensaje:    `${creadorNombre} te asignó la tarea "${saved.titulo}" en el proyecto "${(full as any)?.proyecto?.nombre ?? ''}"`,
           tipo:       'info' as any,
+          action_data: JSON.stringify({ ticket_id: saved.id, proyecto_id: saved.proyecto_id }),
         });
 
         // Email
@@ -163,12 +177,40 @@ export class TicketsService {
             asignadoPor:    creadorNombre,
           });
         }
+      } else if (!saved.asignado_a_id && saved.proyecto_id) {
+        // ── Tarea SIN asignar → avisar a TODO el equipo (pueden tomarla) ──────
+        const proyecto: any = await this.ticketsRepository.manager
+          .getRepository('Project')
+          .findOne({ where: { id: saved.proyecto_id }, relations: ['miembros', 'lider'] });
+
+        if (proyecto) {
+          const equipo = new Map<number, any>();
+          for (const m of (proyecto.miembros ?? [])) equipo.set(m.id, m);
+          if (proyecto.lider) equipo.set(proyecto.lider.id, proyecto.lider);
+          // No notificar a quien creó la tarea
+          equipo.delete(Number(createTicketDto.creado_por_id));
+
+          for (const miembro of equipo.values()) {
+            await this.notificationsService.create({
+              usuario_id: miembro.id,
+              titulo:     `🆕 Nueva tarea disponible: "${saved.titulo}"`,
+              mensaje:    `Hay una tarea sin asignar en "${proyecto.nombre}". Tómala desde el tablero si quieres encargarte.`,
+              tipo:       'info' as any,
+              action_data: JSON.stringify({ ticket_id: saved.id, proyecto_id: saved.proyecto_id }),
+            });
+          }
+        }
       }
     } catch (err) {
       // No relanzar: el ticket fue creado exitosamente.
       // El fallo es solo en el canal de notificación/email.
       console.error('[TicketsService.create] Error enviando notificación:', err?.message);
     }
+
+    // ── Real-time: refrescar el tablero del proyecto al crear la tarea ────────
+    try {
+      this.gateway.broadcastTicketUpdated(saved.proyecto_id, saved);
+    } catch { /* el socket no debe romper la creación */ }
 
     return saved;
   }
@@ -190,12 +232,16 @@ export class TicketsService {
     });
   }
 
-  // ── MODIFICADO: incluye adjuntos en la carga del ticket ──────────────────
-  async findOne(id: number): Promise<Ticket> {
-    return this.ticketsRepository.findOne({
+  // ── MODIFICADO: incluye adjuntos + valida permisos de acceso ─────────────
+  // El parámetro `actor` (req.user) es opcional para compatibilidad con
+  // llamadas internas, pero el controller SIEMPRE lo pasa para verificar
+  // que el usuario tenga permiso sobre el proyecto al que pertenece la tarea.
+  async findOne(id: number, actor?: any): Promise<Ticket> {
+    const ticket = await this.ticketsRepository.findOne({
       where: { id },
       relations: [
         'proyecto',
+        'proyecto.ficha',
         'asignado_a',
         'creado_por',
         'comentarios',
@@ -207,6 +253,45 @@ export class TicketsService {
         'adjuntos.subido_por',
       ],
     });
+    if (!ticket) throw new NotFoundException('Ticket no encontrado');
+
+    // ── Control de acceso ───────────────────────────────────────────────────
+    // Si no hay actor (llamada interna), no validamos. Si lo hay, debe ser:
+    //   • coordinador (acceso total), o
+    //   • instructor de la ficha del proyecto, o
+    //   • líder del proyecto, o
+    //   • miembro del proyecto (proyecto_usuarios).
+    // De lo contrario lanzamos 403 — privacidad entre fichas/proyectos.
+    if (actor) {
+      const allowed = await this.userCanAccessTicket(ticket as any, actor);
+      if (!allowed) {
+        throw new ForbiddenException('No tienes permiso para ver esta tarea.');
+      }
+    }
+
+    return ticket;
+  }
+
+  /** ¿El usuario `actor` puede ver/operar este ticket? */
+  private async userCanAccessTicket(ticket: any, actor: any): Promise<boolean> {
+    if (!actor) return false;
+    if (actor.rol === 'coordinador') return true;
+
+    const proyecto: any = ticket.proyecto;
+    if (!proyecto) return false;
+
+    // Instructor: dueño de la ficha del proyecto
+    if (actor.rol === 'instructor') {
+      return Number(proyecto?.ficha?.instructor_id) === Number(actor.id);
+    }
+
+    // Aprendiz / líder técnico: líder del proyecto o miembro de proyecto_usuarios
+    if (Number(proyecto.liderId) === Number(actor.id)) return true;
+    const rows = await this.ticketsRepository.manager.query(
+      `SELECT 1 FROM proyecto_usuarios WHERE project_id = ? AND user_id = ? LIMIT 1`,
+      [proyecto.id, actor.id],
+    );
+    return rows?.length > 0;
   }
 
   // ── MODIFICADO: validación de adjunto obligatorio antes de marcar done ────
@@ -283,6 +368,9 @@ export class TicketsService {
         const actorId     = actor?.id ?? null;
         const actorNombre = actor?.nombre ?? (updated as any).creado_por?.nombre ?? 'Alguien';
 
+        // action_data común: deep-link a esta tarea
+        const ad = JSON.stringify({ ticket_id: id, proyecto_id: (updated as any).proyecto_id });
+
         // Tarea completada → notificar al creador/líder (si no fue él mismo quien la completó)
         if (statusDto.estado === TicketStatus.DONE) {
           if (updated.creado_por_id && updated.creado_por_id !== actorId) {
@@ -291,6 +379,7 @@ export class TicketsService {
               titulo:     `Tarea completada: "${titulo}"`,
               mensaje:    `${actorNombre} marcó como completada la tarea "${titulo}" en "${proyecto}".`,
               tipo:       'success' as any,
+              action_data: ad,
             });
           }
         }
@@ -303,6 +392,7 @@ export class TicketsService {
               titulo:     `Tarea lista para revisión: "${titulo}"`,
               mensaje:    `${actorNombre} movió "${titulo}" a Testing. Revísala en el tablero.`,
               tipo:       'info' as any,
+              action_data: ad,
             });
           }
         }
@@ -319,6 +409,7 @@ export class TicketsService {
               titulo:     `Estado actualizado: "${titulo}"`,
               mensaje:    `${actorNombre} cambió el estado de "${titulo}" a "${estadoLabel}".`,
               tipo:       'info' as any,
+              action_data: ad,
             });
           }
         }
@@ -373,12 +464,13 @@ export class TicketsService {
         // decía "A te asignó" cuando fue B quien la reasignó.
         const asignadorNombre = actor?.nombre ?? full?.creado_por?.nombre ?? 'Tu líder técnico';
 
-        // In-app
+        // In-app — incluye action_data con el id de la tarea para deep-link
         await this.notificationsService.create({
           usuario_id: updateTicketDto.asignado_a_id,
           titulo:     `Nueva tarea asignada: "${antes?.titulo}"`,
           mensaje:    `${asignadorNombre} te asignó la tarea "${antes?.titulo}" en el proyecto "${(full as any)?.proyecto?.nombre ?? ''}".`,
           tipo:       'info' as any,
+          action_data: JSON.stringify({ ticket_id: id, proyecto_id: (full as any)?.proyecto_id }),
         });
 
         // Email
@@ -571,6 +663,7 @@ export class TicketsService {
           usuario_id: ticket.creado_por_id,
           titulo:  `Tarea tomada: "${ticket.titulo}"`,
           mensaje: `${full?.asignado_a?.nombre ?? 'Un aprendiz'} tomó la tarea "${ticket.titulo}" en "${(full as any)?.proyecto?.nombre ?? ''}".`,
+          action_data: JSON.stringify({ ticket_id: ticket.id, proyecto_id: (ticket as any).proyecto_id }),
           tipo:    'info' as any,
         });
       }
@@ -630,6 +723,7 @@ export class TicketsService {
           usuario_id: ticket.creado_por_id,
           titulo:  `Tarea enviada a revisión: "${ticket.titulo}"`,
           mensaje: `${(full as any)?.asignado_a?.nombre ?? 'Un aprendiz'} finalizó la tarea "${ticket.titulo}". Revísala en el tablero.`,
+          action_data: JSON.stringify({ ticket_id: ticket.id, proyecto_id: (ticket as any).proyecto_id }),
           tipo:    'success' as any,
         });
 
@@ -685,6 +779,7 @@ export class TicketsService {
           usuario_id: ticket.asignado_a_id,
           titulo:  `¡Tarea aprobada! "${ticket.titulo}"`,
           mensaje: `Tu líder aprobó tu trabajo en "${ticket.titulo}". La tarea quedó Finalizada. ¡Bien hecho!`,
+          action_data: JSON.stringify({ ticket_id: ticket.id, proyecto_id: (ticket as any).proyecto_id }),
           tipo:    'success' as any,
         });
 
@@ -736,6 +831,7 @@ export class TicketsService {
           usuario_id: ticket.asignado_a_id,
           titulo:  `Tarea devuelta con correcciones: "${ticket.titulo}"`,
           mensaje: `Tu líder necesita correcciones en "${ticket.titulo}". Motivo: ${motivo_bloqueo}`,
+          action_data: JSON.stringify({ ticket_id: ticket.id, proyecto_id: (ticket as any).proyecto_id }),
           tipo:    'warning' as any,
         });
 
@@ -791,6 +887,7 @@ export class TicketsService {
           usuario_id: ticket.asignado_a_id,
           titulo:  `¡Tarea finalizada! "${ticket.titulo}"`,
           mensaje: `El instructor aprobó tu tarea "${ticket.titulo}" en "${proyectoNombre}". ¡Bien hecho!`,
+          action_data: JSON.stringify({ ticket_id: ticket.id, proyecto_id: (ticket as any).proyecto_id }),
           tipo:    'success' as any,
         });
         if ((ticket as any)?.asignado_a?.correo) {
@@ -808,6 +905,7 @@ export class TicketsService {
           usuario_id: ticket.creado_por_id,
           titulo:  `Tarea aprobada por instructor: "${ticket.titulo}"`,
           mensaje: `El instructor marcó como finalizada la tarea "${ticket.titulo}" en "${proyectoNombre}".`,
+          action_data: JSON.stringify({ ticket_id: ticket.id, proyecto_id: (ticket as any).proyecto_id }),
           tipo:    'success' as any,
         });
       }
@@ -848,6 +946,7 @@ export class TicketsService {
           usuario_id: ticket.asignado_a_id,
           titulo:  `Tarea devuelta por instructor: "${ticket.titulo}"`,
           mensaje: `El instructor devolvió "${ticket.titulo}". Motivo: ${motivo_bloqueo}`,
+          action_data: JSON.stringify({ ticket_id: ticket.id, proyecto_id: (ticket as any).proyecto_id }),
           tipo:    'warning' as any,
         });
         if ((ticket as any)?.asignado_a?.correo) {

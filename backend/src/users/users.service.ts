@@ -96,6 +96,39 @@ export class UsersService {
   }
 
   /**
+   * Crea un INSTRUCTOR auto-registrado con correo @sena.edu.co.
+   * Estado inicial:
+   *   - cuenta_confirmada = false (debe abrir el correo de activación).
+   *   - aprobacion_coord_estado = PENDIENTE (debe ser aprobado por un coordinador).
+   *   - activo = true (los flags anteriores ya bloquean el login).
+   *
+   * La validación del dominio se hace en AuthService.registerInstructor para
+   * no acoplar esa lógica al repositorio.
+   */
+  async createSelfRegisteredInstructor(
+    dto: { nombre: string; correo: string; contrasena: string },
+  ): Promise<User> {
+    const token  = crypto.randomBytes(32).toString('hex');
+    const hashed = await bcrypt.hash(dto.contrasena, 10);
+    const user = this.usersRepository.create({
+      nombre:            dto.nombre,
+      correo:            dto.correo,
+      contrasena:        hashed,
+      rol:               UserRole.INSTRUCTOR,
+      activo:            true,
+      cuenta_confirmada: false,
+      token_activacion:  token,
+    } as Partial<User>);
+    const saved = await this.usersRepository.save(user);
+    // Correo de confirmación. El instructor solo entra a la pantalla de
+    // "esperando aprobación" tras confirmar el correo.
+    this.sendSelfRegistrationEmail(saved.correo, saved.nombre, token).catch(
+      (err) => console.error('[UsersService] Error al enviar correo de confirmación (instructor):', err),
+    );
+    return saved;
+  }
+
+  /**
    * Login con GitHub: busca al usuario por github_login_id primero, luego
    * por correo. Si no existe, crea un aprendiz confirmado (GitHub ya verificó
    * el correo). Guarda el github_login_id y la foto de perfil.
@@ -366,9 +399,14 @@ export class UsersService {
   async findByEmail(correo: string): Promise<User> {
     return this.usersRepository.findOne({
       where: { correo },
+      // IMPORTANTE: incluir fichaId y los campos de vinculación. Sin ellos, el
+      // objeto user del login llega sin fichaId y el frontend (ProtectedRoute)
+      // creía que el aprendiz no tenía ficha y lo redirigía a /solicitar-vinculacion.
       select: ['id', 'nombre', 'correo', 'contrasena', 'rol', 'es_lider_tecnico',
                'activo', 'creado_en', 'cuenta_confirmada', 'token_activacion',
-               'totp_enabled'],
+               'totp_enabled', 'fichaId', 'documento', 'avatar_url', 'password_set',
+               'vinculacion_estado', 'ficha_solicitada_id', 'jornada_solicitada',
+               'vinculacion_motivo_rechazo'],
     });
   }
 
@@ -1081,6 +1119,28 @@ export class UsersService {
    *      aún), reutilizamos esa fila — se considera aprobación inmediata.
    *   6. En todos los demás casos, se marca pendiente y se notifica al instructor.
    */
+  /**
+   * Pre-valida que una ficha exista y que la jornada coincida ANTES de crear
+   * una cuenta (para no dejar cuentas huérfanas en el registro de aprendiz).
+   * Devuelve la ficha si todo está bien; lanza BadRequest si no.
+   */
+  async validarFichaVinculacion(codigoFicha: string, jornada: JornadaFicha): Promise<Ficha> {
+    const codigo = String(codigoFicha ?? '').trim();
+    if (!codigo)  throw new BadRequestException('Debes indicar el código de la ficha.');
+    if (!jornada) throw new BadRequestException('Debes indicar tu jornada.');
+
+    const ficha = await this.fichasRepository.findOne({ where: { codigo } });
+    if (!ficha) {
+      throw new BadRequestException(`No se encontró ninguna ficha con código "${codigo}".`);
+    }
+    if (ficha.jornada !== jornada) {
+      throw new BadRequestException(
+        `La jornada que indicaste (${jornada}) no coincide con la jornada de la ficha (${ficha.jornada}).`,
+      );
+    }
+    return ficha;
+  }
+
   async solicitarVinculacion(
     userId:      number,
     dto: { codigoFicha: string; jornada: JornadaFicha; documento: string },

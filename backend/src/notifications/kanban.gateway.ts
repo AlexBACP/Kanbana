@@ -63,6 +63,7 @@ export class KanbanGateway
 
   handleConnection(client: Socket) {
     this.clients.set(client.id, { userId: 0 });
+    this.logger.log(`🔌 Cliente conectado: ${client.id} (total: ${this.clients.size})`);
   }
 
   handleDisconnect(client: Socket) {
@@ -86,6 +87,7 @@ export class KanbanGateway
     info.userId = Number(userId);
     this.clients.set(client.id, info);
     client.join(`user:${userId}`);
+    this.logger.log(`👤 Cliente ${client.id} se unió a user:${userId}`);
   }
 
   /** Usuario entra al tablero de un proyecto */
@@ -152,6 +154,7 @@ export class KanbanGateway
 
   /** Notificación personal a un usuario (reemplaza la emisión manual anterior) */
   notifyUser(userId: number, notification: any) {
+    this.logger.log(`📨 Emitiendo 'notification' a user:${userId} → "${notification?.titulo ?? notification?.mensaje ?? ''}"`);
     this.server.to(`user:${userId}`).emit('notification', notification);
   }
 

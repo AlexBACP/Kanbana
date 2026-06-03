@@ -2,7 +2,7 @@ import { Injectable, NotFoundException, BadRequestException } from '@nestjs/comm
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, IsNull } from 'typeorm';
 import { Ficha, TipoFormacion } from './entities/ficha.entity';
-import { Trimestre, TipoTrimestre } from '../projects/entities/trimestre.entity';
+import { Trimestre, TipoTrimestre, EstadoTrimestre } from '../projects/entities/trimestre.entity';
 import { PLANTILLAS_POR_TIPO, CATALOGO_SUGERENCIAS, TrimestrePlantilla } from './plantillas-sdlc';
 import { User, UserRole } from '../users/entities/user.entity';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -787,6 +787,126 @@ export class FichasService {
     if (dto.fecha_fin)    t.fecha_fin    = dto.fecha_fin as any;
     if (dto.tipo)         t.tipo         = dto.tipo as TipoTrimestre;
     return this.trimestresRepo.save(t as Trimestre);
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // TRIMESTRES HISTÓRICOS (adopción de ficha en curso)
+  // ══════════════════════════════════════════════════════════════════════════
+  /**
+   * Declara N trimestres anteriores como HISTÓRICOS para una ficha que ya
+   * estaba en curso cuando se adoptó Kanbana. Los trimestres existentes con
+   * numero menor al "trimestre_actual" se marcan como historico (con su
+   * nombre/fechas/evidencia opcional). Los siguientes (incluyendo el actual)
+   * pasan a 'planificado' o 'activo' según corresponda.
+   *
+   * Solo coordinador o instructor de la ficha. Idempotente: se puede ejecutar
+   * varias veces para corregir/añadir evidencias.
+   */
+  async declararTrimestresHistoricos(
+    fichaId: number,
+    actor: User,
+    dto: {
+      trimestre_actual: number;
+      anteriores: Array<{
+        numero: number;
+        nombre?: string;
+        fecha_inicio?: string;
+        fecha_fin?: string;
+        evidencia_url?: string;
+        evidencia_nombre?: string;
+      }>;
+    },
+  ): Promise<{ declarados: number; activos: number; ficha_id: number }> {
+    // 1) Validar ficha + permisos
+    const ficha = await this.fichasRepository.findOne({ where: { id: fichaId } });
+    if (!ficha) throw new NotFoundException('Ficha no encontrada');
+
+    const esCoord  = actor.rol === UserRole.COORDINADOR;
+    const esInstrA = actor.rol === UserRole.INSTRUCTOR && ficha.instructor_id === actor.id;
+    if (!esCoord && !esInstrA) {
+      throw new BadRequestException('Solo el coordinador o el instructor de la ficha pueden declarar trimestres históricos.');
+    }
+
+    // 2) Validar input
+    const actual = Number(dto?.trimestre_actual);
+    if (!Number.isInteger(actual) || actual < 1) {
+      throw new BadRequestException('trimestre_actual inválido.');
+    }
+    const anteriores = Array.isArray(dto?.anteriores) ? dto.anteriores : [];
+    for (const a of anteriores) {
+      if (!Number.isInteger(Number(a.numero)) || Number(a.numero) >= actual) {
+        throw new BadRequestException(`Trimestre histórico #${a.numero} debe ser anterior al actual (${actual}).`);
+      }
+    }
+
+    // 3) Cargar los trimestres existentes de la ficha
+    const existentes = await this.trimestresRepo.find({
+      where: { ficha_id: fichaId },
+      order: { numero: 'ASC' },
+    });
+
+    let declarados = 0;
+    let activos    = 0;
+
+    // 4) Procesar cada trimestre existente según su número
+    for (const t of existentes) {
+      const num = t.numero;
+      if (num < actual) {
+        // Histórico: aplicar datos del DTO si vienen
+        const datos = anteriores.find(a => Number(a.numero) === num);
+        t.estado          = EstadoTrimestre.HISTORICO;
+        t.esta_finalizado = true;
+        if (datos?.nombre)         t.nombre       = datos.nombre;
+        if (datos?.fecha_inicio)   t.fecha_inicio = datos.fecha_inicio as any;
+        if (datos?.fecha_fin)      t.fecha_fin    = datos.fecha_fin    as any;
+        if (datos?.evidencia_url) {
+          t.evidencia_cierre_url    = datos.evidencia_url;
+          t.evidencia_cierre_nombre = datos.evidencia_nombre ?? null;
+        }
+        declarados++;
+      } else if (num === actual) {
+        t.estado          = EstadoTrimestre.ACTIVO;
+        t.esta_finalizado = false;
+        activos++;
+      } else {
+        t.estado          = EstadoTrimestre.PLANIFICADO;
+        t.esta_finalizado = false;
+      }
+      await this.trimestresRepo.save(t);
+    }
+
+    return { declarados, activos, ficha_id: fichaId };
+  }
+
+  /**
+   * Adjunta/reemplaza la evidencia de cierre de UN trimestre histórico.
+   * Útil cuando el instructor declaró el histórico sin evidencia y luego la
+   * sube por separado.
+   */
+  async adjuntarEvidenciaTrimestre(
+    trimestreId: number,
+    actor: User,
+    url: string,
+    nombre: string,
+  ): Promise<Trimestre> {
+    const t = await this.trimestresRepo.findOne({
+      where: { id: trimestreId },
+      relations: ['ficha'],
+    });
+    if (!t) throw new NotFoundException('Trimestre no encontrado');
+    if (t.estado !== EstadoTrimestre.HISTORICO) {
+      throw new BadRequestException('Solo se puede adjuntar evidencia a trimestres históricos.');
+    }
+
+    const esCoord  = actor.rol === UserRole.COORDINADOR;
+    const esInstrA = actor.rol === UserRole.INSTRUCTOR && (t as any).ficha?.instructor_id === actor.id;
+    if (!esCoord && !esInstrA) {
+      throw new BadRequestException('Sin permisos para modificar este trimestre.');
+    }
+
+    t.evidencia_cierre_url    = url;
+    t.evidencia_cierre_nombre = nombre;
+    return this.trimestresRepo.save(t);
   }
 
   /**

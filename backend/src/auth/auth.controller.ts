@@ -1,5 +1,5 @@
 import {
-  Controller, Post, Body, UnauthorizedException,
+  Controller, Post, Body, UnauthorizedException, BadRequestException,
   Get, UseGuards, Request, HttpCode, HttpStatus, Query, Res,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
@@ -37,6 +37,25 @@ export class AuthController {
   @ApiOperation({ summary: 'Registro público de auto-servicio (crea un aprendiz)' })
   async register(@Body() body: { nombre: string; correo: string; contrasena: string }) {
     return this.authService.register(body);
+  }
+
+  @Post('register-aprendiz')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Registro de aprendiz con ficha + jornada (crea cuenta y solicitud en un paso)' })
+  async registerAprendiz(@Body() body: {
+    nombre: string; correo: string; contrasena: string;
+    codigoFicha: string; jornada: string; documento: string;
+  }) {
+    return this.authService.registerAprendiz(body);
+  }
+
+  @Post('register-instructor')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Registro de instructor con correo SENA (queda pendiente de aprobación del coordinador)' })
+  async registerInstructor(@Body() body: {
+    nombre: string; correo: string; contrasena: string;
+  }) {
+    return this.authService.registerInstructor(body);
   }
 
   // ── Login con Google (OAuth) — rutas públicas ────────────────────────────
@@ -137,6 +156,31 @@ export class AuthController {
   @ApiOperation({ summary: 'Estado actual del 2FA del usuario autenticado' })
   async get2faStatus(@Request() req: any) {
     return { enabled: !!req.user.totp_enabled };
+  }
+
+  // ── PQRS — ruta pública, sin autenticación ──────────────────────────────
+  @Post('contact')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Envía un mensaje PQRS al administrador del sistema' })
+  async contact(@Body() body: {
+    nombre: string; correo: string;
+    tipo: 'peticion' | 'queja' | 'reclamo' | 'sugerencia';
+    mensaje: string;
+  }) {
+    const nombre  = (body.nombre  || '').trim();
+    const correo  = (body.correo  || '').trim();
+    const tipo    = (body.tipo    || '').trim() as any;
+    const mensaje = (body.mensaje || '').trim();
+
+    if (!nombre || !correo || !tipo || !mensaje) {
+      throw new BadRequestException('Todos los campos son obligatorios.');
+    }
+    if (mensaje.length > 2000) {
+      throw new BadRequestException('El mensaje no puede superar 2000 caracteres.');
+    }
+
+    await this.authService.sendPqrs({ nombre, correo, tipo, mensaje });
+    return { mensaje: 'Tu mensaje fue enviado correctamente. Te responderemos a la brevedad.' };
   }
 
   @Post('logout')

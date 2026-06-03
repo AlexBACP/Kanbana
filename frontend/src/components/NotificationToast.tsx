@@ -1,21 +1,35 @@
 /**
- * NotificationToast — Toast de notificaciones en tiempo real.
+ * NotificationToast — Toasts inteligentes de notificaciones en tiempo real.
  *
- * Se muestra en la esquina inferior derecha cuando llega
- * una notificación por WebSocket.
+ * Comportamiento:
+ *  • Funciona en CUALQUIER vista (tablero, detalle, dashboard, etc.).
+ *  • Si el ícono de la campana del TopBar está visible (id="topbar-bell"),
+ *    el toast "emana" debajo de la campana con una animación tipo paloma.
+ *  • Si no hay TopBar (p.ej. pantallas pre-login o de espera), cae en la
+ *    esquina inferior derecha — el comportamiento de antes.
+ *  • Al hacer clic, navega al destino más relevante (acción/ref → /tickets/X,
+ *    /projects/X/kanban...). Si no se infiere destino, abre el panel /dashboard.
  *
- * Montado una sola vez en App.tsx (dentro de BrowserRouter).
+ * Se monta una sola vez en App.tsx (dentro de BrowserRouter).
  */
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { useNavigate }                        from 'react-router-dom';
-import { motion, AnimatePresence }            from 'framer-motion';
-import { Bell, X, CheckCircle2, AlertTriangle, Clock, Ticket } from 'lucide-react';
-import { useNotificationStore }               from '../store/notification.store';
-import { useAuthStore }                       from '../store/auth.store';
-import { NotificationType }                   from '../types/notification.types';
+import { createPortal } from 'react-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { motion, AnimatePresence }  from 'framer-motion';
+import {
+  Bell, X, CheckCircle2, AlertTriangle, Clock, Ticket,
+} from 'lucide-react';
+import { useNotificationStore } from '../store/notification.store';
+import { useAuthStore }         from '../store/auth.store';
+import type { Notification, NotificationType } from '../types/notification.types';
+import { notifTarget } from '../utils/notifTarget';
 
-// ── Iconos y colores por tipo de notificación ─────────────────────────────────
-const TYPE_CONFIG: Record<NotificationType, { icon: React.ElementType; color: string; bg: string; border: string }> = {
+// ── Estilos por tipo ─────────────────────────────────────────────────────────
+const TYPE_CONFIG: Record<string, { icon: React.ElementType; color: string; bg: string; border: string }> = {
+  info:                  { icon: Bell,          color: 'text-blue-400',    bg: 'bg-blue-500/10',    border: 'border-blue-500/25'    },
+  success:               { icon: CheckCircle2,  color: 'text-emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/25' },
+  warning:               { icon: AlertTriangle, color: 'text-amber-400',   bg: 'bg-amber-500/10',   border: 'border-amber-500/25'   },
+  error:                 { icon: AlertTriangle, color: 'text-rose-400',    bg: 'bg-rose-500/10',    border: 'border-rose-500/25'    },
   ticket_asignado:       { icon: Ticket,        color: 'text-blue-400',    bg: 'bg-blue-500/10',    border: 'border-blue-500/20'    },
   ticket_en_revision:    { icon: Clock,         color: 'text-amber-400',   bg: 'bg-amber-500/10',   border: 'border-amber-500/20'   },
   ticket_aprobado:       { icon: CheckCircle2,  color: 'text-emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/20' },
@@ -26,116 +40,171 @@ const TYPE_CONFIG: Record<NotificationType, { icon: React.ElementType; color: st
 };
 
 interface Toast {
-  id:           number;
-  mensaje:      string;
-  tipo:         NotificationType;
-  referencia_id: number;
-  referencia_tipo: string;
+  id:      number;
+  titulo?: string;
+  mensaje: string;
+  tipo:    NotificationType;
+  target:  string | null;
+}
+
+// Posición del ancla (campana) en coordenadas absolutas
+interface Anchor { top: number; left: number; }
+
+// Busca la campana visible y devuelve su posición (centro inferior del botón)
+function findBellAnchor(): Anchor | null {
+  const el = document.getElementById('topbar-bell');
+  if (!el) return null;
+  const rect = el.getBoundingClientRect();
+  // Si el botón está fuera de pantalla (oculto), también lo descartamos
+  if (rect.width === 0 && rect.height === 0) return null;
+  return { top: rect.bottom + 10, left: rect.left + rect.width / 2 };
+}
+
+// Brinquito de la campana cuando llega un toast (efecto visual)
+function pingBell() {
+  const el = document.getElementById('topbar-bell');
+  if (!el) return;
+  el.animate(
+    [
+      { transform: 'scale(1)'   },
+      { transform: 'scale(1.25) rotate(-12deg)' },
+      { transform: 'scale(1.1)  rotate(10deg)'  },
+      { transform: 'scale(1)'   },
+    ],
+    { duration: 600, easing: 'cubic-bezier(0.4,0,0.2,1)' },
+  );
 }
 
 export const NotificationToast = () => {
-  const [toasts, setToasts] = useState<Toast[]>([]);
-  const { notifications }   = useNotificationStore();
-  const { settings }        = useAuthStore();
-  const navigate            = useNavigate();
-  const lastSeenRef         = useRef<number>(0);
+  const [toasts, setToasts]   = useState<Toast[]>([]);
+  const [anchor, setAnchor]   = useState<Anchor | null>(null);
+  const { notifications }     = useNotificationStore();
+  const { settings }          = useAuthStore();
+  const navigate              = useNavigate();
+  const location              = useLocation();
+  const lastSeenRef           = useRef<number>(0);
 
-  // Detectar nuevas notificaciones en el store
+  // Re-localizar la campana al cambiar de ruta o al redimensionar la ventana
+  useEffect(() => {
+    const update = () => setAnchor(findBellAnchor());
+    update();
+    window.addEventListener('resize', update);
+    // Pequeño delay para esperar el render de la nueva vista
+    const t = setTimeout(update, 100);
+    return () => { window.removeEventListener('resize', update); clearTimeout(t); };
+  }, [location.pathname]);
+
+  // Detectar la notificación nueva del store
   useEffect(() => {
     if (!settings.notificationsEnabled) return;
     if (!notifications.length) return;
-    const latest = notifications[0];
+    const latest = notifications[0] as Notification;
     if (!latest || lastSeenRef.current === latest.id) return;
-
-    // Evitar mostrar notificaciones viejas (leídas o anteriores a la sesión)
     if (latest.leida) return;
 
     lastSeenRef.current = latest.id;
 
-    const toast: Toast = {
-      id:              latest.id,
-      mensaje:         latest.mensaje,
-      tipo:            latest.tipo,
-      referencia_id:   latest.referencia_id,
-      referencia_tipo: latest.referencia_tipo,
+    // Re-localizar la campana en el momento exacto en que llega el toast
+    const a = findBellAnchor();
+    setAnchor(a);
+    if (a) pingBell();
+
+    const t: Toast = {
+      id:      latest.id,
+      titulo:  latest.titulo,
+      mensaje: latest.mensaje,
+      tipo:    latest.tipo,
+      target:  notifTarget(latest),
     };
+    setToasts(prev => [t, ...prev].slice(0, 4));
 
-    setToasts(prev => [toast, ...prev].slice(0, 4));
-
-    // ── Notificación del SISTEMA (navegador) ───────────────────────────────
-    // Si el permiso está concedido, dispara una notificación nativa del SO.
-    // Útil sobre todo cuando la pestaña está en segundo plano (document.hidden).
+    // Notificación del SO si la pestaña está en segundo plano
     if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
       try {
-        const sysNotif = new Notification('Kanbana', {
+        const sys = new Notification('Kanbana', {
           body: latest.mensaje,
-          icon: '/favicon.ico',
+          icon: '/favicon.svg',
           tag:  `kanbana-${latest.id}`,
         });
-        sysNotif.onclick = () => {
+        sys.onclick = () => {
           window.focus();
-          if (latest.referencia_tipo === 'ticket' && latest.referencia_id) {
-            navigate(`/tickets/${latest.referencia_id}`);
-          }
-          sysNotif.close();
+          if (t.target) navigate(t.target);
+          sys.close();
         };
-      } catch { /* algunos navegadores limitan Notification fuera de user-gesture */ }
+      } catch { /* algunos navegadores limitan fuera de user-gesture */ }
     }
 
-    // Auto-dismiss después de 5s
-    setTimeout(() => {
-      setToasts(prev => prev.filter(t => t.id !== latest.id));
+    // Auto-dismiss 5s
+    const tid = setTimeout(() => {
+      setToasts(prev => prev.filter(x => x.id !== t.id));
     }, 5000);
+    return () => clearTimeout(tid);
   }, [notifications]); // eslint-disable-line
 
   const dismiss = useCallback((id: number) => {
     setToasts(prev => prev.filter(t => t.id !== id));
   }, []);
 
-  const handleClick = useCallback((toast: Toast) => {
-    dismiss(toast.id);
-    if (toast.referencia_tipo === 'ticket' && toast.referencia_id) {
-      navigate(`/tickets/${toast.referencia_id}`);
-    }
+  const open = useCallback((t: Toast) => {
+    dismiss(t.id);
+    if (t.target) navigate(t.target);
   }, [navigate, dismiss]);
 
-  return (
-    <div className="fixed bottom-6 right-6 z-[200] flex flex-col gap-2 pointer-events-none">
-      <AnimatePresence>
-        {toasts.map(toast => {
-          const cfg = TYPE_CONFIG[toast.tipo] ?? {
-            icon: Bell, color: 'text-zinc-400', bg: 'bg-zinc-800', border: 'border-zinc-700'
-          };
-          const Icon = cfg.icon;
+  // Si hay campana visible → modo "ancla bajo la campana"
+  // Si no → modo "esquina inferior derecha"
+  const usingAnchor = !!anchor;
 
+  // Posición del contenedor (porta el clip de movimiento natural)
+  const containerStyle: React.CSSProperties = usingAnchor
+    ? { position: 'fixed', top: anchor!.top, left: anchor!.left, transform: 'translateX(-92%)', zIndex: 200, pointerEvents: 'none' }
+    : { position: 'fixed', bottom: 24, right: 24, zIndex: 200, pointerEvents: 'none' };
+
+  // Animación: si emana de la campana, sube y baja desde -8px con escala
+  const motionInitial = usingAnchor
+    ? { opacity: 0, y: -16, scale: 0.7 }
+    : { opacity: 0, x: 40, scale: 0.9 };
+  const motionAnimate = usingAnchor
+    ? { opacity: 1, y: 0, scale: 1 }
+    : { opacity: 1, x: 0, scale: 1 };
+  const motionExit = usingAnchor
+    ? { opacity: 0, y: -10, scale: 0.85 }
+    : { opacity: 0, x: 40, scale: 0.9 };
+
+  return createPortal(
+    <div style={containerStyle} className="flex flex-col gap-2">
+      {/* Triangulito apuntando a la campana cuando estamos anclados */}
+      {usingAnchor && toasts.length > 0 && (
+        <div className="self-end mr-3 -mb-1 w-3 h-3 rotate-45 bg-zinc-900 border-t border-l border-zinc-700/60 shadow" />
+      )}
+      <AnimatePresence>
+        {toasts.map(t => {
+          const cfg = TYPE_CONFIG[t.tipo as string] ?? TYPE_CONFIG.info;
+          const Icon = cfg.icon;
           return (
             <motion.div
-              key={toast.id}
-              initial={{ opacity: 0, x: 40, scale: 0.9 }}
-              animate={{ opacity: 1, x: 0,  scale: 1   }}
-              exit={{   opacity: 0, x: 40,  scale: 0.9 }}
-              transition={{ duration: 0.2 }}
+              key={t.id}
+              initial={motionInitial}
+              animate={motionAnimate}
+              exit={motionExit}
+              transition={{ type: 'spring', stiffness: 420, damping: 30 }}
               className="pointer-events-auto"
             >
               <div
-                onClick={() => handleClick(toast)}
-                className={`
-                  flex items-start gap-3 px-4 py-3 rounded-xl border shadow-2xl cursor-pointer
-                  bg-zinc-900 ${cfg.border}
-                  hover:bg-zinc-800 transition-colors max-w-xs
-                `}
+                onClick={() => open(t)}
+                title={t.target ? 'Click para abrir' : undefined}
+                className={`flex items-start gap-3 px-4 py-3 rounded-xl border shadow-2xl ${t.target ? 'cursor-pointer' : 'cursor-default'}
+                            bg-zinc-900 ${cfg.border} hover:bg-zinc-800 transition-colors max-w-xs`}
               >
                 <div className={`w-8 h-8 rounded-lg ${cfg.bg} flex items-center justify-center shrink-0`}>
                   <Icon size={15} className={cfg.color} />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs font-bold text-zinc-200 leading-snug">{toast.mensaje}</p>
-                  {toast.referencia_tipo === 'ticket' && (
-                    <p className="text-[10px] text-zinc-500 mt-0.5">Click para ver la tarea</p>
-                  )}
+                  {t.titulo && <p className="text-[12px] font-black text-zinc-100 leading-snug">{t.titulo}</p>}
+                  <p className={`text-xs leading-snug ${t.titulo ? 'text-zinc-400 mt-0.5' : 'font-bold text-zinc-200'}`}>{t.mensaje}</p>
+                  {t.target && <p className="text-[10px] text-blue-400 mt-1 font-bold">Abrir →</p>}
                 </div>
                 <button
-                  onClick={e => { e.stopPropagation(); dismiss(toast.id); }}
+                  onClick={(e) => { e.stopPropagation(); dismiss(t.id); }}
                   className="text-zinc-600 hover:text-zinc-300 transition-colors shrink-0 mt-0.5"
                 >
                   <X size={12} />
@@ -145,6 +214,7 @@ export const NotificationToast = () => {
           );
         })}
       </AnimatePresence>
-    </div>
+    </div>,
+    document.body,
   );
 };

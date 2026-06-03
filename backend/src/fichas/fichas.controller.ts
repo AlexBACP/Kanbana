@@ -7,8 +7,24 @@ import type { Response } from 'express';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { AuthGuard } from '@nestjs/passport';
 import { ApiBearerAuth, ApiTags, ApiOperation, ApiConsumes } from '@nestjs/swagger';
-import { memoryStorage } from 'multer';
+import { memoryStorage, diskStorage } from 'multer';
+import { extname, join }              from 'path';
+import { existsSync, mkdirSync }      from 'fs';
+import { v4 as uuidv4 }               from 'uuid';
 import { FichasService } from './fichas.service';
+
+// ── Configuración de Multer para evidencias de cierre de trimestre ───────────
+const evidenciasStorage = diskStorage({
+  destination: (req, file, cb) => {
+    const dest = join(process.cwd(), 'uploads', 'evidencias');
+    if (!existsSync(dest)) mkdirSync(dest, { recursive: true });
+    cb(null, dest);
+  },
+  filename: (req, file, cb) => {
+    const ext = extname(file.originalname).toLowerCase();
+    cb(null, `${uuidv4()}${ext}`);
+  },
+});
 
 @ApiTags('Fichas')
 @ApiBearerAuth()
@@ -296,5 +312,54 @@ export class FichasController {
     @Body() dto: any,
   ) {
     return this.fichasService.updateTrimestre(tid, dto);
+  }
+
+  // ── Subir UNA evidencia (puede usarse independiente del wizard) ─────────────
+  // Devuelve { url, nombre } que el frontend reusará al llamar declarar-historico.
+  @Post('upload-evidencia')
+  @ApiOperation({ summary: 'Sube un archivo y devuelve su URL pública (para evidencias de cierre)' })
+  @UseInterceptors(FileInterceptor('file', { storage: evidenciasStorage }))
+  uploadEvidencia(@UploadedFile() file: Express.Multer.File) {
+    if (!file) throw new BadRequestException('No se recibió archivo.');
+    const baseUrl = process.env.BASE_URL ?? 'http://localhost:3000';
+    return {
+      url:    `${baseUrl}/uploads/evidencias/${file.filename}`,
+      nombre: file.originalname,
+      mime:   file.mimetype,
+      size:   file.size,
+    };
+  }
+
+  // ── Declarar trimestres históricos en bloque ────────────────────────────────
+  @Post(':id/declarar-historico')
+  @ApiOperation({ summary: 'Declara los trimestres anteriores de una ficha que ya estaba en curso' })
+  declararHistorico(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: {
+      trimestre_actual: number;
+      anteriores: Array<{
+        numero: number; nombre?: string;
+        fecha_inicio?: string; fecha_fin?: string;
+        evidencia_url?: string; evidencia_nombre?: string;
+      }>;
+    },
+    @Request() req: any,
+  ) {
+    return this.fichasService.declararTrimestresHistoricos(id, req.user, dto);
+  }
+
+  // ── Adjuntar/reemplazar evidencia a UN trimestre histórico ──────────────────
+  @Patch('trimestres/:tid/evidencia')
+  @ApiOperation({ summary: 'Adjunta o reemplaza la evidencia de cierre de un trimestre histórico' })
+  @UseInterceptors(FileInterceptor('file', { storage: evidenciasStorage }))
+  adjuntarEvidencia(
+    @Param('tid', ParseIntPipe) tid: number,
+    @UploadedFile() file: Express.Multer.File,
+    @Request() req: any,
+  ) {
+    if (!file) throw new BadRequestException('No se recibió archivo.');
+    const baseUrl = process.env.BASE_URL ?? 'http://localhost:3000';
+    const url     = `${baseUrl}/uploads/evidencias/${file.filename}`;
+    return this.fichasService.adjuntarEvidenciaTrimestre(tid, req.user, url, file.originalname);
   }
 }

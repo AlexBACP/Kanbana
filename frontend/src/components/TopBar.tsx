@@ -81,31 +81,47 @@ export const TYPE_META: Record<SearchHit['type'], {
   usuario:  { icon: UserIcon,      color: 'text-amber-400',   bg: 'bg-amber-500/10',   label: 'Usuario'  },
 };
 
-const QUICK_ACTIONS: Record<string, QuickAction[]> = {
-  coordinador: [
-    { label: 'Nueva ficha',    icon: GraduationCap, description: 'Crear una ficha de formación',     section: 'fichas',   accent: 'text-cyan-400 bg-cyan-500/10 border-cyan-500/20'         },
-    { label: 'Nuevo proyecto', icon: FolderKanban,  description: 'Crear un proyecto formativo',      section: 'projects', accent: 'text-blue-400 bg-blue-500/10 border-blue-500/20'         },
-    { label: 'Ver usuarios',   icon: Users,         description: 'Gestionar usuarios del sistema',   section: 'users',    accent: 'text-amber-400 bg-amber-500/10 border-amber-500/20'      },
-    { label: 'Panel control',  icon: BookOpen,      description: 'Panel de control y estadísticas',  section: 'overview', accent: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20' },
-  ],
-  instructor: [
-    { label: 'Mis proyectos',  icon: FolderKanban,  description: 'Ver todos mis proyectos activos',  section: 'projects', accent: 'text-blue-400 bg-blue-500/10 border-blue-500/20'         },
-    { label: 'Mis fichas',     icon: GraduationCap, description: 'Gestionar fichas de formación',    section: 'fichas',   accent: 'text-cyan-400 bg-cyan-500/10 border-cyan-500/20'         },
-    { label: 'Mi equipo',      icon: Users,         description: 'Ver aprendices y líderes técnicos',section: 'fichas',   accent: 'text-teal-400 bg-teal-500/10 border-teal-500/20'         },
-    { label: 'Nueva tarea',    icon: Plus,          description: 'Crear ticket en un proyecto',      section: 'projects', accent: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20' },
-  ],
-  lider: [
-    { label: 'Mi tablero',     icon: Layers,   description: 'Ir al tablero Kanban del proyecto',   section: 'projects', accent: 'text-blue-400 bg-blue-500/10 border-blue-500/20'         },
-    { label: 'Nueva tarea',    icon: Plus,     description: 'Crear un ticket en el sprint activo', section: 'projects', accent: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20' },
-    { label: 'Mi equipo',      icon: Users,    description: 'Ver aprendices del proyecto',         section: 'equipo',   accent: 'text-amber-400 bg-amber-500/10 border-amber-500/20'      },
-    { label: 'Ver backlog',    icon: BookOpen, description: 'Gestionar el backlog del proyecto',   section: 'projects', accent: 'text-zinc-300 bg-zinc-700/40 border-zinc-600/40'         },
-  ],
-  aprendiz: [
-    { label: 'Mis tareas',  icon: CheckCircle2, description: 'Ver el estado de mis tareas',      section: 'tareas',   accent: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20' },
-    { label: 'Tomar tarea', icon: Zap,          description: 'Ver pool de tareas disponibles',   section: 'tareas',   accent: 'text-cyan-400 bg-cyan-500/10 border-cyan-500/20'         },
-    { label: 'Mi avance',   icon: Layers,       description: 'Ver progreso en el módulo activo', section: 'overview', accent: 'text-blue-400 bg-blue-500/10 border-blue-500/20'         },
-  ],
-};
+// Construye las acciones rápidas según el rol del usuario y, cuando aplica,
+// el ID del proyecto principal (para que líderes y aprendices vayan DIRECTO
+// a su tablero/backlog, no a la lista de proyectos).
+function buildQuickActions(rolEfectivo: string, miProyectoId?: number): QuickAction[] {
+  switch (rolEfectivo) {
+    case 'coordinador':
+      return [
+        { label: 'Nueva ficha',    icon: GraduationCap, description: 'Crear una ficha de formación',    section: 'fichas',   accent: 'text-cyan-400 bg-cyan-500/10 border-cyan-500/20'         },
+        { label: 'Nuevo proyecto', icon: FolderKanban,  description: 'Crear un proyecto formativo',      section: 'projects', accent: 'text-blue-400 bg-blue-500/10 border-blue-500/20'         },
+        { label: 'Ver usuarios',   icon: Users,         description: 'Gestionar usuarios del sistema',   section: 'users',    accent: 'text-amber-400 bg-amber-500/10 border-amber-500/20'      },
+        { label: 'Panel control',  icon: BookOpen,      description: 'Panel de control y estadísticas',  section: 'overview', accent: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20' },
+      ];
+    case 'instructor':
+      return [
+        { label: 'Mis proyectos',  icon: FolderKanban,  description: 'Ver todos mis proyectos activos',  section: 'projects', accent: 'text-blue-400 bg-blue-500/10 border-blue-500/20'         },
+        { label: 'Mis fichas',     icon: GraduationCap, description: 'Gestionar fichas de formación',    section: 'fichas',   accent: 'text-cyan-400 bg-cyan-500/10 border-cyan-500/20'         },
+        { label: 'Notificaciones', icon: BookOpen,      description: 'Revisar alertas y solicitudes',    section: 'notifications', accent: 'text-teal-400 bg-teal-500/10 border-teal-500/20'    },
+        { label: 'Panel control',  icon: CheckCircle2,  description: 'Resumen y métricas del programa',  section: 'overview', accent: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20' },
+      ];
+    case 'lider':
+      // Si tenemos el proyecto, llevamos DIRECTO a tablero/backlog.
+      return miProyectoId ? [
+        { label: 'Mi tablero',     icon: Layers,   description: 'Abrir el tablero Kanban del proyecto', path: `/projects/${miProyectoId}/kanban`,  accent: 'text-blue-400 bg-blue-500/10 border-blue-500/20'         },
+        { label: 'Cola de trabajo',icon: BookOpen, description: 'Backlog y módulos del proyecto',       path: `/projects/${miProyectoId}/backlog`, accent: 'text-zinc-300 bg-zinc-700/40 border-zinc-600/40'         },
+        { label: 'Recursos',       icon: Plus,     description: 'Repos, Drive y enlaces del proyecto',  section: 'recursos', accent: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20' },
+        { label: 'Notificaciones', icon: Users,    description: 'Revisar alertas del equipo',            section: 'notifications', accent: 'text-amber-400 bg-amber-500/10 border-amber-500/20' },
+      ] : [
+        { label: 'Mis proyectos',  icon: FolderKanban, description: 'Abrir el listado de proyectos',    section: 'projects',      accent: 'text-blue-400 bg-blue-500/10 border-blue-500/20'         },
+        { label: 'Notificaciones', icon: Users,        description: 'Revisar alertas del equipo',       section: 'notifications', accent: 'text-amber-400 bg-amber-500/10 border-amber-500/20'      },
+      ];
+    case 'aprendiz':
+      return [
+        { label: 'Mi tablero',     icon: Layers,       description: 'Abrir el tablero Kanban del trimestre activo', section: 'tablero',  accent: 'text-blue-400 bg-blue-500/10 border-blue-500/20'         },
+        { label: 'Mis tareas',     icon: CheckCircle2, description: 'Ver el estado de mis tareas',                  section: 'tareas',   accent: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20' },
+        { label: 'Recursos',       icon: BookOpen,     description: 'Material y enlaces del proyecto',              section: 'recursos', accent: 'text-cyan-400 bg-cyan-500/10 border-cyan-500/20'         },
+        { label: 'Notificaciones', icon: Zap,          description: 'Tus alertas recientes',                        section: 'notificaciones', accent: 'text-amber-400 bg-amber-500/10 border-amber-500/20' },
+      ];
+    default:
+      return [];
+  }
+}
 
 const RECENT_KEY = (uid: number) => `kanbana:recent:${uid}`;
 const MAX_RECENT = 6;
@@ -351,7 +367,17 @@ export const TopBar = ({
   const avatarSrc    = userService.getAvatarUrl(user?.avatar_url);
   const bannerSrc    = userService.getAvatarUrl(user?.banner_url);
   const placeholder  = SEARCH_PLACEHOLDER[rolEfectivo] ?? 'Buscar…';
-  const quickActions = QUICK_ACTIONS[rolEfectivo] ?? [];
+  // Tomamos el ID del proyecto principal del cache de React Query — así las
+  // acciones rápidas de líder/aprendiz pueden ir DIRECTO al tablero/backlog
+  // en lugar de a la lista de proyectos.
+  const miProyectoId = useMemo(() => {
+    const projects: any[] = qc.getQueryData(['projects', 'for-me']) ?? [];
+    return projects?.[0]?.id as number | undefined;
+  }, [qc, rolEfectivo, showActions]);
+  const quickActions = useMemo(
+    () => buildQuickActions(rolEfectivo, miProyectoId),
+    [rolEfectivo, miProyectoId],
+  );
 
   const rolLabel =
     rolEfectivo === 'coordinador' ? 'Coordinador'   :
@@ -648,6 +674,7 @@ export const TopBar = ({
 
       {/* ── 4. Notificaciones ────────────────────────────────────────────────── */}
       <button
+        id="topbar-bell"
         onClick={onNotifications}
         className="relative w-9 h-9 flex items-center justify-center rounded-lg text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors shrink-0"
         title="Notificaciones"

@@ -65,12 +65,14 @@ export class CommentsService {
       }
 
       const autorNombre = full.usuario?.nombre ?? 'Alguien';
+      const ad = JSON.stringify({ ticket_id: ticketId, proyecto_id: ticket.proyecto_id });
       for (const uid of notifyIds) {
         await this.notificationsService.create({
           usuario_id: uid,
           titulo:     `Nuevo comentario en "${ticket.titulo}"`,
           mensaje:    `${autorNombre} comentó: "${(createCommentDto.contenido ?? '').slice(0, 100)}"`,
           tipo:       'info' as any,
+          action_data: ad,
         });
       }
     }

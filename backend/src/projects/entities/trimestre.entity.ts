@@ -11,6 +11,23 @@ export enum TipoTrimestre {
 }
 
 /**
+ * Estado operativo del trimestre.
+ *   - planificado  → futuro, sin operación.
+ *   - activo       → donde se trabaja actualmente (uno por ficha a la vez).
+ *   - completado   → cerrado normalmente desde Kanbana (se trabajó aquí).
+ *   - historico    → declarado por instructor/coordinador para una ficha que
+ *                    ya estaba en curso al adoptar Kanbana. NO tiene operación
+ *                    detallada (sin módulos ni tareas), solo nombre/fechas y
+ *                    una evidencia de cierre opcional.
+ */
+export enum EstadoTrimestre {
+  PLANIFICADO = 'planificado',
+  ACTIVO      = 'activo',
+  COMPLETADO  = 'completado',
+  HISTORICO   = 'historico',
+}
+
+/**
  * Trimestre — ahora pertenece a la FICHA, no al proyecto.
  *
  * ── MODIFICADO ────────────────────────────────────────────────────────────
@@ -51,6 +68,24 @@ export class Trimestre {
 
   @Column({ default: false })
   esta_finalizado: boolean;
+
+  // ── Estado operativo del trimestre ────────────────────────────────────
+  @Column({
+    type: 'enum',
+    enum: EstadoTrimestre,
+    default: EstadoTrimestre.PLANIFICADO,
+  })
+  estado: EstadoTrimestre;
+
+  // ── Evidencia de cierre (solo para trimestres históricos) ─────────────
+  // URL pública del archivo subido (acta, planilla, PDF...).
+  // null = sin evidencia. La UI muestra un badge "Sin evidencia" para que
+  // el coordinador la añada después si quiere.
+  @Column({ type: 'text', nullable: true })
+  evidencia_cierre_url: string | null;
+
+  @Column({ nullable: true })
+  evidencia_cierre_nombre: string | null;
 
   // ── MODIFICADO: ficha_id en lugar de proyecto_id ──────────────────────
   @Column()

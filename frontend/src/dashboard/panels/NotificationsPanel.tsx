@@ -19,7 +19,9 @@ import {
   Info, AlertTriangle, Trash2, Shield,
   Clock, Zap, RefreshCw, GraduationCap, ChevronDown, Layers,
 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { notificationService } from '../../services/notification.service';
+import { notifTarget } from '../../utils/notifTarget';
 import { permisosService }     from '../../services/permisos.service';
 import { fichaService }        from '../../services/ficha.service';
 import { projectService }      from '../../services/project.service';
@@ -118,6 +120,14 @@ function clusterGroup(items: NotifItem[]): ClusteredItem[] {
 export const NotificationsPanel = () => {
   const qc       = useQueryClient();
   const { user } = useAuthStore();
+  const navigate = useNavigate();
+
+  // Abrir destino al hacer clic en una notificación: marca como leída + navega
+  const openNotif = (n: any) => {
+    if (!n.leida) markReadMut.mutate(n.id);
+    const target = notifTarget(n);
+    if (target) navigate(target);
+  };
 
   // Clusters expandidos (key = "cluster-<firstId>")
   const [expandedClusters, setExpandedClusters] = useState<Set<string>>(new Set());
@@ -272,6 +282,12 @@ export const NotificationsPanel = () => {
     const isSprintRequest  = n.action_type === 'solicitar_modulo'     && !n.leida;
     const isSprintExpanded = sprintAction?.notifId === n.id;
 
+    // Las notificaciones de acción (permiso, ficha, sprint) NO deben navegar
+    // al hacer clic — tienen sus propios botones inline.
+    const hasInlineAction = isPermiso || isFichaRequest || isSprintRequest;
+    const target          = hasInlineAction ? null : notifTarget(n);
+    const isLink          = !!target;
+
     return (
       <motion.div
         key={n.id}
@@ -280,9 +296,13 @@ export const NotificationsPanel = () => {
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, x: 30, transition: { duration: 0.15 } }}
         transition={{ duration: 0.2 }}
+        onClick={isLink ? () => openNotif(n) : undefined}
+        title={isLink ? 'Abrir' : undefined}
         className={`relative flex items-start gap-3.5 px-4 py-4 group border-l-[3px] transition-colors ${
+          isLink ? 'cursor-pointer' : ''
+        } ${
           !n.leida
-            ? `${cfg.leftBorder} bg-zinc-800/25`
+            ? `${cfg.leftBorder} bg-zinc-800/25 hover:bg-zinc-800/40`
             : 'border-l-transparent hover:bg-zinc-800/15'
         }`}
       >

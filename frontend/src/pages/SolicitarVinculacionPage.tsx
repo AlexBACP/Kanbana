@@ -8,13 +8,15 @@
  * Si el estado es 'pendiente' o 'rechazado', muestra una pantalla informativa
  * en lugar del formulario.
  */
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useMutation } from '@tanstack/react-query';
 import {
   GraduationCap, Hash, Loader2, AlertCircle, CheckCircle2,
   Clock, XCircle, ArrowLeft, LogOut,
 } from 'lucide-react';
-import { useAuthStore }  from '../store/auth.store';
+import { useAuthStore }         from '../store/auth.store';
+import { useNotificationStore } from '../store/notification.store';
 import { userService }   from '../services/user.service';
 import { authService }   from '../services/auth.service';
 import { useAuth }       from '../hooks/useAuth';
@@ -29,6 +31,10 @@ const JORNADAS = [
 export const SolicitarVinculacionPage = () => {
   const { user, setUser } = useAuthStore();
   const { logout } = useAuth();
+  const navigate  = useNavigate();
+  // Cuenta de notificaciones: cuando llega la de "vinculación aprobada" por
+  // socket, este número cambia y disparamos un re-chequeo inmediato.
+  const notifCount = useNotificationStore(s => s.notifications.length);
 
   const [codigoFicha, setCodigoFicha] = useState('');
   const [jornada,     setJornada]     = useState<'mañana' | 'tarde' | 'noche'>('mañana');
@@ -54,6 +60,33 @@ export const SolicitarVinculacionPage = () => {
       setError(Array.isArray(msg) ? msg.join(', ') : (msg || 'Error al enviar la solicitud'));
     },
   });
+
+  // ── Detección en tiempo real de la aprobación ───────────────────────────────
+  // Mientras el aprendiz no tenga ficha, revisamos /me (al llegar una
+  // notificación por socket y como respaldo cada 6s). En cuanto el instructor
+  // aprueba y aparece la fichaId, entramos al sistema sin refrescar.
+  useEffect(() => {
+    if (user?.fichaId) return;
+    let cancelled = false;
+
+    const check = async () => {
+      try {
+        const fresh = await authService.me();
+        if (cancelled || !fresh) return;
+        if (fresh.fichaId) {
+          setUser(fresh);
+          navigate(fresh.rol === 'aprendiz' ? '/kanban' : '/dashboard', { replace: true });
+        } else if (fresh.vinculacion_estado !== user?.vinculacion_estado) {
+          // Refleja cambios de estado (p. ej. rechazado) sin recargar.
+          setUser(fresh);
+        }
+      } catch { /* silencioso */ }
+    };
+
+    check();
+    const id = setInterval(check, 6000);
+    return () => { cancelled = true; clearInterval(id); };
+  }, [notifCount, user?.fichaId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();

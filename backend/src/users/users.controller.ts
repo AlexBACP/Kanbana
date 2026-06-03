@@ -372,4 +372,5 @@ export class UsersController {
     }
     return this.usersService.rechazarVinculacion(id, motivo, req.user);
   }
+
 }

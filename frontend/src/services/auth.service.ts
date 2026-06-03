@@ -14,6 +14,31 @@ export const authService = {
     return data as { id: number; nombre: string; correo: string };
   },
 
+  /** Registro de aprendiz con ficha + jornada (crea cuenta + solicitud en un paso) */
+  registerAprendiz: async (dto: {
+    nombre: string; correo: string; contrasena: string;
+    codigoFicha: string; jornada: 'mañana' | 'tarde' | 'noche'; documento: string;
+  }) => {
+    const { data } = await api.post('/auth/register-aprendiz', dto);
+    return data as { id: number; requiere_confirmacion: boolean; mensaje: string };
+  },
+
+  /** Envía un mensaje PQRS al administrador (ruta pública) */
+  sendPqrs: async (dto: {
+    nombre: string; correo: string;
+    tipo: 'peticion' | 'queja' | 'reclamo' | 'sugerencia';
+    mensaje: string;
+  }) => {
+    const { data } = await api.post('/auth/contact', dto);
+    return data as { mensaje: string };
+  },
+
+  /** Registro de instructor con correo @sena.edu.co */
+  registerInstructor: async (dto: { nombre: string; correo: string; contrasena: string }) => {
+    const { data } = await api.post('/auth/register-instructor', dto);
+    return data as { id: number; requiere_confirmacion: boolean; mensaje: string };
+  },
+
   logout: async (): Promise<void> => {
     await api.post('/auth/logout');
     localStorage.removeItem('access_token');
