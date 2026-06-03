@@ -1,8 +1,11 @@
 import axios from 'axios';
 import { useAuthStore } from '../store/auth.store';
 
+// En producción el frontend es servido por nginx que proxia /api → backend.
+// En desarrollo Vite proxia /api → localhost:3000 (ver vite.config.ts).
+// Usar ruta relativa evita hardcodear el host/puerto del VPS.
 const api = axios.create({
-  baseURL: 'http://localhost:3000/api',
+  baseURL: '/api',
   withCredentials: true,
 });
 
@@ -81,7 +84,7 @@ api.interceptors.response.use(
     try {
       // Llamar directamente con fetch para evitar que el propio interceptor
       // capture el error de este refresco y cause un bucle
-      const res = await fetch('http://localhost:3000/api/auth/refresh', {
+      const res = await fetch('/api/auth/refresh', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ refresh_token: refreshToken }),

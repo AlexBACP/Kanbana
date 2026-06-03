@@ -224,8 +224,8 @@ export const LoginAside = ({
     }
   };
 
-  const goGoogle  = () => { window.location.href = 'http://localhost:3000/api/auth/google'; };
-  const goGithub  = () => { window.location.href = 'http://localhost:3000/api/auth/github'; };
+  const goGoogle  = () => { window.location.href = '/api/auth/google'; };
+  const goGithub  = () => { window.location.href = '/api/auth/github'; };
 
   // ── Botones OAuth reutilizables ──────────────────────────────────────────────
   const OAuthButtons = () => (
