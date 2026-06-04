@@ -750,7 +750,7 @@ export const UsersPanel = () => {
     <div className="w-full text-zinc-100 bg-zinc-900 min-h-screen">
 
       {/* ── Header con tabs (igual que ProjectsPanel) ──────────────────── */}
-      <div className="flex items-start bg-zinc-900 pt-10 pl-10 gap-4 flex-col border-b border-zinc-600/60">
+      <div className="flex items-start bg-zinc-900 pt-6 md:pt-10 px-4 md:pl-10 md:pr-4 gap-4 flex-col border-b border-zinc-600/60">
         <div>
           <h2 className="text-3xl font-black text-white tracking-tight">Usuarios</h2>
           <p className="text-[12px] font-semibold text-zinc-400 mt-0.5">
@@ -798,7 +798,7 @@ export const UsersPanel = () => {
           {/* Búsqueda y filtros */}
           <div className="flex bg-zinc-900 flex-col pt-6 gap-4">
             {/* Barra de búsqueda */}
-            <div className="relative mx-10">
+            <div className="relative mx-4 md:mx-10">
               <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400" size={18} />
               <input
                 value={search}
@@ -816,7 +816,7 @@ export const UsersPanel = () => {
             </div>
 
             {/* Filtros rápidos */}
-            <div className="flex mx-10 items-center gap-3 flex-wrap">
+            <div className="flex mx-4 md:mx-10 items-center gap-3 flex-wrap">
               {/* Vista */}
               <div className="flex gap-1 bg-zinc-950 border border-zinc-700 rounded-md p-1 shrink-0">
                 <button onClick={() => setViewMode('fichas')}
@@ -860,7 +860,7 @@ export const UsersPanel = () => {
           </div>
 
           {/* Contador */}
-          <div className="px-10 pt-8 pb-2.5 bg-zinc-900 flex items-center justify-between text-lg font-bold text-zinc-300 shrink-0">
+          <div className="px-4 md:px-10 pt-6 md:pt-8 pb-2.5 bg-zinc-900 flex items-center justify-between text-lg font-bold text-zinc-300 shrink-0">
             <span>
               Hay <strong className="text-zinc-300">{usersArr.length}</strong> usuarios
             </span>
