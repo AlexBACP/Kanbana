@@ -2,14 +2,18 @@
  * Detección de referencias a tickets dentro de textos de GitHub
  * (mensajes de commit, nombres de rama, títulos/cuerpos de PR).
  *
- * Formatos soportados, todos resolviendo al id numérico del ticket:
- *   KAN-32   →  32   (prefijo configurable vía GITHUB_TICKET_PREFIX, default "KAN")
- *   #32      →  32
+ * El número devuelto se resuelve en github.service.ts → resolveTicketForRepo()
+ * buscando PRIMERO por `ticket_number` dentro del proyecto del repo
+ * (el #1, #2, #3 visible en la UI por módulo), y como fallback por `id` global.
+ *
+ * Formatos soportados:
+ *   KAN-3   →  3   (prefijo configurable vía GITHUB_TICKET_PREFIX, default "KAN")
+ *   #3      →  3
  *
  * Ejemplos:
- *   "feature/KAN-32-auth-jwt"            → 32
- *   "KAN-32 agrega refresh token"        → 32
- *   "Fixes #15 and KAN-7"                → [15, 7]
+ *   "feature/KAN-3-auth-jwt"             → 3
+ *   "KAN-3 agrega refresh token"         → 3
+ *   "Fixes #1 and KAN-7"                 → [1, 7]
  */
 const PREFIX = (process.env.GITHUB_TICKET_PREFIX || 'KAN').trim();
 

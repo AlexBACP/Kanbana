@@ -522,8 +522,27 @@ export class GithubService {
    * De los ids referenciados, devuelve el primero que pertenezca al MISMO
    * proyecto del repo (consistencia: un commit no debe mover un ticket ajeno).
    */
+  /**
+   * Dado un número referenciado en GitHub (KAN-X o #X), encuentra la tarea
+   * correspondiente DENTRO del proyecto vinculado al repo.
+   *
+   * Resolución (en orden):
+   *   1. Tarea cuyo `ticket_number` coincida + pertenezca a este proyecto.
+   *      (Es lo que ve el usuario en la UI: #1, #2, #3... por módulo)
+   *   2. Si no, fallback al `id` global (compatibilidad hacia atrás).
+   */
   private async resolveTicketForRepo(refs: number[], repo: RepoEntity): Promise<number | null> {
     if (!refs.length) return null;
+
+    for (const num of refs) {
+      // 1) Buscar por ticket_number en el proyecto del repo
+      const byNumber = await this.ticketsRepo.findOne({
+        where: { ticket_number: num, proyecto_id: repo.proyecto_id },
+      });
+      if (byNumber) return byNumber.id;
+    }
+
+    // 2) Fallback: id global (tickets antiguos sin ticket_number)
     const tickets = await this.ticketsRepo.find({ where: { id: In(refs) } });
     const valido = tickets.find((t) => t.proyecto_id === repo.proyecto_id);
     return valido?.id ?? null;
