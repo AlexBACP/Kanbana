@@ -197,13 +197,14 @@ export const ProjectPage = () => {
               {generarModulosMut.isPending ? 'Generando...' : 'Generar módulos'}
             </button>
           )}
-          {isAdmin && (
+          {/* Solo mostrar el botón si aún NO hay trimestres configurados */}
+          {isAdmin && trimestres.length === 0 && (
             <button
               onClick={() => setShowGenerate(true)}
               className="flex items-center gap-2 px-3 py-2 rounded-xl bg-zinc-800 border border-zinc-700 text-xs font-bold text-zinc-400 hover:text-primary-400 hover:border-primary-500/40 transition-all"
             >
               <Settings size={14} />
-              {trimestres.length > 0 ? 'Reconfigurar' : 'Configurar trimestres'}
+              Configurar trimestres
             </button>
           )}
         </div>
