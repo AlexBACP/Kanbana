@@ -100,9 +100,16 @@ export class Ticket {
 
   // ── Número de tarea dentro del módulo ────────────────────────────────────
   // Se asigna automáticamente al crear/mover la tarea a un sprint.
-  // Permite mostrar #1, #2, #3... por módulo en lugar del ID global.
+  // Permite mostrar #1, #2, #3... por módulo (orden visual).
   @Column({ nullable: true })
   ticket_number: number | null;
+
+  // ── Código de referencia globalmente único ──────────────────────────────
+  // Se genera al crear la tarea: número aleatorio de 5 dígitos (10000-99999).
+  // Único en TODO el sistema. Se usa para GitHub (KAN-XXXXX), búsquedas,
+  // copiar/pegar y como identificador estable que el usuario puede memorizar.
+  @Column({ type: 'int', nullable: true, unique: true })
+  codigo_referencia: number | null;
 
   // ── Kanban ────────────────────────────────────────────────────────────────
   @Column({ default: 0 })

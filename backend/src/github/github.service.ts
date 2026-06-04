@@ -524,25 +524,35 @@ export class GithubService {
    */
   /**
    * Dado un número referenciado en GitHub (KAN-X o #X), encuentra la tarea
-   * correspondiente DENTRO del proyecto vinculado al repo.
+   * correspondiente.
    *
-   * Resolución (en orden):
-   *   1. Tarea cuyo `ticket_number` coincida + pertenezca a este proyecto.
-   *      (Es lo que ve el usuario en la UI: #1, #2, #3... por módulo)
-   *   2. Si no, fallback al `id` global (compatibilidad hacia atrás).
+   * Resolución por prioridad:
+   *   1. codigo_referencia (5 dígitos único globalmente): IDEAL — sin ambigüedad
+   *   2. ticket_number + proyecto: solo si hay UNA sola coincidencia en el proyecto
+   *   3. id global: compatibilidad con tareas antiguas
    */
   private async resolveTicketForRepo(refs: number[], repo: RepoEntity): Promise<number | null> {
     if (!refs.length) return null;
 
+    // 1) Por código de referencia único (lo que se muestra en la UI: KAN-58329)
     for (const num of refs) {
-      // 1) Buscar por ticket_number en el proyecto del repo
-      const byNumber = await this.ticketsRepo.findOne({
-        where: { ticket_number: num, proyecto_id: repo.proyecto_id },
+      const byCodigo = await this.ticketsRepo.findOne({
+        where: { codigo_referencia: num },
       });
-      if (byNumber) return byNumber.id;
+      if (byCodigo && byCodigo.proyecto_id === repo.proyecto_id) {
+        return byCodigo.id;
+      }
     }
 
-    // 2) Fallback: id global (tickets antiguos sin ticket_number)
+    // 2) Por ticket_number (solo si NO hay ambigüedad)
+    for (const num of refs) {
+      const byNumber = await this.ticketsRepo.find({
+        where: { ticket_number: num, proyecto_id: repo.proyecto_id },
+      });
+      if (byNumber.length === 1) return byNumber[0].id;
+    }
+
+    // 3) Fallback: id global (tareas pre-sistema)
     const tickets = await this.ticketsRepo.find({ where: { id: In(refs) } });
     const valido = tickets.find((t) => t.proyecto_id === repo.proyecto_id);
     return valido?.id ?? null;

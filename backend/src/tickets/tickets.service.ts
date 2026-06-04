@@ -56,6 +56,22 @@ export class TicketsService {
     private readonly gateway: KanbanGateway,
   ) {}
 
+  /**
+   * Genera un código de referencia único de 5 dígitos (10000-99999).
+   * Reintenta hasta 10 veces si colisiona (extremadamente improbable con 90.000 espacios).
+   */
+  private async generateCodigoReferencia(): Promise<number> {
+    for (let i = 0; i < 10; i++) {
+      const candidate = Math.floor(10000 + Math.random() * 90000);
+      const exists = await this.ticketsRepository.findOne({
+        where: { codigo_referencia: candidate },
+      });
+      if (!exists) return candidate;
+    }
+    // Fallback en el caso casi imposible: timestamp últimos 5 dígitos
+    return Math.floor(Date.now() % 90000) + 10000;
+  }
+
   // ── MODIFICADO: detecta si el ticket debe requerir adjunto ───────────────
   // Regla: si el ticket se crea dentro de un sprint de un trimestre documental,
   // requiere_adjunto se activa automáticamente.
@@ -141,11 +157,15 @@ export class TicketsService {
       ticket_number = count + 1;
     }
 
+    // ── Generar codigo_referencia único global (5 dígitos: 10000-99999) ──
+    const codigo_referencia = await this.generateCodigoReferencia();
+
     const ticket = this.ticketsRepository.create({
       ...createTicketDto,
       requiere_adjunto,
       trimestre_id,
       ticket_number,
+      codigo_referencia,
     });
     const saved = await this.ticketsRepository.save(ticket as any) as any;
 

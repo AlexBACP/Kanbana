@@ -110,10 +110,16 @@ export const TicketCard = ({ ticket, actions }: TicketCardProps) => {
               {typeCfg.label}
             </span>
 
-            {/* Número de módulo */}
+            {/* Código de referencia global (KAN-XXXXX) — único en todo el sistema */}
+            {(ticket as any).codigo_referencia && (
+              <span className="text-[9px] font-black text-blue-400 shrink-0 font-mono tracking-wider">
+                KAN-{(ticket as any).codigo_referencia}
+              </span>
+            )}
+            {/* Número visual dentro del módulo */}
             {(ticket as any).sprint_id && (ticket as any).ticket_number && (
-              <span className="text-[9px] font-black text-zinc-500 shrink-0">
-                #{(ticket as any).ticket_number}
+              <span className="text-[9px] font-bold text-zinc-600 shrink-0">
+                · #{(ticket as any).ticket_number}
               </span>
             )}
 

@@ -18,6 +18,7 @@ import {
   Trash2, CheckCircle2, Flag, Plus, GripVertical,
   AlertCircle, AlertTriangle, X, Edit2, Save, ExternalLink, Lightbulb,
   Github, GitBranch, GitCommit, GitPullRequest,
+  Copy, Check,
 } from 'lucide-react';
 import { ticketService }    from '../services/ticket.service';
 import { commentService }   from '../services/comment.service';
@@ -192,6 +193,7 @@ export const TicketDetailPage = () => {
 
   const [activeTab,         setActiveTab]         = useState<'comentarios' | 'adjuntos' | 'subtareas' | 'github' | 'historial'>('comentarios');
   const [isFlagModalOpen,   setIsFlagModalOpen]   = useState(false);
+  const [copiado,           setCopiado]           = useState(false);
   const [isSubtaskModal,    setIsSubtaskModal]     = useState(false);
   const [isEditingTitle,    setIsEditingTitle]     = useState(false);
   const [editTitle,         setEditTitle]         = useState('');
@@ -474,9 +476,27 @@ export const TicketDetailPage = () => {
               <div className="p-6 space-y-4">
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex items-center gap-2 flex-wrap">
+                    {/* Código de referencia global con botón copiar (para usar en commits) */}
+                    {(t as any).codigo_referencia && (
+                      <button
+                        onClick={() => {
+                          navigator.clipboard.writeText(`KAN-${(t as any).codigo_referencia}`);
+                          setCopiado(true);
+                          setTimeout(() => setCopiado(false), 2000);
+                        }}
+                        title="Copiar referencia para usar en commits de GitHub"
+                        className="group flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest bg-blue-500/10 hover:bg-blue-500/20 px-2.5 py-1 rounded-lg border border-blue-500/20 hover:border-blue-500/40 text-blue-400 transition-all font-mono"
+                      >
+                        <span>KAN-{(t as any).codigo_referencia}</span>
+                        {copiado
+                          ? <Check size={11} className="text-emerald-400" />
+                          : <Copy size={11} className="opacity-50 group-hover:opacity-100" />}
+                      </button>
+                    )}
+                    {/* Número visual dentro del módulo */}
                     {t.sprint_id && t.ticket_number && (
-                      <span className="text-[10px] font-black text-blue-400 uppercase tracking-widest bg-blue-500/10 px-2.5 py-1 rounded-lg border border-blue-500/20">
-                        #{t.ticket_number}
+                      <span className="text-[10px] font-bold uppercase tracking-widest bg-zinc-800 px-2.5 py-1 rounded-lg border border-zinc-700 text-zinc-400">
+                        #{t.ticket_number} en módulo
                       </span>
                     )}
                     <span className={`text-[10px] font-black uppercase tracking-widest px-2.5 py-1 rounded-lg border ${PRIO_COLOR[t.prioridad] ?? ''}`}>
