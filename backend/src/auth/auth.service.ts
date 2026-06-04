@@ -270,7 +270,8 @@ export class AuthService {
       );
       accessToken = res.data.access_token;
       if (!accessToken) throw new Error('sin access_token');
-    } catch {
+    } catch (err: any) {
+      console.error('[AuthService] Google OAuth error:', err?.message);
       throw new BadRequestException('No se pudo validar el inicio de sesión con Google.');
     }
 
@@ -368,7 +369,8 @@ export class AuthService {
       );
       ghToken = res.data.access_token;
       if (!ghToken) throw new Error('sin access_token');
-    } catch {
+    } catch (err: any) {
+      console.error('[AuthService] GitHub OAuth error:', err?.message);
       throw new BadRequestException('No se pudo validar el inicio de sesión con GitHub.');
     }
 

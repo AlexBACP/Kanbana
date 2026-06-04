@@ -515,7 +515,7 @@ export class FichasService {
         creadosList.push({ nombre, correo });
         try {
           await this.sendConfirmationEmail(correo, nombre, token);
-        } catch { /* no bloquea el import */ }
+        } catch (err: any) { console.error(`[FichasService] Error al enviar correo a ${correo}:`, err?.message); }
       } else {
         if (user.ficha && user.ficha.id !== fichaId) {
           errors.push({ fila, correo, reason: `Ya pertenece a la ficha ${user.ficha.id}` });
@@ -693,8 +693,9 @@ export class FichasService {
 
     try {
       await this.sendConfirmationEmail(correo, dto.nombre, token);
-    } catch {
+    } catch (err: any) {
       // El usuario fue creado; el correo puede reenviarse después
+      console.error('[FichasService] Error al enviar correo de invitación:', err?.message);
     }
 
     return saved;

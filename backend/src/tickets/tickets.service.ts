@@ -210,7 +210,7 @@ export class TicketsService {
     // ── Real-time: refrescar el tablero del proyecto al crear la tarea ────────
     try {
       this.gateway.broadcastTicketUpdated(saved.proyecto_id, saved);
-    } catch { /* el socket no debe romper la creación */ }
+    } catch (err: any) { console.error('[TicketsService] Error en broadcastTicketUpdated:', err?.message); }
 
     return saved;
   }

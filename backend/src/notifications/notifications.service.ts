@@ -31,7 +31,7 @@ export class NotificationsService {
     // para cualquier rol y cualquier evento que cree una notificación.
     try {
       if (saved.usuario_id) this.gateway.notifyUser(saved.usuario_id, saved);
-    } catch { /* el socket no debe romper la creación */ }
+    } catch (err: any) { console.error('[NotificationsService] Error en push WebSocket:', err?.message); }
 
     // ── SALIENTE → n8n: espejamos cada notificación como evento ──────────────
     // Fire-and-forget; si n8n no está configurado, no hace nada.
@@ -87,9 +87,7 @@ export class NotificationsService {
       try {
         const data = JSON.parse(n.action_data || '{}');
         if (data && data[key] === value) ids.push(n.id);
-      } catch {
-        /* ignorar JSON inválido */
-      }
+      } catch { /* JSON inválido en action_data — ignorar */ }
     }
     if (ids.length > 0) {
       await this.notificationsRepository.delete(ids);

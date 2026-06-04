@@ -1228,7 +1228,7 @@ export class UsersService {
           mensaje:    `${user.nombre} solicita unirse a la ficha ${ficha.codigo}. Revisa su solicitud en "Aprendices".`,
           tipo:       'info' as any,
         });
-      } catch { /* no rompe el flujo */ }
+      } catch (err: any) { console.error('[UsersService] Error al notificar instructor (vinculación):', err?.message); }
     }
 
     return {
@@ -1301,7 +1301,7 @@ export class UsersService {
         mensaje:    `Tu vinculación a la ficha ${ficha.codigo} fue aprobada. Ya puedes acceder al sistema.`,
         tipo:       'success' as any,
       });
-    } catch { /* no op */ }
+    } catch (err: any) { console.error('[UsersService] Error al crear notificación:', err?.message); }
 
     // Correo de confirmación al aprendiz
     if (target.correo) {
@@ -1364,7 +1364,7 @@ export class UsersService {
                     `${motivoLimpio ? `Motivo: ${motivoLimpio}` : 'Si crees que es un error, contacta al coordinador.'}`,
         tipo:       'error' as any,
       });
-    } catch { /* no op */ }
+    } catch (err: any) { console.error('[UsersService] Error al crear notificación:', err?.message); }
 
     return this.findOne(targetUserId);
   }
