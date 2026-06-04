@@ -36,11 +36,18 @@ export class AuthController {
   }
 
   // 5 registros por IP cada 60s
-  @Throttle({ default: { ttl: 60_000, limit: 5 } })
+  /**
+   * @deprecated Usar POST /auth/register-aprendiz (incluye ficha + jornada en un paso).
+   * Este endpoint queda restringido a coordinadores para crear cuentas básicas desde el panel.
+   */
+  @UseGuards(AuthGuard('jwt'))
   @Post('register')
   @HttpCode(HttpStatus.CREATED)
-  @ApiOperation({ summary: 'Registro público de auto-servicio (crea un aprendiz)' })
-  async register(@Body() body: { nombre: string; correo: string; contrasena: string }) {
+  @ApiOperation({ summary: '[DEPRECADO] Solo coordinador. Usar /register-aprendiz para el flujo normal.' })
+  async register(@Body() body: { nombre: string; correo: string; contrasena: string }, @Request() req: any) {
+    if (req.user?.rol !== 'coordinador') {
+      throw new BadRequestException('Usa /register-aprendiz para el registro público.');
+    }
     return this.authService.register(body);
   }
 
