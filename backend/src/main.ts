@@ -51,9 +51,17 @@ async function bootstrap() {
     }),
   );
 
-  // ─── CORS (sin cambios) ───────────────────────────────────────────────
+  // ─── CORS — lee orígenes del .env ────────────────────────────────────
+  // CORS_ORIGINS: lista separada por comas. Si no está definida, usa el
+  // FRONTEND_URL como único origen permitido + localhost para dev.
+  const rawOrigins = process.env.CORS_ORIGINS || process.env.FRONTEND_URL || 'http://localhost:5173';
+  const allowedOrigins = rawOrigins
+    .split(',')
+    .map(o => o.trim())
+    .filter(Boolean);
+
   app.enableCors({
-    origin:      ['http://localhost:5173', 'http://localhost:3001'],
+    origin:      allowedOrigins,
     credentials: true,
   });
 
