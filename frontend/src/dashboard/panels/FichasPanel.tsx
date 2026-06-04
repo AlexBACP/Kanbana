@@ -68,13 +68,16 @@ const Chip = ({ label, color }: { label: string; color: string }) => (
   <span className={`text-[10px] font-black px-2 py-0.5 rounded-lg border uppercase tracking-widest ${color}`}>{label}</span>
 );
 
-const AvatarBadge = ({ nombre, url, size = 8 }: { nombre?: string; url?: string; size?: number }) => (
-  <div className={`w-${size} h-${size} rounded-md bg-gradient-to-br from-primary-600 to-indigo-700 flex items-center justify-center overflow-hidden border border-white/10 shrink-0`}>
-    {url
-      ? <img src={url} className="w-full h-full object-cover" alt="" />
-      : <span className="text-white font-black text-xs">{nombre?.slice(0, 2).toUpperCase() || 'KA'}</span>}
-  </div>
-);
+const AvatarBadge = ({ nombre, url, size = 8 }: { nombre?: string; url?: string; size?: number }) => {
+  const src = userService.getAvatarUrl(url);
+  return (
+    <div className={`w-${size} h-${size} rounded-md bg-gradient-to-br from-primary-600 to-indigo-700 flex items-center justify-center overflow-hidden border border-white/10 shrink-0`}>
+      {src
+        ? <img src={src} className="w-full h-full object-cover" alt="" />
+        : <span className="text-white font-black text-xs">{nombre?.slice(0, 2).toUpperCase() || 'KA'}</span>}
+    </div>
+  );
+};
 
 const SkeletonRow = () => (
   <div className="h-14 bg-zinc-800/40 rounded-md animate-pulse mx-4 mb-1" />

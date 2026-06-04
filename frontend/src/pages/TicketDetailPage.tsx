@@ -21,6 +21,8 @@ import {
 } from 'lucide-react';
 import { ticketService }    from '../services/ticket.service';
 import { commentService }   from '../services/comment.service';
+import { Avatar }           from '../components/Avatar';
+import { userService }      from '../services/user.service';
 import { recursoService }   from '../services/recurso.service';
 import { githubService }    from '../services/github.service';
 import { formatDate }       from '../utils/date.utils';
@@ -594,9 +596,11 @@ export const TicketDetailPage = () => {
                         <div className="text-center py-10 text-zinc-600 text-sm">No hay comentarios aún.</div>
                       ) : (comments as any[]).map((c: any) => (
                         <div key={c.id} className="flex gap-3 group">
-                          <div className="w-8 h-8 rounded-lg bg-zinc-800 border border-zinc-700 flex items-center justify-center text-zinc-500 text-xs font-black shrink-0">
-                            {c.usuario?.nombre?.charAt(0)?.toUpperCase() ?? <User size={14} />}
-                          </div>
+                          <Avatar
+                            nombre={c.usuario?.nombre ?? '?'}
+                            avatarUrl={c.usuario?.avatar_url}
+                            size="sm"
+                          />
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center justify-between gap-2 mb-1">
                               <span className="text-xs font-black text-zinc-300">
@@ -832,9 +836,11 @@ export const TicketDetailPage = () => {
                 <p className="text-[10px] text-zinc-600 uppercase tracking-widest font-bold">Responsable</p>
                 {assigneeName ? (
                   <div className="flex items-center gap-2">
-                    <div className="w-7 h-7 rounded-lg bg-blue-500/10 text-blue-400 flex items-center justify-center text-xs font-black border border-blue-500/20">
-                      {assigneeName.charAt(0)}
-                    </div>
+                    <Avatar
+                      nombre={assigneeName}
+                      avatarUrl={t.asignado_a?.avatar_url ?? t.asignado_a_rel?.avatar_url}
+                      size="xs"
+                    />
                     <span className="text-sm font-black text-zinc-300">{assigneeName}</span>
                   </div>
                 ) : (
