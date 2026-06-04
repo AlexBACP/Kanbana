@@ -535,8 +535,37 @@ export const TicketDetailPage = () => {
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 pt-4 border-t border-zinc-800">
                   {creatorName && (
                     <div>
-                      <p className="text-[10px] text-zinc-600 uppercase tracking-widest font-bold">Creado por</p>
-                      <p className="text-sm font-black text-zinc-300 mt-0.5">{creatorName}</p>
+                      <p className="text-[10px] text-zinc-600 uppercase tracking-widest font-bold mb-1.5">Creado por</p>
+                      <div className="flex items-center gap-2">
+                        <Avatar
+                          nombre={creatorName}
+                          avatarUrl={(t as any).creado_por?.avatar_url ?? (t as any).creado_por_rel?.avatar_url}
+                          size="xs"
+                        />
+                        <div className="min-w-0">
+                          <p className="text-sm font-black text-zinc-300 leading-tight truncate">{creatorName}</p>
+                          {(() => {
+                            const rol = (t as any).creado_por?.rol ?? (t as any).creado_por_rel?.rol;
+                            const esLider = (t as any).creado_por?.es_lider_tecnico ?? (t as any).creado_por_rel?.es_lider_tecnico;
+                            if (!rol) return null;
+                            const rolLabel = esLider
+                              ? 'Líder Técnico'
+                              : rol === 'coordinador' ? 'Coordinador'
+                              : rol === 'instructor'  ? 'Instructor'
+                              : 'Aprendiz';
+                            const rolColor = esLider
+                              ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20'
+                              : rol === 'coordinador' ? 'text-blue-400 bg-blue-500/10 border-blue-500/20'
+                              : rol === 'instructor'  ? 'text-cyan-400 bg-cyan-500/10 border-cyan-500/20'
+                              : 'text-amber-400 bg-amber-500/10 border-amber-500/20';
+                            return (
+                              <span className={`inline-block text-[8px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded border mt-0.5 ${rolColor}`}>
+                                {rolLabel}
+                              </span>
+                            );
+                          })()}
+                        </div>
+                      </div>
                     </div>
                   )}
                   <div>
