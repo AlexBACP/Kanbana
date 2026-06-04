@@ -21,7 +21,7 @@ import {
   Eye, Shield, GraduationCap, BookOpen,
   X, UserCheck, UserX, Crown,
   AlertTriangle, Hash, FolderOpen, ChevronRight,
-  Plus, Mail, Lock, Send, CheckCircle2, Check,
+  Plus, Mail, Lock, Send, CheckCircle2, Check, ArrowRightLeft,
 } from 'lucide-react';
 import { userService }  from '../../services/user.service';
 import { fichaService } from '../../services/ficha.service';
@@ -102,7 +102,7 @@ const RoleChangeConfirmModal = ({
 const UserRow = ({
   u, isAdmin, canConfirm, canViewProfiles, onViewProfile, onRoleChange,
   toggleMutation, deleteMutation, liderMutation, confirmMutation,
-  selected, onSelect, isMe,
+  selected, onSelect, isMe, onMoveUser,
 }: any) => {
   const cfg = ROL_CONFIG[u.rol] ?? ROL_CONFIG.aprendiz;
   const isAprendiz = u.rol === 'aprendiz';
@@ -207,6 +207,15 @@ const UserRow = ({
               <Eye size={12} /> Ver
             </button>
           )}
+          {isAdmin && isAprendiz && (
+            <button
+              onClick={() => onMoveUser?.({ id: u.id, nombre: u.nombre, fichaActual: u.fichaId ?? u.ficha?.id ?? null })}
+              className="flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-bold text-zinc-400 hover:text-blue-400 hover:bg-blue-500/5 rounded-md transition-all border border-transparent hover:border-blue-500/20"
+              title="Mover a otra ficha"
+            >
+              <ArrowRightLeft size={12} /> Mover
+            </button>
+          )}
           {/* Confirmar cuenta — coordinador puede hacerlo con cualquiera; instructor solo con los de su ficha */}
           {canConfirm && u.cuenta_confirmada === false && (
             <button
@@ -252,7 +261,7 @@ const UserRow = ({
 const UsersTable = ({
   users, isAdmin, canConfirm, canViewProfiles, onViewProfile, onRoleChange,
   toggleMutation, deleteMutation, liderMutation, confirmMutation,
-  selectedIds, onSelect, onSelectGroup, onDeselectGroup, meId,
+  selectedIds, onSelect, onSelectGroup, onDeselectGroup, meId, onMoveUser,
 }: any) => {
   if (users.length === 0) {
     return (
@@ -306,6 +315,7 @@ const UsersTable = ({
             selected={selectedIds.has(u.id)}
             onSelect={() => onSelect(u.id)}
             isMe={u.id === meId}
+            onMoveUser={onMoveUser}
           />
         ))}
       </tbody>
@@ -317,7 +327,7 @@ const UsersTable = ({
 const FichaBlock = ({
   ficha, users, isAdmin, canConfirm, canViewProfiles, search,
   onViewProfile, onRoleChange, toggleMutation, deleteMutation, liderMutation, confirmMutation,
-  selectedIds, onSelect, onSelectGroup, onDeselectGroup, meId,
+  selectedIds, onSelect, onSelectGroup, onDeselectGroup, meId, onMoveUser,
 }: any) => {
   const [open, setOpen] = useState(true);
   const filtered = useMemo(() => {
@@ -343,10 +353,14 @@ const FichaBlock = ({
             <p className="text-[11px] text-zinc-400 font-medium">{ficha.programa}</p>
           </div>
           {ficha.instructor && (
-            <div className="ml-3 flex flex-col leading-tight bg-zinc-900 border border-zinc-700 rounded px-2 py-1">
+            <button
+              onClick={e => { e.stopPropagation(); onViewProfile(ficha.instructor.id); }}
+              className="ml-3 flex flex-col leading-tight bg-zinc-900 border border-zinc-700 rounded px-2 py-1 hover:border-cyan-500/50 hover:bg-cyan-500/5 transition-colors text-left"
+              title="Ver perfil del instructor"
+            >
               <span className="text-[10px] font-black text-cyan-400">{ficha.instructor.nombre}</span>
               <span className="text-[9px] text-zinc-500">{ficha.instructor.correo}</span>
-            </div>
+            </button>
           )}
         </div>
         <div className="flex items-center gap-4">
@@ -370,6 +384,7 @@ const FichaBlock = ({
                 liderMutation={liderMutation} confirmMutation={confirmMutation}
                 selectedIds={selectedIds} onSelect={onSelect}
                 onSelectGroup={onSelectGroup} onDeselectGroup={onDeselectGroup} meId={meId}
+                onMoveUser={onMoveUser}
               />
             </div>
           </motion.div>
@@ -588,6 +603,7 @@ export const UsersPanel = () => {
   const [statusFilter,   setStatusFilter]   = useState<'all' | 'activo' | 'inactivo'>('all');
   const [roleConfirm,    setRoleConfirm]    = useState<{ userId: number; nombre: string; newRole: string } | null>(null);
   const [selectedUserIds, setSelectedUserIds] = useState<Set<number>>(new Set());
+  const [moveUser,       setMoveUser]       = useState<{ id: number; nombre: string; fichaActual: number | null } | null>(null);
 
   const { data: users = [],  isLoading: loadingUsers  } = useQuery({
     queryKey: ['users'],
@@ -634,6 +650,12 @@ export const UsersPanel = () => {
   });
 
   // ─── Mutaciones masivas ──────────────────────────────────────────────────────
+  const moveUserMutation = useMutation({
+    mutationFn: ({ userId, fichaId }: { userId: number; fichaId: number | null }) =>
+      userService.update(userId, { fichaId }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['users'] }); setMoveUser(null); },
+  });
+
   const bulkConfirmMutation = useMutation({
     mutationFn: (ids: number[]) => userService.confirmBulk(ids),
     onSuccess:  () => { qc.invalidateQueries({ queryKey: ['users'] }); setSelectedUserIds(new Set()); },
@@ -697,10 +719,11 @@ export const UsersPanel = () => {
 
   const fichaGroups = useMemo(() => {
     const filtered = applyFilters(visibleUsers);
+    // Mostrar TODAS las fichas, incluso las que aún no tienen usuarios
     const byFicha  = fichasArr.map((f: any) => ({
       ficha: f,
       users: filtered.filter((u: any) => u.ficha?.id === f.id || u.fichaId === f.id),
-    })).filter((g: any) => g.users.length > 0);
+    }));
     // "Sin ficha" no se muestra: coordinadores e instructores no tienen ficha
     // y los aprendices sin ficha están en proceso de vinculación (ya lo gestionan desde Fichas).
     const sinFicha: any[] = [];
@@ -866,6 +889,7 @@ export const UsersPanel = () => {
                     liderMutation={liderMutation} confirmMutation={confirmMutation}
                     selectedIds={selectedUserIds} onSelect={toggleSelect}
                     onSelectGroup={selectGroup} onDeselectGroup={deselectGroup} meId={me?.id}
+                    onMoveUser={setMoveUser}
                   />
                 ))}
                 {fichaGroups.sinFicha.length > 0 && (
@@ -1042,6 +1066,71 @@ export const UsersPanel = () => {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* ── Modal mover usuario de ficha ──────────────────────────────── */}
+      <Modal isOpen={moveUser !== null} onClose={() => setMoveUser(null)} title="Mover usuario de ficha">
+        {moveUser && (
+          <div className="space-y-4">
+            <p className="text-sm text-zinc-400">
+              Selecciona la ficha de destino para{' '}
+              <strong className="text-white">{moveUser.nombre}</strong>.
+            </p>
+
+            <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+              {/* Opción: sin ficha */}
+              <button
+                onClick={() => moveUserMutation.mutate({ userId: moveUser.id, fichaId: null })}
+                disabled={moveUserMutation.isPending || moveUser.fichaActual === null}
+                className={`w-full text-left px-4 py-3 rounded-md border transition-all flex items-center justify-between ${
+                  moveUser.fichaActual === null
+                    ? 'border-blue-500/40 bg-blue-500/5 text-blue-400 cursor-default opacity-60'
+                    : 'border-zinc-700 hover:border-rose-500/40 hover:bg-rose-500/5 text-zinc-300'
+                }`}
+              >
+                <div>
+                  <p className="text-[13px] font-bold">Sin ficha</p>
+                  <p className="text-[11px] text-zinc-500">Retirar de la ficha actual</p>
+                </div>
+                {moveUser.fichaActual === null && (
+                  <span className="text-[10px] text-blue-400 font-bold border border-blue-500/30 rounded px-1.5 py-0.5">actual</span>
+                )}
+              </button>
+
+              {/* Lista de fichas */}
+              {fichasArr.map((f: any) => (
+                <button
+                  key={f.id}
+                  onClick={() => moveUserMutation.mutate({ userId: moveUser.id, fichaId: f.id })}
+                  disabled={moveUserMutation.isPending || f.id === moveUser.fichaActual}
+                  className={`w-full text-left px-4 py-3 rounded-md border transition-all flex items-center justify-between ${
+                    f.id === moveUser.fichaActual
+                      ? 'border-blue-500/40 bg-blue-500/5 text-blue-400 cursor-default opacity-70'
+                      : 'border-zinc-700 hover:border-blue-500/40 hover:bg-blue-500/5 text-zinc-300'
+                  }`}
+                >
+                  <div>
+                    <p className="text-[13px] font-bold">{f.codigo}</p>
+                    <p className="text-[11px] text-zinc-500">{f.programa}</p>
+                    {f.instructor && (
+                      <p className="text-[10px] text-cyan-500 mt-0.5">{f.instructor.nombre}</p>
+                    )}
+                  </div>
+                  {f.id === moveUser.fichaActual && (
+                    <span className="text-[10px] text-blue-400 font-bold border border-blue-500/30 rounded px-1.5 py-0.5 shrink-0">actual</span>
+                  )}
+                </button>
+              ))}
+            </div>
+
+            {moveUserMutation.isPending && (
+              <div className="flex items-center gap-2 text-xs text-zinc-400">
+                <span className="w-3.5 h-3.5 border-2 border-zinc-600 border-t-blue-400 rounded-full animate-spin" />
+                Moviendo usuario...
+              </div>
+            )}
+          </div>
+        )}
+      </Modal>
 
       {/* ── Modal confirmación cambio a coordinador ─────────────────────── */}
       <RoleChangeConfirmModal
