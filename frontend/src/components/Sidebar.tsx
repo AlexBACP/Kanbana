@@ -267,10 +267,10 @@ export const Sidebar = ({ setSection, activeSection, allowedSections }: Props) =
         {/* Botón hamburguesa flotante encima del contenido */}
         <button
           onClick={() => setMobileOpen(true)}
-          className="fixed top-3 left-3 z-40 p-2.5 rounded-xl bg-zinc-800 border border-zinc-700 shadow-lg hover:bg-zinc-700 transition-all"
+          className="fixed top-3 left-3 z-50 p-2.5 rounded-xl bg-zinc-800 border border-zinc-700 shadow-xl hover:bg-zinc-700 active:scale-95 transition-all"
           aria-label="Abrir menú"
         >
-          <Menu size={18} className="text-white" />
+          <Menu size={20} className="text-white" />
         </button>
 
         {/* Drawer overlay */}

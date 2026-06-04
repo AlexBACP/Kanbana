@@ -393,7 +393,7 @@ export const TopBar = ({
   let globalIdx = 0;
 
   return (
-    <header className="bg-zinc-900 border-b border-zinc-800 flex items-center gap-4 px-5 py-3.5 shrink-0 relative z-40">
+    <header className="bg-zinc-900 border-b border-zinc-800 flex items-center gap-2 md:gap-4 pl-16 pr-3 md:px-5 py-3 md:py-3.5 shrink-0 relative z-40">
 
       {/* ── 1. Búsqueda universal ─────────────────────────────────────────────── */}
       <div className="flex-1 max-w-2xl relative" ref={searchRef}>

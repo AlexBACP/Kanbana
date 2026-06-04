@@ -133,7 +133,7 @@ export const AdminDashboard = () => {
           onLogout={logout}
         />
 
-        <main className="flex-1 overflow-hidden">
+        <main className="flex-1 overflow-x-auto md:overflow-hidden">
           <AnimatePresence mode="wait">
             <motion.div
               key={section}

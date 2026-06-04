@@ -127,7 +127,7 @@ export const AprendizDashboard = () => {
           onLogout={logout}
         />
 
-        <main className="flex-1 flex flex-col overflow-hidden">
+        <main className="flex-1 flex flex-col overflow-x-auto md:overflow-hidden">
           <AnimatePresence mode="wait">
             <motion.div
               key={sec}
