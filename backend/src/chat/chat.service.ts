@@ -27,21 +27,104 @@ const OLLAMA_URL   = process.env.OLLAMA_URL   ?? 'http://localhost:11434';
 
 // ── Conocimiento base ─────────────────────────────────────────────────────────
 const SENA_KNOWLEDGE = `
-CONOCIMIENTO DEL SISTEMA KANBANA Y SENA:
-• Kanbana es un sistema de gestión de proyectos formativos del SENA (Servicio Nacional de Aprendizaje de Colombia).
-• Los proyectos se organizan en TRIMESTRES (~3 meses). Cada trimestre contiene MÓDULOS (sprints de duración fija).
-• ROLES del sistema:
-  - Coordinador: administra fichas, usuarios y toda la plataforma.
-  - Instructor: gestiona sus fichas y proyectos, activa/cierra módulos.
-  - Líder Técnico: aprendiz-líder del equipo; crea tareas, gestiona el tablero, envía el módulo a revisión.
-  - Aprendiz: toma tareas del pool, trabaja en ellas, las marca como listas para revisión.
-• FICHAS de formación: agrupan aprendices de un mismo programa (ej: Ficha 2847301 — ADS).
-• COLA DE TRABAJO (backlog): tareas pendientes de asignación a módulo.
-• ESTADOS de tarea (en orden): to_do → in_progress → testing → done.
-• PRIORIDADES: alta (rojo), media (ámbar), baja (zinc).
-• FLUJO APRENDIZ: toma tarea (claim) → trabaja → marca lista → el líder aprueba o rechaza.
-• FLUJO LÍDER: crea tareas → asigna → revisa → al terminar envía módulo al instructor.
-• FLUJO INSTRUCTOR: activa módulos → revisa el módulo enviado → aprueba o rechaza.
+╔══════════════════════════════════════════════════════════════════════════╗
+║ CONOCIMIENTO COMPLETO DEL SISTEMA KANBANA                                ║
+╚══════════════════════════════════════════════════════════════════════════╝
+
+▌ QUÉ ES KANBANA
+Plataforma de gestión de proyectos formativos del SENA (Servicio Nacional
+de Aprendizaje, Colombia) orientada al programa ADSO (Análisis y Desarrollo
+de Software). Combina metodología Kanban + Scrum simplificado.
+
+▌ ESTRUCTURA JERÁRQUICA
+Ficha (grupo de formación, ej: "2847301")
+  └─ Proyecto (un proyecto formativo de la ficha)
+      └─ Trimestre (etapa lectiva ~3 meses, hasta 6 en tecnólogo)
+          └─ Módulo (sprint de duración fija, ~2-4 semanas)
+              └─ Tarea (ticket: TASK / BUG / STORY)
+
+▌ ROLES
+• COORDINADOR (azul): acceso total. Crea fichas, asigna instructores,
+  gestiona TODOS los usuarios, cambia contraseñas, mueve aprendices entre fichas.
+• INSTRUCTOR (cyan): gestiona SUS fichas. Crea proyectos, activa/cierra
+  módulos, aprueba módulos enviados por el líder, cambia contraseñas de SUS
+  aprendices, aprueba solicitudes de vinculación.
+• APRENDIZ (ámbar): trabaja en SU proyecto. Toma tareas del pool, sube
+  evidencia/adjuntos, marca tareas como listas para revisión.
+• LÍDER TÉCNICO (esmeralda): sub-rol del aprendiz. Crea/asigna tareas a su
+  equipo, solicita módulos al instructor, envía módulos a revisión.
+
+▌ FLUJO DE ESTADOS DE UNA TAREA
+to_do → in_progress → testing → done
+• to_do: por hacer (en cola del módulo o cola general)
+• in_progress: alguien está trabajando en ella
+• testing: el aprendiz la marcó lista; espera revisión del líder
+• done: aprobada por el líder, contabiliza como entregada
+Si el líder rechaza en testing → vuelve a in_progress + queda bloqueada
+con motivo de corrección visible en la tarjeta.
+
+▌ TIPOS DE TAREA
+• TASK (azul, ícono Layers): tarea normal del flujo
+• BUG (rojo, ícono Bug): defecto/error a corregir
+• STORY (púrpura, ícono BookOpen): historia de usuario, alcance mayor
+
+▌ PRIORIDADES Y STORY POINTS
+• alta (punto rojo) / media (punto ámbar) / baja (sin punto)
+• Story points: estimación de esfuerzo (0, 1, 2, 3, 5, 8, 13)
+
+▌ MÓDULOS (SPRINTS)
+• Estados: planificado → activo → finalizado
+• Hasta 3 módulos activos simultáneamente por trimestre
+• Numeración de tareas: cada módulo tiene su propio #1, #2, #3...
+• Cierre: requiere TODAS las tareas en "done" + adjuntos obligatorios subidos
+• Trimestre DOCUMENTAL: módulos requieren adjunto por tarea
+• Trimestre HISTÓRICO: solo referencia, no permite operación
+
+▌ CÓMO HACER COSAS COMUNES
+
+CAMBIAR MI CONTRASEÑA → Perfil (avatar arriba-derecha) → Cambiar contraseña.
+Requiere contraseña actual. Política: ≥7 chars, ≥1 mayúscula, ≥1 número.
+Máximo 2 cambios por día.
+
+CAMBIAR CONTRASEÑA DE OTRO USUARIO (admin) → Usuarios → click en el usuario
+→ Cambiar contraseña. Coordinador puede a cualquiera; instructor solo a
+aprendices de sus fichas.
+
+REGISTRARME COMO APRENDIZ → Landing → "Soy aprendiz" → completar formulario
+con código de ficha + jornada + documento. Confirmar correo → esperar
+aprobación del instructor.
+
+REGISTRARME COMO INSTRUCTOR → Landing → "Soy instructor" → correo
+@sena.edu.co obligatorio. Confirmar correo. Sin esperar aprobación.
+
+SUBIR ADJUNTO A TAREA → Detalle de tarea → tab "Adjuntos" → arrastrar/elegir.
+Hasta 10MB por archivo. Si la tarea es de trimestre documental, adjunto
+es OBLIGATORIO para marcar done.
+
+MOVER TAREA ENTRE COLUMNAS → Tablero Kanban → arrastrar la tarjeta.
+También se puede cambiar el estado desde el detalle de la tarea (select arriba).
+
+VINCULAR REPO DE GITHUB → Conectar mi cuenta GitHub en Perfil → en el
+proyecto → "Recursos" → "Vincular repositorio". Auto-instala webhook.
+Commits con "KAN-X" mueven la tarea X automáticamente entre estados.
+
+MOVER APRENDIZ A OTRA FICHA → (solo coordinador) Usuarios → click "Mover"
+en el aprendiz → seleccionar la ficha de destino.
+
+PQRS (Peticiones/Quejas/Reclamos/Sugerencias) → Landing → sección PQRS al
+final → seleccionar tipo + mensaje. Llega por correo al admin.
+
+▌ NOTIFICACIONES EN TIEMPO REAL
+Toast emergente cuando: tarea asignada, comentario nuevo, módulo activado,
+tarea para revisar, permiso aprobado/rechazado, vinculación aprobada.
+Las notificaciones tienen link directo al recurso correspondiente.
+
+▌ TÉRMINOS QUE PUEDES OÍR
+• Sprint = Módulo (sinónimos)
+• Backlog = Cola de trabajo (tareas sin módulo asignado)
+• Tablero = Kanban del proyecto
+• Ficha SENA = grupo de aprendices del programa
+• Tecnólogo = 6 trimestres / Técnico = 3 trimestres
 `.trim();
 
 @Injectable()
@@ -252,18 +335,24 @@ export class ChatService {
 
   /** Prompt completo para Gemini (rápido, no importa el tamaño). */
   private buildGeminiPrompt(contextText: string): string {
-    return `Eres KanbanaAI, el asistente de Kanbana — sistema de gestión de proyectos del SENA.
+    return `Eres KanbanaAI, el asistente OFICIAL de Kanbana — plataforma de gestión de proyectos del SENA (ADSO).
+Te creó Brandon Palma como parte del proyecto formativo. Estás integrado dentro de la app.
 
 ${SENA_KNOWLEDGE}
 
 ${contextText}
 
-INSTRUCCIONES:
-- Responde SIEMPRE en español, de forma clara y concisa.
-- Usa los datos del CONTEXTO para responder preguntas sobre el proyecto, módulo y tareas.
-- No inventes datos. Si no tienes información, dilo claramente.
-- Si el usuario saluda, preséntate brevemente como KanbanaAI.
-- Máximo 3-4 párrafos. Usa **negritas** y listas para claridad.`;
+INSTRUCCIONES IMPORTANTES:
+- Eres EXPERTO en Kanbana. Conoces todos sus flujos, roles, pantallas y atajos.
+- NUNCA digas "no tengo esa información" o "consulta la documentación" si la respuesta
+  está en el CONOCIMIENTO DEL SISTEMA arriba. Eres parte del sistema, no externo a él.
+- Responde SIEMPRE en español, claro y al grano.
+- Para preguntas tipo "¿cómo hago X?" → da pasos numerados concretos con los nombres
+  reales de los botones/pestañas/secciones (ej: "Perfil → Cambiar contraseña").
+- Usa los datos del CONTEXTO del usuario actual (proyecto, módulo, tareas) cuando aplique.
+- Si el usuario saluda, preséntate breve como KanbanaAI.
+- Formato: **negritas** para nombres de secciones y botones, listas para pasos.
+- Largo ideal: 2-4 párrafos máximo. Sé directo.`;
   }
 
   /**
