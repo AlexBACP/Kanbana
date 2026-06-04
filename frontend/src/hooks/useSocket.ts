@@ -36,9 +36,10 @@ export const useSocket = (userId: number | undefined) => {
     if (!userId) return;
 
     socket = io(window.location.origin, {
-      auth: { token: localStorage.getItem('access_token') },
+      auth:                { token: localStorage.getItem('access_token') },
+      transports:          ['websocket'],   // evita polling (falla CORS en prod con nginx)
       reconnectionAttempts: 5,
-      reconnectionDelay: 2000,
+      reconnectionDelay:    2000,
     });
 
     socket.on('connect', () => {

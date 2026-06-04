@@ -40,10 +40,9 @@ interface ClientInfo {
 }
 
 @WebSocketGateway({
-  cors: {
-    origin:      ['http://localhost:5173', 'http://localhost:3001'],
-    credentials: true,
-  },
+  // CORS: acepta cualquier origen ya que la seguridad real es el JWT token.
+  // Restringir aquí por origen no aporta seguridad extra y rompe el VPS.
+  cors: { origin: '*' },
   transports: ['websocket', 'polling'],
 })
 export class KanbanGateway

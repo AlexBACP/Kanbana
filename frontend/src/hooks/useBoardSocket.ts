@@ -24,6 +24,7 @@ function getSocket(): Socket {
   if (!boardSocket || !boardSocket.connected) {
     boardSocket = io(window.location.origin, {
       auth:                { token: localStorage.getItem('access_token') },
+      transports:          ['websocket'],
       reconnectionAttempts: 5,
       reconnectionDelay:    2000,
     });
