@@ -19,6 +19,7 @@ import {
   FileText, FileQuestion, ExternalLink,
 } from 'lucide-react';
 import type { TicketAttachment } from '../types/trimestre.types';
+import { userService } from '../services/user.service';
 
 type Kind = 'image' | 'pdf' | 'video' | 'audio' | 'text' | 'office' | 'other';
 
@@ -54,7 +55,9 @@ interface Props {
 }
 
 export const FileViewerModal = ({ attachments, index, onClose, onIndexChange }: Props) => {
-  const file  = attachments[index];
+  const rawFile = attachments[index];
+  // Normalizar URL para que funcione en VPS (quita http://localhost:3000 de registros viejos)
+  const file  = rawFile ? { ...rawFile, url: userService.getUploadUrl(rawFile.url) ?? rawFile.url } : rawFile;
   const total = attachments.length;
 
   const goPrev = () => onIndexChange((index - 1 + total) % total);

@@ -11,6 +11,7 @@ import { Ticket } from '../types/ticket.types';
 import type { TicketAttachment } from '../types/trimestre.types';
 import { Avatar } from './Avatar';
 import { FileViewerModal } from './FileViewerModal';
+import { userService } from '../services/user.service';
 
 const isImage = (adj: TicketAttachment) => (adj.tipo_mime || '').toLowerCase().startsWith('image/');
 
@@ -158,7 +159,7 @@ export const TicketCard = ({ ticket, actions }: TicketCardProps) => {
                 >
                   {isImage(adj) ? (
                     <img
-                      src={adj.url}
+                      src={userService.getUploadUrl(adj.url) ?? adj.url}
                       alt={adj.nombre_original}
                       loading="lazy"
                       className="w-full h-full object-cover"

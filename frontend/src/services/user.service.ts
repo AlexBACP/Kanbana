@@ -90,6 +90,20 @@ export const userService = {
     return `${BASE}${url}`;
   },
 
+  /**
+   * Normaliza URLs de adjuntos/uploads para producción.
+   * Convierte http://localhost:3000/uploads/... → /uploads/...
+   * así los archivos subidos en dev también funcionan en prod (nginx los proxia).
+   */
+  getUploadUrl: (url: string | null | undefined): string | null => {
+    if (!url) return null;
+    // Quitar el prefijo localhost:3000 si existe (archivos subidos antes del fix)
+    const clean = url
+      .replace(/^https?:\/\/localhost:\d+/, '')
+      .replace(/^https?:\/\/127\.0\.0\.1:\d+/, '');
+    return clean || null;
+  },
+
   // ── VINCULACIÓN DE APRENDICES AUTO-REGISTRADOS A UNA FICHA ──────────────
   /** Aprendiz solicita unirse a una ficha indicando código + jornada + documento */
   solicitarVinculacion: (dto: { codigoFicha: string; jornada: 'mañana' | 'tarde' | 'noche'; documento: string }) =>

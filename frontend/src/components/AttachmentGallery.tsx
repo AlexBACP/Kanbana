@@ -24,6 +24,7 @@ import {
   Presentation, Download, Trash2, Paperclip, Eye,
 } from 'lucide-react';
 import { ticketService }    from '../services/ticket.service';
+import { userService }     from '../services/user.service';
 import type { TicketAttachment } from '../types/trimestre.types';
 import { formatDate }       from '../utils/date.utils';
 import { FileViewerModal }  from './FileViewerModal';
@@ -162,7 +163,7 @@ export const AttachmentGallery = ({ ticketId, canDelete }: Props) => {
 
             {/* Descargar: abre la URL pública en nueva pestaña */}
             <a
-              href={adj.url}
+              href={userService.getUploadUrl(adj.url) ?? adj.url}
               target="_blank"
               rel="noopener noreferrer"
               onClick={(e) => e.stopPropagation()}
