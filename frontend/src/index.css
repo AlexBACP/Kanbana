@@ -40,7 +40,17 @@
 /* ── Base ───────────────────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; }
 
-html { font-size: 15px; }
+/* Anti-aliasing y crisp text en TODAS las plataformas — clave para que se vea
+   nítido en pantallas grandes (TVs, proyectores, monitores 4K escalados).
+   El kit completo: Webkit (Chrome/Safari) + Firefox + text-rendering optimizado. */
+html {
+  font-size: 15px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
 
 body {
   background: var(--bg);
@@ -48,7 +58,29 @@ body {
   font-family: 'Inter', system-ui, sans-serif;
   font-feature-settings: 'cv02','cv03','cv04','cv11';
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
   line-height: 1.5;
+  /* Mejora bordes de íconos SVG y imágenes en pantallas escaladas */
+  image-rendering: -webkit-optimize-contrast;
+}
+
+/* SVG sharper rendering — los íconos lucide se ven más nítidos */
+svg {
+  shape-rendering: geometricPrecision;
+}
+
+/* Auto-scaling para pantallas grandes (TVs, proyectores 4K).
+   Usa zoom CSS para amplificar toda la app SIN romper layouts.
+   Webkit/Blink y Firefox modernos lo soportan. */
+@media (min-width: 1920px) and (max-width: 2559px) {
+  body { zoom: 1.15; }
+}
+@media (min-width: 2560px) and (max-width: 3839px) {
+  body { zoom: 1.4; }
+}
+@media (min-width: 3840px) {
+  body { zoom: 1.75; }
 }
 
 /* ── Scrollbar ──────────────────────────────────────────────────────── */
