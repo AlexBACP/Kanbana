@@ -164,8 +164,7 @@ export const AttachmentGallery = ({ ticketId, canDelete }: Props) => {
             {/* Descargar: abre la URL pública en nueva pestaña */}
             <a
               href={userService.getUploadUrl(adj.url) ?? adj.url}
-              target="_blank"
-              rel="noopener noreferrer"
+              download={adj.nombre_original}
               onClick={(e) => e.stopPropagation()}
               className="p-2 rounded-xl bg-zinc-900 border border-zinc-800
                          text-zinc-500 hover:text-primary-400 hover:border-primary-500/30

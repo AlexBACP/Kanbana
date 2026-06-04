@@ -199,8 +199,7 @@ export const FileViewerModal = ({ attachments, index, onClose, onIndexChange }: 
         <div className="flex items-center gap-2 shrink-0">
           <a
             href={file.url}
-            target="_blank"
-            rel="noopener noreferrer"
+            download={file.nombre_original}
             className="p-2 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-400 hover:text-white hover:border-zinc-600 transition-all"
             title="Descargar"
           >
