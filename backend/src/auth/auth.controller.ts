@@ -2,6 +2,7 @@ import {
   Controller, Post, Body, UnauthorizedException, BadRequestException,
   Get, UseGuards, Request, HttpCode, HttpStatus, Query, Res,
 } from '@nestjs/common';
+import { Throttle, SkipThrottle } from '@nestjs/throttler';
 import { AuthGuard } from '@nestjs/passport';
 import type { Response } from 'express';
 import { AuthService } from './auth.service';
@@ -12,6 +13,8 @@ import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 export class AuthController {
   constructor(private authService: AuthService) {}
 
+  // 10 intentos de login por IP cada 60s
+  @Throttle({ default: { ttl: 60_000, limit: 10 } })
   @Post('login')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Login with email and password (+ optional TOTP code)' })
@@ -32,6 +35,8 @@ export class AuthController {
     return this.authService.login(user);
   }
 
+  // 5 registros por IP cada 60s
+  @Throttle({ default: { ttl: 60_000, limit: 5 } })
   @Post('register')
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Registro público de auto-servicio (crea un aprendiz)' })
@@ -39,6 +44,7 @@ export class AuthController {
     return this.authService.register(body);
   }
 
+  @Throttle({ default: { ttl: 60_000, limit: 5 } })
   @Post('register-aprendiz')
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Registro de aprendiz con ficha + jornada (crea cuenta y solicitud en un paso)' })
@@ -49,6 +55,7 @@ export class AuthController {
     return this.authService.registerAprendiz(body);
   }
 
+  @Throttle({ default: { ttl: 60_000, limit: 5 } })
   @Post('register-instructor')
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Registro de instructor con correo SENA (queda pendiente de aprobación del coordinador)' })
@@ -114,6 +121,7 @@ export class AuthController {
     }
   }
 
+  @SkipThrottle()
   @Get('me')
   @UseGuards(AuthGuard('jwt'))
   @ApiBearerAuth()
@@ -159,6 +167,8 @@ export class AuthController {
   }
 
   // ── PQRS — ruta pública, sin autenticación ──────────────────────────────
+  // 3 mensajes por IP cada 10 minutos
+  @Throttle({ default: { ttl: 600_000, limit: 3 } })
   @Post('contact')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Envía un mensaje PQRS al administrador del sistema' })
@@ -199,6 +209,7 @@ export class AuthController {
     return this.authService.resetPassword(body.token, body.newPassword);
   }
 
+  @SkipThrottle()
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
   async refreshToken(@Body('refresh_token') refreshToken: string) {

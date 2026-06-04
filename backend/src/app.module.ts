@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
+import { APP_GUARD } from '@nestjs/core';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
@@ -23,6 +25,12 @@ import { EmailModule }      from './email/email.module';
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
+    // Rate limiting global: 100 requests por IP cada 60s
+    // Los endpoints sensibles (login, register, contact) tienen su propio límite más estricto.
+    ThrottlerModule.forRoot([{
+      ttl:   60_000, // ventana de 60 segundos
+      limit: 100,    // máx 100 requests por IP en esa ventana
+    }]),
     TypeOrmModule.forRoot({
       type: 'mysql',
       host: process.env.DB_HOST || 'localhost',
@@ -54,6 +62,10 @@ import { EmailModule }      from './email/email.module';
     IntegrationsModule,
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [
+    AppService,
+    // Aplica ThrottlerGuard globalmente a todos los endpoints
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
+  ],
 })
 export class AppModule {}
