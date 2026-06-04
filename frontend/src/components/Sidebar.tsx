@@ -5,7 +5,7 @@ import { Section } from '../layouts/AdminDashboard';
 import { useAuth } from '../hooks/useAuth';
 import {
   LayoutDashboard, GraduationCap, Users, ShieldCheck,
-  Bell, Settings, ChevronRight, PanelLeftClose, PanelLeftOpen, Menu, CheckSquare, FolderKanban,
+  Bell, ChevronRight, PanelLeftClose, PanelLeftOpen, Menu, CheckSquare, FolderKanban,
   Link2,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -238,7 +238,6 @@ export const Sidebar = ({ setSection, activeSection, allowedSections }: Props) =
           <div className="space-y-0.5">
             {[
               { label: 'Notificaciones', key: 'notifications' as Section, icon: Bell },
-              { label: 'Configuración', key: 'settings' as Section, icon: Settings },
             ].map((item) => {
               const Icon = item.icon;
               const isActive = activeSection === item.key;

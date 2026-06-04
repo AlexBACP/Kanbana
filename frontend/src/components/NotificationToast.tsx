@@ -134,10 +134,10 @@ export const NotificationToast = () => {
       } catch { /* algunos navegadores limitan fuera de user-gesture */ }
     }
 
-    // Auto-dismiss 5s
+    // Auto-dismiss 12s — el usuario tiene tiempo de leer y reaccionar
     const tid = setTimeout(() => {
       setToasts(prev => prev.filter(x => x.id !== t.id));
-    }, 5000);
+    }, 12_000);
     return () => clearTimeout(tid);
   }, [notifications]); // eslint-disable-line
 

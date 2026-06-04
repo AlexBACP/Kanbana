@@ -696,16 +696,7 @@ export const TopBar = ({
         </AnimatePresence>
       </button>
 
-      {/* ── 5. Configuración ─────────────────────────────────────────────────── */}
-      <button
-        onClick={onSettings}
-        className="w-9 h-9 flex items-center justify-center rounded-lg text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors shrink-0"
-        title="Configuración"
-      >
-        <Settings size={19} />
-      </button>
-
-      {/* ── 6. Perfil ────────────────────────────────────────────────────────── */}
+      {/* ── 5. Perfil ────────────────────────────────────────────────────────── */}
       <div className="relative shrink-0" ref={menuRef}>
         <button
           onClick={() => setShowMenu(v => !v)}
