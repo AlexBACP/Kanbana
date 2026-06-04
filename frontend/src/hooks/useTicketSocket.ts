@@ -14,7 +14,7 @@ let ticketSocket: Socket | null = null;
 
 function getSocket(): Socket {
   if (!ticketSocket || !ticketSocket.connected) {
-    ticketSocket = io('http://localhost:3000', {
+    ticketSocket = io(window.location.origin, {
       auth:                { token: localStorage.getItem('access_token') },
       reconnectionAttempts: 5,
       reconnectionDelay:    2000,

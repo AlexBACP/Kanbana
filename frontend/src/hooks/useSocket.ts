@@ -35,7 +35,7 @@ export const useSocket = (userId: number | undefined) => {
   useEffect(() => {
     if (!userId) return;
 
-    socket = io('http://localhost:3000', {
+    socket = io(window.location.origin, {
       auth: { token: localStorage.getItem('access_token') },
       reconnectionAttempts: 5,
       reconnectionDelay: 2000,

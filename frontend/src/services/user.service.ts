@@ -1,6 +1,7 @@
 import api from './api';
 
-const BASE = 'http://localhost:3000';
+// Ruta relativa — nginx proxia /uploads/ al backend tanto en prod como en dev (vite proxy)
+const BASE = '';
 
 export const userService = {
   getAll: (rol?: string) =>

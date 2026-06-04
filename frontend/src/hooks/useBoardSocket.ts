@@ -22,7 +22,7 @@ let boardSocket: Socket | null = null;
 
 function getSocket(): Socket {
   if (!boardSocket || !boardSocket.connected) {
-    boardSocket = io('http://localhost:3000', {
+    boardSocket = io(window.location.origin, {
       auth:                { token: localStorage.getItem('access_token') },
       reconnectionAttempts: 5,
       reconnectionDelay:    2000,
