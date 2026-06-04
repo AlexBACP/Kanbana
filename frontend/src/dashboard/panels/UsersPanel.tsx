@@ -931,6 +931,7 @@ export const UsersPanel = () => {
                     liderMutation={liderMutation} confirmMutation={confirmMutation}
                     selectedIds={selectedUserIds} onSelect={toggleSelect}
                     onSelectGroup={selectGroup} onDeselectGroup={deselectGroup} meId={me?.id}
+                    onMoveUser={setMoveUser}
                   />
                 </div>
                 {filteredByRole.length > 0 && (
