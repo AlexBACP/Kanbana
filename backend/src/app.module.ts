@@ -31,7 +31,9 @@ import { EmailModule }      from './email/email.module';
       password: process.env.DB_PASSWORD || 'kanbana123',
       database: process.env.DB_NAME || 'kanbana_db',
       entities: [__dirname + '/**/*.entity{.ts,.js}'],
-      synchronize: true, // set false in production
+      // En producción (NODE_ENV=production) synchronize=false para no alterar
+      // el schema automáticamente. En desarrollo queda true para comodidad.
+      synchronize: process.env.NODE_ENV !== 'production',
       logging: false,
     }),
     // EmailModule primero: es @Global y provee EmailService + ScheduleModule a todos
