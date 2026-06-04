@@ -1304,10 +1304,11 @@ export class UsersService {
     // Notificar al aprendiz (in-app)
     try {
       await this.notificationsService.create({
-        usuario_id: target.id,
-        titulo:     '✅ Vinculación aprobada',
-        mensaje:    `Tu vinculación a la ficha ${ficha.codigo} fue aprobada. Ya puedes acceder al sistema.`,
-        tipo:       'success' as any,
+        usuario_id:  target.id,
+        titulo:      '✅ Vinculación aprobada',
+        mensaje:     `Tu vinculación a la ficha ${ficha.codigo} fue aprobada. Ya puedes acceder al sistema.`,
+        tipo:        'success' as any,
+        action_data: JSON.stringify({ ficha_id: ficha.id }),
       });
     } catch (err: any) { console.error('[UsersService] Error al crear notificación:', err?.message); }
 

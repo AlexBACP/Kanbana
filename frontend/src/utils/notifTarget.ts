@@ -16,21 +16,26 @@ export function notifTarget(n: Notification): string | null {
   if (n.action_data) {
     try {
       const data = JSON.parse(n.action_data);
-      if (data?.ticket_id)    return `/tickets/${data.ticket_id}`;
-      if (data?.proyecto_id && data?.trimestre_id) {
+      // Tarea específica
+      if (data?.ticket_id)
+        return `/tickets/${data.ticket_id}`;
+      // Trimestre específico
+      if (data?.proyecto_id && data?.trimestre_id)
         return `/projects/${data.proyecto_id}/trimestre/${data.trimestre_id}/kanban`;
-      }
-      if (data?.proyecto_id)  return `/projects/${data.proyecto_id}/kanban`;
+      // Proyecto (módulos, correcciones, líder asignado, etc.)
+      if (data?.proyecto_id)
+        return `/projects/${data.proyecto_id}/kanban`;
+      // Ficha (vinculación aprobada → dashboard del aprendiz)
+      if (data?.ficha_id)
+        return `/kanban`;
     } catch { /* JSON inválido — ignorar */ }
   }
 
   // 2) Campos legacy estructurados
-  if (n.referencia_tipo === 'ticket' && n.referencia_id) {
+  if (n.referencia_tipo === 'ticket' && n.referencia_id)
     return `/tickets/${n.referencia_id}`;
-  }
-  if (n.referencia_tipo === 'proyecto' && n.referencia_id) {
+  if (n.referencia_tipo === 'proyecto' && n.referencia_id)
     return `/projects/${n.referencia_id}/kanban`;
-  }
 
   // Sin id confiable → no navegamos a ningún lado. Privacidad primero.
   return null;

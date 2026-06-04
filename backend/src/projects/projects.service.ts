@@ -345,10 +345,11 @@ export class ProjectsService {
 
       // ── Notificación in-app al nuevo líder ────────────────────────────────
       await this.notificationsService.create({
-        usuario_id: u.id,
-        titulo:     `🛡️ Eres el Líder Técnico de "${p.nombre}"`,
-        mensaje:    `${instructor?.nombre ?? 'Tu instructor'} te ha designado Líder Técnico del proyecto "${p.nombre}". Ya puedes acceder al dashboard de gestión.`,
-        tipo:       'success' as any,
+        usuario_id:  u.id,
+        titulo:      `🛡️ Eres el Líder Técnico de "${p.nombre}"`,
+        mensaje:     `${instructor?.nombre ?? 'Tu instructor'} te ha designado Líder Técnico del proyecto "${p.nombre}". Ya puedes acceder al dashboard de gestión.`,
+        tipo:        'success' as any,
+        action_data: JSON.stringify({ proyecto_id: p.id }),
       });
 
       // ── Email al nuevo líder ───────────────────────────────────────────────
@@ -503,10 +504,11 @@ export class ProjectsService {
       // In-app a cada miembro
       for (const u of destinatarios) {
         await this.notificationsService.create({
-          usuario_id: u.id,
-          titulo:     `🚀 Módulo activo: "${s.nombre}"`,
-          mensaje:    `${instrNombre} activó el módulo "${s.nombre}" en el proyecto "${proyecto.nombre}". ¡El trabajo comienza!`,
-          tipo:       'info' as any,
+          usuario_id:  u.id,
+          titulo:      `🚀 Módulo activo: "${s.nombre}"`,
+          mensaje:     `${instrNombre} activó el módulo "${s.nombre}" en el proyecto "${proyecto.nombre}". ¡El trabajo comienza!`,
+          tipo:        'info' as any,
+          action_data: JSON.stringify({ proyecto_id: proyecto.id }),
         });
       }
 
@@ -905,10 +907,11 @@ export class ProjectsService {
 
       // In-app
       await this.notificationsService.create({
-        usuario_id: instructor.id,
-        titulo:     `Módulo listo para revisión: "${sprint.nombre}"`,
-        mensaje:    `${lider?.nombre ?? 'El líder'} completó el módulo "${sprint.nombre}" del proyecto "${proyecto.nombre}". Revísalo y apruébalo o solicita correcciones.`,
-        tipo:       'info' as any,
+        usuario_id:  instructor.id,
+        titulo:      `Módulo listo para revisión: "${sprint.nombre}"`,
+        mensaje:     `${lider?.nombre ?? 'El líder'} completó el módulo "${sprint.nombre}" del proyecto "${proyecto.nombre}". Revísalo y apruébalo o solicita correcciones.`,
+        tipo:        'info' as any,
+        action_data: JSON.stringify({ proyecto_id: proyecto.id }),
       });
 
       // Email
@@ -957,10 +960,11 @@ export class ProjectsService {
     if (lider) {
       // In-app
       await this.notificationsService.create({
-        usuario_id: lider.id,
-        titulo:     `Correcciones requeridas en "${sprint.nombre}"`,
-        mensaje:    `El instructor requiere correcciones en el módulo "${sprint.nombre}". ${mensaje}`,
-        tipo:       'warning' as any,
+        usuario_id:  lider.id,
+        titulo:      `Correcciones requeridas en "${sprint.nombre}"`,
+        mensaje:     `El instructor requiere correcciones en el módulo "${sprint.nombre}". ${mensaje}`,
+        tipo:        'warning' as any,
+        action_data: JSON.stringify({ proyecto_id: proyecto.id }),
       });
 
       // Email
@@ -1034,10 +1038,11 @@ export class ProjectsService {
 
     // Notificar al líder que su solicitud fue aprobada
     await this.notificationsService.create({
-      usuario_id: data.lider_id,
-      titulo:     'Módulo aprobado ✓',
-      mensaje:    `Tu solicitud de módulo "${data.nombre}" fue aprobada por el instructor. El módulo ya está disponible en el proyecto.`,
-      tipo:       'success' as any,
+      usuario_id:  data.lider_id,
+      titulo:      'Módulo aprobado ✓',
+      mensaje:     `Tu solicitud de módulo "${data.nombre}" fue aprobada por el instructor. El módulo ya está disponible en el proyecto.`,
+      tipo:        'success' as any,
+      action_data: data.proyecto_id ? JSON.stringify({ proyecto_id: data.proyecto_id }) : undefined,
     });
 
     return { mensaje: 'Módulo creado correctamente.', sprint };
