@@ -343,9 +343,10 @@ const FichaBlock = ({
             <p className="text-[11px] text-zinc-400 font-medium">{ficha.programa}</p>
           </div>
           {ficha.instructor && (
-            <span className="ml-3 text-[10px] font-bold text-zinc-400 bg-zinc-900 border border-zinc-600 rounded px-2 py-0.5 uppercase tracking-wide">
-              {ficha.instructor.nombre}
-            </span>
+            <div className="ml-3 flex flex-col leading-tight bg-zinc-900 border border-zinc-700 rounded px-2 py-1">
+              <span className="text-[10px] font-black text-cyan-400">{ficha.instructor.nombre}</span>
+              <span className="text-[9px] text-zinc-500">{ficha.instructor.correo}</span>
+            </div>
           )}
         </div>
         <div className="flex items-center gap-4">
@@ -700,8 +701,9 @@ export const UsersPanel = () => {
       ficha: f,
       users: filtered.filter((u: any) => u.ficha?.id === f.id || u.fichaId === f.id),
     })).filter((g: any) => g.users.length > 0);
-    // Instructores no ven el grupo "Sin ficha" — no es de su competencia
-    const sinFicha = isInstructor ? [] : filtered.filter((u: any) => !u.ficha && !u.fichaId);
+    // "Sin ficha" no se muestra: coordinadores e instructores no tienen ficha
+    // y los aprendices sin ficha están en proceso de vinculación (ya lo gestionan desde Fichas).
+    const sinFicha: any[] = [];
     return { byFicha, sinFicha };
   }, [visibleUsers, fichasArr, activeRolTab, statusFilter, isInstructor]);
 

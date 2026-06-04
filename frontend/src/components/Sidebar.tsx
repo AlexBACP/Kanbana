@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { useAuthStore } from '../store/auth.store';
 import { Section } from '../layouts/AdminDashboard';
 import { useAuth } from '../hooks/useAuth';
@@ -150,9 +151,9 @@ export const Sidebar = ({ setSection, activeSection, allowedSections }: Props) =
   // ── Contenido interno del sidebar (reutilizado en normal y drawer) ──
   const SidebarContent = ({ isDrawer = false }: { isDrawer?: boolean }) => (
     <>
-      {/* Brand */}
-      <div className="px-4 py-3 ">
-        <div className="flex items-center gap-2.5">
+      {/* Brand — link a la landing */}
+      <div className="px-4 py-3">
+        <Link to="/" className="flex items-center gap-2.5 hover:opacity-80 transition-opacity" title="Ir a la landing">
           <div className="relative w-10 h-10 flex items-center justify-center shrink-0">
             {/* Fondo esmeralda */}
             <div className="absolute inset-0 rounded-xl" style={{ background: 'radial-gradient(circle, #064e3b, #022c22)' }} />
@@ -202,7 +203,7 @@ export const Sidebar = ({ setSection, activeSection, allowedSections }: Props) =
               <p className="text-[10px] text-zinc-500 mt-0.5">SENA · ADSO</p>
             </div>
           )}
-        </div>
+        </Link>
       </div>
 
       {/* Nav principal */}

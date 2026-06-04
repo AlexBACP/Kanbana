@@ -854,9 +854,17 @@ export class UsersService {
     }
 
     user.rol = rol;
+
     if (rol !== UserRole.APRENDIZ) {
       user.es_lider_tecnico = false;
     }
+
+    // Instructores y coordinadores no pertenecen a fichas como aprendices.
+    // Si el usuario tenía ficha asignada (era aprendiz), se limpia al ascender.
+    if (rol !== UserRole.APRENDIZ && user.fichaId) {
+      user.fichaId = null as any;
+    }
+
     return this.usersRepository.save(user);
   }
 
