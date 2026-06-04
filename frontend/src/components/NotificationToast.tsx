@@ -94,33 +94,45 @@ export const NotificationToast = () => {
     return () => { window.removeEventListener('resize', update); clearTimeout(t); };
   }, [location.pathname]);
 
-  // Detectar la notificación nueva del store
+  // Detectar TODAS las notificaciones nuevas del store (no solo la primera)
   useEffect(() => {
     if (!settings.notificationsEnabled) return;
     if (!notifications.length) return;
-    const latest = notifications[0] as Notification;
-    if (!latest || lastSeenRef.current === latest.id) return;
-    if (latest.leida) return;
 
-    lastSeenRef.current = latest.id;
+    // Buscar todas las notificaciones nuevas (id > último visto) que no estén leídas
+    const nuevas = (notifications as Notification[])
+      .filter(n => n.id > lastSeenRef.current && !n.leida);
 
-    // Re-localizar la campana en el momento exacto en que llega el toast
+    if (nuevas.length === 0) return;
+
+    // Actualizar el "último visto" al id más grande
+    lastSeenRef.current = Math.max(...nuevas.map(n => n.id));
+
+    if (import.meta.env.DEV) {
+      console.log(`[NotificationToast] ${nuevas.length} nueva(s) notificación(es):`, nuevas);
+    }
+
+    // Re-localizar la campana en el momento exacto en que llegan los toasts
     const a = findBellAnchor();
     setAnchor(a);
     if (a) pingBell();
 
-    const t: Toast = {
-      id:      latest.id,
-      titulo:  latest.titulo,
-      mensaje: latest.mensaje,
-      tipo:    latest.tipo,
-      target:  notifTarget(latest),
-    };
-    setToasts(prev => [t, ...prev].slice(0, 4));
+    // Convertir cada notificación nueva a Toast
+    const nuevosToasts: Toast[] = nuevas.map(n => ({
+      id:      n.id,
+      titulo:  n.titulo,
+      mensaje: n.mensaje,
+      tipo:    n.tipo,
+      target:  notifTarget(n),
+    }));
 
-    // Notificación del SO si la pestaña está en segundo plano
+    // Mostrar todos los nuevos (máx 4 visibles a la vez)
+    setToasts(prev => [...nuevosToasts, ...prev].slice(0, 4));
+
+    // Notificación del SO si la pestaña está en segundo plano (solo el más reciente)
     if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
       try {
+        const latest = nuevas[0];
         const sys = new Notification('Kanbana', {
           body: latest.mensaje,
           icon: '/favicon.svg',
@@ -128,17 +140,20 @@ export const NotificationToast = () => {
         });
         sys.onclick = () => {
           window.focus();
-          if (t.target) navigate(t.target);
+          const tgt = notifTarget(latest);
+          if (tgt) navigate(tgt);
           sys.close();
         };
       } catch { /* algunos navegadores limitan fuera de user-gesture */ }
     }
 
-    // Auto-dismiss 12s — el usuario tiene tiempo de leer y reaccionar
-    const tid = setTimeout(() => {
-      setToasts(prev => prev.filter(x => x.id !== t.id));
-    }, 12_000);
-    return () => clearTimeout(tid);
+    // Auto-dismiss 20s por toast — tiempo generoso para leer y reaccionar
+    const tids = nuevosToasts.map(t =>
+      setTimeout(() => {
+        setToasts(prev => prev.filter(x => x.id !== t.id));
+      }, 20_000),
+    );
+    return () => tids.forEach(clearTimeout);
   }, [notifications]); // eslint-disable-line
 
   const dismiss = useCallback((id: number) => {
