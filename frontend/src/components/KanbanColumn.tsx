@@ -20,7 +20,7 @@ export const KanbanColumn = ({
   return (
     <div
       ref={setNodeRef}
-      className={`flex flex-col w-72 shrink-0 h-full rounded-xl border transition-all duration-200 ${
+      className={`flex flex-col w-[85vw] sm:w-72 snap-center shrink-0 h-full rounded-xl border transition-all duration-200 ${
         isOver
           ? 'bg-blue-950/20 border-blue-500/30 ring-1 ring-blue-500/20'
           : 'bg-zinc-900/50 border-zinc-700/40'

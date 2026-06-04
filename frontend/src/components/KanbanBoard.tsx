@@ -175,7 +175,7 @@ export const KanbanBoard = ({
       onDragOver={handleDragOver}
       onDragEnd={handleDragEnd}
     >
-      <div className="flex gap-3 h-full min-w-max px-1">
+      <div className="flex gap-3 h-full min-w-max px-1 snap-x snap-mandatory sm:snap-none">
         {visibleColumns.map(({ status, label, color, desc }) => (
           <KanbanColumn
             key={status}
