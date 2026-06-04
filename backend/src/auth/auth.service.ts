@@ -432,7 +432,8 @@ export class AuthService {
     const { totp_secret, contrasena, ...safeUser } = user;
     const payload = { sub: safeUser.id, email: safeUser.correo, rol: safeUser.rol };
     const access_token = this.jwtService.sign(payload, {
-      expiresIn: Number(process.env.JWT_ACCESS_EXPIRES) || 60 * 60 * 8, // 8h por defecto (era 15min)
+      // Acepta string ('2h', '30m') o número en segundos. Default: 2h en producción.
+      expiresIn: (process.env.JWT_ACCESS_EXPIRES || '2h') as any,
     });
     const refresh_token = this.jwtService.sign(payload, {
       secret: process.env.JWT_REFRESH_SECRET || 'kanbana_refresh_secreto_diferente_al_anterior',
