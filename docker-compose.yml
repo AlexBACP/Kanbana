@@ -15,17 +15,17 @@ services:
     image: mysql:8.0
     restart: unless-stopped
     environment:
-      MYSQL_ROOT_PASSWORD: kanbana_root_2026
-      MYSQL_DATABASE: kanbana_db
-      MYSQL_USER: kanbana_user
-      MYSQL_PASSWORD: kanbana2026
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
     volumes:
       - mysql_data:/var/lib/mysql
     # Puerto NO publicado para no chocar con un MySQL local en 3306.
     # (Descomenta si quieres conectarte desde el host)
     # ports: ["3307:3306"]
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-pkanbana_root_2026"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}"]
       interval: 10s
       timeout: 5s
       retries: 12
@@ -47,9 +47,9 @@ services:
       PORT: "3000"
       DB_HOST: mysql
       DB_PORT: "3306"
-      DB_USER: kanbana_user
-      DB_PASSWORD: kanbana2026
-      DB_NAME: kanbana_db
+      DB_USER: ${MYSQL_USER}
+      DB_PASSWORD: ${MYSQL_PASSWORD}
+      DB_NAME: ${MYSQL_DATABASE}
       REDIS_HOST: redis
       REDIS_PORT: "6379"
     depends_on:
@@ -83,8 +83,8 @@ services:
     environment:
       # Acceso a la UI (cámbialos en producción)
       N8N_BASIC_AUTH_ACTIVE: "true"
-      N8N_BASIC_AUTH_USER: admin
-      N8N_BASIC_AUTH_PASSWORD: kanbana2026
+      N8N_BASIC_AUTH_USER: ${N8N_USER}
+      N8N_BASIC_AUTH_PASSWORD: ${N8N_PASSWORD}
       # URL pública del editor / webhooks
       N8N_HOST: localhost
       N8N_PORT: "5678"
