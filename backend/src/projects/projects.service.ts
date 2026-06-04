@@ -481,8 +481,20 @@ export class ProjectsService {
     const s = await this.sprintsRepo.findOne({ where: { id: sprintId } });
     if (!s) throw new NotFoundException();
 
-    // Desactivar cualquier sprint activo anterior del mismo proyecto
-    await this.sprintsRepo.update({ proyecto_id: s.proyecto_id, esta_activo: true }, { esta_activo: false });
+    // Verificar cuántos módulos activos hay en el mismo trimestre (máx 3)
+    const whereActivos: any = { esta_activo: true };
+    if (s.trimestre_id) {
+      whereActivos.trimestre_id = s.trimestre_id;
+    } else {
+      whereActivos.proyecto_id = s.proyecto_id;
+    }
+    const activosEnTrimestre = await this.sprintsRepo.count({ where: whereActivos });
+    if (activosEnTrimestre >= 3) {
+      throw new BadRequestException(
+        'Ya hay 3 módulos activos en este trimestre. Cierra uno antes de activar otro.'
+      );
+    }
+
     s.esta_activo = true;
     await this.sprintsRepo.save(s as Sprint);
 

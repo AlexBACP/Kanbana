@@ -95,9 +95,11 @@ export const TicketCard = ({ ticket, actions }: TicketCardProps) => {
           {/* Row 1 — meta: ID · badges · drag handle */}
           <div className="flex items-center justify-between mb-1.5">
             <div className="flex items-center gap-1.5 min-w-0">
-              <span className="text-[9px] font-black text-zinc-600 tracking-wider shrink-0">
-                #{ticket.id}
-              </span>
+              {(ticket as any).sprint_id && (ticket as any).ticket_number && (
+                <span className="text-[9px] font-black text-zinc-600 tracking-wider shrink-0">
+                  #{(ticket as any).ticket_number}
+                </span>
+              )}
               {ticket.esta_bloqueado && (
                 <Flag size={9} className="text-rose-400 shrink-0" fill="currentColor" />
               )}

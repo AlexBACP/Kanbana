@@ -474,9 +474,11 @@ export const TicketDetailPage = () => {
               <div className="p-6 space-y-4">
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-[10px] font-black text-blue-400 uppercase tracking-widest bg-blue-500/10 px-2.5 py-1 rounded-lg border border-blue-500/20">
-                      #{t.id}
-                    </span>
+                    {t.sprint_id && t.ticket_number && (
+                      <span className="text-[10px] font-black text-blue-400 uppercase tracking-widest bg-blue-500/10 px-2.5 py-1 rounded-lg border border-blue-500/20">
+                        #{t.ticket_number}
+                      </span>
+                    )}
                     <span className={`text-[10px] font-black uppercase tracking-widest px-2.5 py-1 rounded-lg border ${PRIO_COLOR[t.prioridad] ?? ''}`}>
                       Prioridad {t.prioridad}
                     </span>

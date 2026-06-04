@@ -98,6 +98,12 @@ export class Ticket {
   @Column({ type: 'enum', enum: TicketType, default: TicketType.TASK })
   tipo: TicketType;
 
+  // ── Número de tarea dentro del módulo ────────────────────────────────────
+  // Se asigna automáticamente al crear/mover la tarea a un sprint.
+  // Permite mostrar #1, #2, #3... por módulo en lugar del ID global.
+  @Column({ nullable: true })
+  ticket_number: number | null;
+
   // ── Kanban ────────────────────────────────────────────────────────────────
   @Column({ default: 0 })
   orden: number;

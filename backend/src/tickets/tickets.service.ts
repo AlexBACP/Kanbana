@@ -132,10 +132,20 @@ export class TicketsService {
       }
     }
 
+    // ── Asignar número de tarea dentro del módulo ────────────────────────────
+    let ticket_number: number | null = null;
+    if (createTicketDto.sprint_id) {
+      const count = await this.ticketsRepository.count({
+        where: { sprint_id: createTicketDto.sprint_id },
+      });
+      ticket_number = count + 1;
+    }
+
     const ticket = this.ticketsRepository.create({
       ...createTicketDto,
       requiere_adjunto,
       trimestre_id,
+      ticket_number,
     });
     const saved = await this.ticketsRepository.save(ticket as any) as any;
 
@@ -496,16 +506,22 @@ export class TicketsService {
   }
 
   async moveTask(ticketId: number, sprintId: number | null): Promise<Ticket> {
-    // Al asignar la tarea a un módulo, sincronizamos su trimestre con el del
-    // módulo. Al moverla a la cola de trabajo (sprintId null) conservamos el
-    // trimestre que ya tenía, para que no se "escape" a todos los trimestres.
     const patch: any = { sprint_id: sprintId };
+
     if (sprintId) {
       const sprint = await this.ticketsRepository.manager
         .getRepository(Sprint)
         .findOne({ where: { id: sprintId } });
       if (sprint?.trimestre_id) patch.trimestre_id = sprint.trimestre_id;
+
+      // Asignar número dentro del módulo si aún no tiene uno
+      const current = await this.ticketsRepository.findOne({ where: { id: ticketId } });
+      if (!current?.ticket_number) {
+        const count = await this.ticketsRepository.count({ where: { sprint_id: sprintId } });
+        patch.ticket_number = count + 1;
+      }
     }
+
     await this.ticketsRepository.update(ticketId, patch);
     return this.findOne(ticketId);
   }
