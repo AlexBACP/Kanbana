@@ -408,11 +408,11 @@ export const BacklogPage = () => {
             </div>
           </div>
 
-          {/* Layout dos columnas */}
-          <div className="flex-1 flex overflow-hidden">
+          {/* Layout dos columnas (apiladas en móvil) */}
+          <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
 
             {/* ─── MÓDULOS (izquierda) ─────────────────────────────────────── */}
-            <div className="w-[54%] border-r border-zinc-800 flex flex-col overflow-hidden">
+            <div className="w-full md:w-[54%] md:border-r border-b md:border-b-0 border-zinc-800 flex flex-col overflow-hidden md:overflow-hidden max-h-[60vh] md:max-h-none">
               <div className="shrink-0 px-5 py-2.5 border-b border-zinc-800/60 flex items-center gap-2">
                 <BookMarked size={11} className="text-zinc-500" />
                 <p className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.15em]">Módulos</p>
@@ -643,10 +643,10 @@ export const BacklogPage = () => {
 
       {/* ═══ TAB: NUEVO MÓDULO (admin) / SOLICITAR MÓDULO (líder) ════════════ */}
       {activeTab === 'modulo' && (
-        <div className="flex-1 flex overflow-hidden">
+        <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
 
           {/* ── IZQUIERDA: formulario ──────────────────────────────────────── */}
-          <div className="w-1/2 border-r border-zinc-800 overflow-y-auto p-8">
+          <div className="w-full md:w-1/2 md:border-r border-b md:border-b-0 border-zinc-800 overflow-y-auto p-4 md:p-8">
             <div className="max-w-lg">
 
               {/* Encabezado */}
@@ -794,7 +794,7 @@ export const BacklogPage = () => {
           </div>
 
           {/* ── DERECHA: sugerencias del trimestre ────────────────────────── */}
-          <div className="w-1/2 bg-zinc-950/40 overflow-hidden flex flex-col">
+          <div className="w-full md:w-1/2 bg-zinc-950/40 overflow-hidden flex flex-col min-h-[40vh] md:min-h-0">
             <SugerenciasCompactas
               proyectoId={projectId}
               trimestreId={activeTrimId}
@@ -815,7 +815,7 @@ export const BacklogPage = () => {
 
       {/* ═══ TAB: NUEVA TAREA ════════════════════════════════════════════════ */}
       {activeTab === 'tarea' && (
-        <div className="flex-1 overflow-y-auto p-8">
+        <div className="flex-1 overflow-y-auto p-4 md:p-8">
           <div className="max-w-xl">
             <div className="mb-6 pb-4 border-b border-zinc-800">
               <p className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.18em] mb-1">
