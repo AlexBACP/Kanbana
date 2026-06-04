@@ -26,6 +26,7 @@ import { DateTimeInput }       from '../components/DateTimeInput';
 import { SugerenciasCompactas } from '../components/SugerenciasCompactas';
 import { projectService }  from '../services/project.service';
 import { ticketService }   from '../services/ticket.service';
+import { userService }     from '../services/user.service';
 import { useForm }         from 'react-hook-form';
 import { CreateTicketDto, CreateSprintDto } from '../types/ticket.types';
 import { Trimestre }       from '../types/trimestre.types';
@@ -104,6 +105,13 @@ export const BacklogPage = () => {
     enabled:  !!projectId,
   });
 
+  const { data: miembros = [] } = useQuery({
+    queryKey: ['users', 'by-proyecto', projectId],
+    queryFn:  () => userService.getByProyecto(projectId),
+    enabled:  !!projectId,
+    staleTime: 120_000,
+  });
+
   const trimestresArr = trimestresData as Trimestre[];
   const sprintsAll   = sprints as any[];
 
@@ -171,11 +179,9 @@ export const BacklogPage = () => {
       ...data,
       proyecto_id:  projectId,
       story_points: Number(data.story_points) || 0,
-      // sprint_id viene del form; si es "" o undefined, la tarea va al backlog
       sprint_id:    data.sprint_id ? Number(data.sprint_id) : undefined,
-      // Acotar la tarea al trimestre activo aunque no tenga módulo, para que
-      // la cola de trabajo no la muestre en todos los trimestres.
       trimestre_id: activeTrimId ?? undefined,
+      asignado_a:   data.asignado_a ? Number(data.asignado_a) : undefined,
     }),
     onSuccess: () => {
       // Invalidar backlog Y sprints: si la tarea fue asignada a un sprint,
@@ -873,6 +879,20 @@ export const BacklogPage = () => {
                     : 'Sin módulo → aparecerá en "Sin módulo asignado".'}
                 </p>
               </FormField>
+
+              {/* Asignar a un miembro del equipo */}
+              {(miembros as any[]).length > 0 && (
+                <FormField label="Asignar a (opcional)">
+                  <select {...regTicket('asignado_a' as any)} className={inCls} defaultValue="">
+                    <option value="">— Sin asignar —</option>
+                    {(miembros as any[]).map((m: any) => (
+                      <option key={m.id} value={m.id}>
+                        {m.nombre} {m.es_lider_tecnico ? '⭐' : ''}
+                      </option>
+                    ))}
+                  </select>
+                </FormField>
+              )}
 
               {/* Fecha límite con constraints dinámicos según módulo/trimestre */}
               {(() => {

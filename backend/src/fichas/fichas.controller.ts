@@ -321,9 +321,8 @@ export class FichasController {
   @UseInterceptors(FileInterceptor('file', { storage: evidenciasStorage }))
   uploadEvidencia(@UploadedFile() file: Express.Multer.File) {
     if (!file) throw new BadRequestException('No se recibió archivo.');
-    const baseUrl = process.env.BASE_URL ?? 'http://localhost:3000';
     return {
-      url:    `${baseUrl}/uploads/evidencias/${file.filename}`,
+      url:    `/uploads/evidencias/${file.filename}`,
       nombre: file.originalname,
       mime:   file.mimetype,
       size:   file.size,
@@ -358,8 +357,7 @@ export class FichasController {
     @Request() req: any,
   ) {
     if (!file) throw new BadRequestException('No se recibió archivo.');
-    const baseUrl = process.env.BASE_URL ?? 'http://localhost:3000';
-    const url     = `${baseUrl}/uploads/evidencias/${file.filename}`;
+    const url = `/uploads/evidencias/${file.filename}`;
     return this.fichasService.adjuntarEvidenciaTrimestre(tid, req.user, url, file.originalname);
   }
 }

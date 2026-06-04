@@ -574,10 +574,9 @@ export class TicketsService {
       await this.ticketsRepository.update(ticketId, { estado: TicketStatus.IN_PROGRESS });
     }
 
-    // La URL pública que el frontend usará para descargar el archivo.
-    // Funciona gracias a useStaticAssets() en main.ts.
-    const baseUrl = process.env.BASE_URL ?? 'http://localhost:3000';
-    const url     = `${baseUrl}/uploads/attachments/${file.filename}`;
+    // URL relativa — nginx proxia /uploads/ al backend tanto en prod como en dev.
+    // No se usa URL absoluta para evitar hardcodear el dominio/puerto.
+    const url = `/uploads/attachments/${file.filename}`;
 
     const attachment = this.attachmentsRepo.create({
       ticket_id:      ticketId,
