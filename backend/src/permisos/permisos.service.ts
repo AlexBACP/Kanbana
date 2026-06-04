@@ -120,10 +120,11 @@ export class PermisosService {
 
     // In-app
     await this.notificationsService.create({
-      usuario_id: permiso.lider_id,
-      titulo:     '✓ Permiso concedido',
-      mensaje:    `Tu solicitud para ${tipoLabel} fue aceptada. Tienes ${dias} días (hasta el ${expira.toLocaleDateString('es-CO')}).`,
-      tipo:       'success' as any,
+      usuario_id:  permiso.lider_id,
+      titulo:      '✓ Permiso concedido',
+      mensaje:     `Tu solicitud para ${tipoLabel} fue aceptada. Tienes ${dias} días (hasta el ${expira.toLocaleDateString('es-CO')}).`,
+      tipo:        'success' as any,
+      action_data: JSON.stringify({ proyecto_id: permiso.proyecto_id }),
     });
 
     // Email al líder
@@ -170,10 +171,11 @@ export class PermisosService {
 
     // In-app
     await this.notificationsService.create({
-      usuario_id: permiso.lider_id,
-      titulo:     '✗ Permiso rechazado',
-      mensaje:    `Tu solicitud para ${tipoLabel} fue rechazada.${motivo ? ` Motivo: "${motivo}"` : ''}`,
-      tipo:       'error' as any,
+      usuario_id:  permiso.lider_id,
+      titulo:      '✗ Permiso rechazado',
+      mensaje:     `Tu solicitud para ${tipoLabel} fue rechazada.${motivo ? ` Motivo: "${motivo}"` : ''}`,
+      tipo:        'error' as any,
+      action_data: JSON.stringify({ proyecto_id: permiso.proyecto_id }),
     });
 
     // Email al líder

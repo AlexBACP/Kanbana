@@ -347,7 +347,58 @@ Si el usuario saluda, preséntate como KanbanaAI. Máximo 2-3 párrafos.`;
     return merged;
   }
 
-  // ── 3b. Llamada a Ollama (http nativo, stream: false) ────────────────────
+  // ── 3b. Llamada a Groq (compatible OpenAI, modelo llama rápido) ─────────
+  private callGroq(
+    systemPrompt: string,
+    messages:     { role: string; content: string }[],
+  ): Promise<string> {
+    const apiKey = process.env.GROQ_API_KEY;
+    if (!apiKey) throw new ServiceUnavailableException('GROQ_API_KEY no configurada');
+
+    const allMessages = [
+      { role: 'system', content: systemPrompt },
+      ...messages.map(m => ({ role: m.role, content: m.content })),
+    ];
+    const payload = JSON.stringify({
+      model:       'llama-3.3-70b-versatile',
+      messages:    allMessages,
+      temperature: TEMPERATURE,
+      max_tokens:  MAX_TOKENS,
+    });
+
+    return new Promise((resolve, reject) => {
+      const req = https.request(
+        {
+          hostname: 'api.groq.com',
+          path:     '/openai/v1/chat/completions',
+          method:   'POST',
+          headers:  {
+            'Content-Type':   'application/json',
+            'Content-Length': Buffer.byteLength(payload),
+            'Authorization':  `Bearer ${apiKey}`,
+          },
+        },
+        (res) => {
+          let raw = '';
+          res.on('data', (c) => { raw += c; });
+          res.on('end', () => {
+            try {
+              const json  = JSON.parse(raw);
+              const reply = json?.choices?.[0]?.message?.content ?? '';
+              if (!reply && json?.error) reject(new Error(json.error.message));
+              else resolve(reply || 'No pude generar una respuesta.');
+            } catch { reject(new Error('Respuesta inválida de Groq')); }
+          });
+        },
+      );
+      req.on('error', reject);
+      req.setTimeout(30_000, () => { req.destroy(); reject(new Error('Timeout Groq')); });
+      req.write(payload);
+      req.end();
+    });
+  }
+
+  // ── 3c. Llamada a Ollama (http nativo, stream: false) ────────────────────
   private callOllama(
     systemPrompt: string,
     messages:     { role: string; content: string }[],
@@ -416,24 +467,63 @@ Si el usuario saluda, preséntate como KanbanaAI. Máximo 2-3 párrafos.`;
     });
   }
 
-  // ── Punto de entrada ──────────────────────────────────────────────────────
+  // ── Punto de entrada con cadena de fallback ──────────────────────────────
+  // Orden: Gemini → Groq → Ollama
+  // Solo usa Ollama si se solicita explícitamente o si los otros dos fallan.
   async chat(
     messages: { role: string; content: string }[],
     user:     User,
-    provider: 'gemini' | 'ollama' = 'gemini',
+    provider: 'gemini' | 'ollama' | 'groq' = 'gemini',
   ): Promise<string> {
     const history = messages.slice(-MAX_HISTORY);
 
+    // ── Ollama explícito (solo dev local) ────────────────────────────────────
     if (provider === 'ollama') {
-      // Contexto breve → menos tokens → respuesta en ~20-40s en vez de ~90s
       const contextText  = await this.buildBriefContext(user);
       const systemPrompt = this.buildOllamaPrompt(contextText);
       return this.callOllama(systemPrompt, history);
     }
 
-    // Gemini: contexto completo (veloz, sin límite de tokens relevante)
+    // ── Contexto completo para modelos cloud ────────────────────────────────
     const contextText  = await this.buildContext(user);
-    const systemPrompt = this.buildGeminiPrompt(contextText);
-    return this.callGemini(systemPrompt, history);
+    const systemPrompt = this.buildGeminiPrompt(contextText);  // misma calidad para Groq
+
+    // ── Groq explícito ────────────────────────────────────────────────────
+    if (provider === 'groq') {
+      return this.callGroq(systemPrompt, history);
+    }
+
+    // ── Gemini con fallback automático a Groq ────────────────────────────
+    // Si Gemini no está configurado o falla → intenta Groq → intenta Ollama
+    const hasGemini = !!process.env.GEMINI_API_KEY;
+    const hasGroq   = !!process.env.GROQ_API_KEY;
+
+    if (hasGemini) {
+      try {
+        return await this.callGemini(systemPrompt, history);
+      } catch (err: any) {
+        console.warn('[ChatService] Gemini falló, intentando Groq...', err?.message);
+      }
+    }
+
+    if (hasGroq) {
+      try {
+        return await this.callGroq(systemPrompt, history);
+      } catch (err: any) {
+        console.warn('[ChatService] Groq falló, intentando Ollama...', err?.message);
+      }
+    }
+
+    // Último recurso: Ollama local
+    try {
+      const brief  = await this.buildBriefContext(user);
+      const ollPmt = this.buildOllamaPrompt(brief);
+      return await this.callOllama(ollPmt, history);
+    } catch {
+      throw new ServiceUnavailableException(
+        'Ningún proveedor de IA está disponible. ' +
+        'Configura GEMINI_API_KEY o GROQ_API_KEY en backend/.env',
+      );
+    }
   }
 }
