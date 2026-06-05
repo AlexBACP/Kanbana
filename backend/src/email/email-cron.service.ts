@@ -16,6 +16,7 @@ import { Repository, Between, Not, IsNull, LessThan } from 'typeorm';
 import { Ticket, TicketStatus } from '../tickets/entities/ticket.entity';
 import { Sprint }             from '../projects/entities/sprint.entity';
 import { EmailService }       from './email.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class EmailCronService {
@@ -28,7 +29,8 @@ export class EmailCronService {
     @InjectRepository(Sprint)
     private readonly sprintsRepo: Repository<Sprint>,
 
-    private readonly emailService: EmailService,
+    private readonly emailService:        EmailService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -217,5 +219,72 @@ export class EmailCronService {
     }
 
     this.logger.log('✅ Notificaciones de módulos completados enviadas.');
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // 4. DETECTAR TAREAS VENCIDAS — corre 3 veces al día (8am, 1pm, 6pm Bogotá)
+  // ══════════════════════════════════════════════════════════════════════════
+  @Cron('0 13,18,23 * * *', { timeZone: 'UTC' })
+  async detectarTareasVencidas(): Promise<void> {
+    this.logger.log('🔴 Ejecutando cron de tareas vencidas…');
+    const ahora = new Date();
+
+    let vencidas: Ticket[];
+    try {
+      vencidas = await this.ticketsRepo.find({
+        where: {
+          fecha_limite: LessThan(ahora) as any,
+          estado:       Not(TicketStatus.DONE) as any,
+          vencida:      false,
+        },
+        relations: ['asignado_a', 'proyecto', 'proyecto.lider'],
+      });
+    } catch (err: any) {
+      this.logger.error(`Error consultando tareas vencidas: ${err.message}`);
+      return;
+    }
+
+    if (vencidas.length === 0) {
+      this.logger.log('ℹ  Sin tareas vencidas nuevas.');
+      return;
+    }
+
+    this.logger.log(`📌 Marcando ${vencidas.length} tarea(s) como vencidas…`);
+
+    for (const ticket of vencidas) {
+      try {
+        // Marcar como vencida
+        await this.ticketsRepo.update(ticket.id, { vencida: true });
+
+        const ad = JSON.stringify({ ticket_id: ticket.id, proyecto_id: ticket.proyecto_id });
+
+        // Notificar al asignado
+        if (ticket.asignado_a_id) {
+          await this.notificationsService.create({
+            usuario_id:  ticket.asignado_a_id,
+            titulo:      `⏰ Tarea vencida: "${ticket.titulo}"`,
+            mensaje:     `La fecha límite de "${ticket.titulo}" ya pasó. Revísala y actualízala lo antes posible.`,
+            tipo:        'warning' as any,
+            action_data: ad,
+          });
+        }
+
+        // Notificar al líder técnico del proyecto (si existe y es distinto al asignado)
+        const lider = (ticket as any).proyecto?.lider;
+        if (lider?.id && lider.id !== ticket.asignado_a_id) {
+          await this.notificationsService.create({
+            usuario_id:  lider.id,
+            titulo:      `⏰ Tarea de tu equipo vencida: "${ticket.titulo}"`,
+            mensaje:     `Una tarea de tu equipo ya pasó su fecha límite. Coordina con el aprendiz para destrabarla.`,
+            tipo:        'warning' as any,
+            action_data: ad,
+          });
+        }
+      } catch (err: any) {
+        this.logger.error(`Error procesando tarea vencida ${ticket.id}: ${err.message}`);
+      }
+    }
+
+    this.logger.log('✅ Notificaciones de tareas vencidas enviadas.');
   }
 }

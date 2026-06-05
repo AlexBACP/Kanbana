@@ -551,8 +551,10 @@ export class TicketsService {
     flagDto: { isBlocked: boolean; reason?: string },
   ): Promise<Ticket> {
     await this.ticketsRepository.update(ticketId, {
-      esta_bloqueado: flagDto.isBlocked,
-      motivo_bloqueo: flagDto.reason,
+      esta_bloqueado:  flagDto.isBlocked,
+      motivo_bloqueo:  flagDto.reason ?? null,
+      // Guardar/limpiar fecha desde cuando está bloqueada (para UI "hace X días")
+      bloqueada_desde: flagDto.isBlocked ? new Date() : null,
     });
     return this.findOne(ticketId);
   }
@@ -743,6 +745,7 @@ export class TicketsService {
       // Si estaba bloqueada (rechazada previamente), limpiar el bloqueo al reenviar
       esta_bloqueado:          false,
       motivo_bloqueo:          null as any,
+      bloqueada_desde:         null as any,
     });
 
     // Notificar al líder (creador) para que revise. try/catch para SMTP.
@@ -855,6 +858,7 @@ export class TicketsService {
       // Marcar en rojo: el aprendiz ve la tarjeta roja hasta que la reenvíe
       esta_bloqueado:          true,
       motivo_bloqueo,
+      bloqueada_desde:         new Date(),
     });
 
     // Notificar al aprendiz que debe corregir. try/catch para SMTP.
@@ -969,6 +973,7 @@ export class TicketsService {
       estado:                  TicketStatus.IN_PROGRESS,
       esta_bloqueado:          true,
       motivo_bloqueo,
+      bloqueada_desde:         new Date(),
       completado_por_aprendiz: false,
       actualizado_en:          new Date(),
     });

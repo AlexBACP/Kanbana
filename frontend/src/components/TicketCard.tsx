@@ -146,6 +146,16 @@ export const TicketCard = ({ ticket, actions }: TicketCardProps) => {
                 <XCircle size={7} /> Rechazado
               </span>
             )}
+
+            {/* Badge: VENCIDA (cron lo marcó) */}
+            {(ticket as any).vencida && (ticket as any).estado !== 'done' && (
+              <span
+                className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-rose-600/20 border border-rose-500/40 rounded-full text-[8px] font-black text-rose-300 uppercase tracking-wider shrink-0 animate-pulse"
+                title="La fecha límite ya pasó"
+              >
+                <AlertCircle size={7} /> Vencida
+              </span>
+            )}
           </div>
 
           {/* Derecha: story points + drag */}

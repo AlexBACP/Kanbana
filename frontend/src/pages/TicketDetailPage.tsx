@@ -368,18 +368,26 @@ export const TicketDetailPage = () => {
           </button>
 
           <div className="flex items-center gap-2 flex-wrap">
-            {/* Cambiar estado */}
-            <select
-              value={t.estado}
-              onChange={e => updateStatusMut.mutate(e.target.value as TicketStatus)}
-              disabled={updateStatusMut.isPending}
-              className={`text-[11px] font-black uppercase tracking-widest px-3 py-1.5 rounded-lg border cursor-pointer outline-none transition-all ${STATUS_COLOR[t.estado]}`}
-            >
-              <option value="to_do">Por hacer</option>
-              <option value="in_progress">En desarrollo</option>
-              <option value="testing">En revisión</option>
-              <option value="done">Finalizado</option>
-            </select>
+            {/* Cambiar estado — restricciones por rol */}
+            {/* - Admin/líder: puede mover libremente */}
+            {/* - Aprendiz normal: solo ve el estado actual como label (sin select) */}
+            {canEdit ? (
+              <select
+                value={t.estado}
+                onChange={e => updateStatusMut.mutate(e.target.value as TicketStatus)}
+                disabled={updateStatusMut.isPending}
+                className={`text-[11px] font-black uppercase tracking-widest px-3 py-1.5 rounded-lg border cursor-pointer outline-none transition-all ${STATUS_COLOR[t.estado]}`}
+              >
+                <option value="to_do">Por hacer</option>
+                <option value="in_progress">En desarrollo</option>
+                <option value="testing">En revisión</option>
+                <option value="done">Finalizado</option>
+              </select>
+            ) : (
+              <span className={`text-[11px] font-black uppercase tracking-widest px-3 py-1.5 rounded-lg border ${STATUS_COLOR[t.estado]}`}>
+                {STATUS_LABEL[t.estado] ?? t.estado}
+              </span>
+            )}
 
             {/* Bloquear / desbloquear */}
             {canEdit && (
@@ -428,9 +436,32 @@ export const TicketDetailPage = () => {
         {t.esta_bloqueado && (
           <div className="flex items-center gap-3 p-4 bg-rose-500/10 border border-rose-500/20 rounded-lg">
             <Flag size={18} className="text-rose-400 shrink-0" fill="currentColor" />
-            <div>
-              <p className="text-rose-400 text-xs font-black uppercase tracking-widest">Impedimento activo</p>
-              <p className="text-zinc-300 text-sm mt-0.5">{t.motivo_bloqueo || 'Sin motivo especificado'}</p>
+            <div className="flex-1">
+              <div className="flex items-center gap-2 flex-wrap">
+                <p className="text-rose-400 text-xs font-black uppercase tracking-widest">Impedimento activo</p>
+                {(t as any).bloqueada_desde && (() => {
+                  const dias = Math.floor((Date.now() - new Date((t as any).bloqueada_desde).getTime()) / 86400000);
+                  return (
+                    <span className="text-[10px] font-bold text-rose-300/80 bg-rose-500/10 px-2 py-0.5 rounded-full border border-rose-500/20">
+                      {dias === 0 ? 'Bloqueada hoy' : dias === 1 ? 'Bloqueada hace 1 día' : `Bloqueada hace ${dias} días`}
+                    </span>
+                  );
+                })()}
+              </div>
+              <p className="text-zinc-300 text-sm mt-1">{t.motivo_bloqueo || 'Sin motivo especificado'}</p>
+            </div>
+          </div>
+        )}
+
+        {/* ── Banner: vencida ─────────────────────────────────────────────── */}
+        {(t as any).vencida && t.estado !== 'done' && (
+          <div className="flex items-center gap-3 p-4 bg-amber-500/10 border border-amber-500/20 rounded-lg">
+            <AlertCircle size={18} className="text-amber-400 shrink-0" />
+            <div className="flex-1">
+              <p className="text-amber-400 text-xs font-black uppercase tracking-widest">Tarea vencida</p>
+              <p className="text-zinc-300 text-sm mt-0.5">
+                La fecha límite ya pasó. {t.fecha_limite && `Vencía el ${formatDate(t.fecha_limite)}.`}
+              </p>
             </div>
           </div>
         )}

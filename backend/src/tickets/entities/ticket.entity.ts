@@ -104,6 +104,18 @@ export class Ticket {
   @Column({ nullable: true })
   ticket_number: number | null;
 
+  // ── Fecha desde cuando está bloqueada ─────────────────────────────────────
+  // Se setea cuando esta_bloqueado pasa a true, se limpia cuando vuelve a false.
+  // Sirve para mostrar "Bloqueada hace X días" en la UI.
+  @Column({ type: 'timestamp', nullable: true })
+  bloqueada_desde: Date | null;
+
+  // ── Flag de tarea vencida ─────────────────────────────────────────────────
+  // Lo activa el cron diario cuando fecha_limite < ahora y estado != 'done'.
+  // Se desactiva si la tarea pasa a 'done' o si se extiende la fecha_limite.
+  @Column({ default: false })
+  vencida: boolean;
+
   // ── Código de referencia globalmente único ──────────────────────────────
   // Se genera al crear la tarea: número aleatorio de 5 dígitos (10000-99999).
   // Único en TODO el sistema. Se usa para GitHub (KAN-XXXXX), búsquedas,
