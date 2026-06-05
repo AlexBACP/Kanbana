@@ -696,7 +696,7 @@ export const NotificationsPanel = () => {
 
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
-    <div className="space-y-5">
+    <div className="space-y-5 p-6 md:p-8 max-w-5xl mx-auto">
 
       {/* Header */}
       <div className="flex items-center justify-between gap-4 flex-wrap">

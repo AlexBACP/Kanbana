@@ -147,11 +147,11 @@ export const NotificationToast = () => {
       } catch { /* algunos navegadores limitan fuera de user-gesture */ }
     }
 
-    // Auto-dismiss 20s por toast — tiempo generoso para leer y reaccionar
+    // Auto-dismiss 7s por toast
     const tids = nuevosToasts.map(t =>
       setTimeout(() => {
         setToasts(prev => prev.filter(x => x.id !== t.id));
-      }, 20_000),
+      }, 7_000),
     );
     return () => tids.forEach(clearTimeout);
   }, [notifications]); // eslint-disable-line

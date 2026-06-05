@@ -550,10 +550,11 @@ export class FichasService {
     // In-app al importador (si existe y no es coordinador — los coords se notifican abajo)
     if (importadorId) {
       await this.notificationsService.create({
-        usuario_id: importadorId,
-        titulo:     `📊 Importación completada — ${fichaNombre}`,
-        mensaje:    resumenMsg,
-        tipo:       NotificationType.SUCCESS,
+        usuario_id:  importadorId,
+        titulo:      `📊 Importación completada — ${fichaNombre}`,
+        mensaje:     resumenMsg,
+        tipo:        NotificationType.SUCCESS,
+        action_data: JSON.stringify({ ficha_id: fichaId }),
       });
     }
 
@@ -562,10 +563,11 @@ export class FichasService {
     for (const coord of coordinadores) {
       if (coord.id === importadorId) continue; // evitar duplicado si el coord mismo importó
       await this.notificationsService.create({
-        usuario_id: coord.id,
-        titulo:     `📊 Importación en ${fichaNombre}`,
-        mensaje:    resumenMsg,
-        tipo:       NotificationType.INFO,
+        usuario_id:  coord.id,
+        titulo:      `📊 Importación en ${fichaNombre}`,
+        mensaje:     resumenMsg,
+        tipo:        NotificationType.INFO,
+        action_data: JSON.stringify({ ficha_id: fichaId }),
       });
       if (coord.correo) {
         this.emailService.notificarResumenImportacion({

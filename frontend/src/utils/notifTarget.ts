@@ -25,9 +25,9 @@ export function notifTarget(n: Notification): string | null {
       // Proyecto (módulos, correcciones, líder asignado, etc.)
       if (data?.proyecto_id)
         return `/projects/${data.proyecto_id}/kanban`;
-      // Ficha (vinculación aprobada → dashboard del aprendiz)
+      // Ficha — el dashboard admin/coordinador la abre desde su panel
       if (data?.ficha_id)
-        return `/kanban`;
+        return `/dashboard?s=fichas&ficha=${data.ficha_id}`;
     } catch { /* JSON inválido — ignorar */ }
   }
 

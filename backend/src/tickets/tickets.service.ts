@@ -1001,10 +1001,11 @@ export class TicketsService {
       // Notificar al líder creador
       if (ticket.creado_por_id && ticket.creado_por_id !== ticket.asignado_a_id) {
         await this.notificationsService.create({
-          usuario_id: ticket.creado_por_id,
-          titulo:  `Tarea rechazada por instructor: "${ticket.titulo}"`,
-          mensaje: `El instructor rechazó "${ticket.titulo}" y la devolvió a desarrollo. Motivo: ${motivo_bloqueo}`,
-          tipo:    'warning' as any,
+          usuario_id:  ticket.creado_por_id,
+          titulo:      `Tarea rechazada por instructor: "${ticket.titulo}"`,
+          mensaje:     `El instructor rechazó "${ticket.titulo}" y la devolvió a desarrollo. Motivo: ${motivo_bloqueo}`,
+          tipo:        'warning' as any,
+          action_data: JSON.stringify({ ticket_id: ticket.id, proyecto_id: (ticket as any).proyecto_id }),
         });
       }
     } catch (err) {

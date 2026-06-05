@@ -71,7 +71,7 @@ const Chip = ({ label, color }: { label: string; color: string }) => (
 const AvatarBadge = ({ nombre, url, size = 8 }: { nombre?: string; url?: string; size?: number }) => {
   const src = userService.getAvatarUrl(url);
   return (
-    <div className={`w-${size} h-${size} rounded-md bg-gradient-to-br from-primary-600 to-indigo-700 flex items-center justify-center overflow-hidden border border-white/10 shrink-0`}>
+    <div className={`w-${size} h-${size} rounded-full bg-gradient-to-br from-primary-600 to-indigo-700 flex items-center justify-center overflow-hidden border border-white/10 shrink-0`}>
       {src
         ? <img src={src} className="w-full h-full object-cover" alt="" />
         : <span className="text-white font-black text-xs">{nombre?.slice(0, 2).toUpperCase() || 'KA'}</span>}
@@ -138,6 +138,14 @@ const ProyectoDetalle = ({ proyectoId, onBack, trimestreId }: { proyectoId: numb
     queryFn: () => projectService.getActiveSprint(proyectoId),
     enabled: !!proyectoId,
   });
+  // Cargar TODOS los sprints para detectar si hay varios activos
+  const { data: allSprints = [] } = useQuery({
+    queryKey: ['projects', proyectoId, 'sprints'],
+    queryFn: () => projectService.getSprints(proyectoId),
+    enabled: !!proyectoId,
+  });
+  // Estado: módulo elegido por el usuario al crear tarea
+  const [selectedSprintId, setSelectedSprintId] = useState<number | null>(null);
   const { data: tickets = [], isLoading: ticketsLoading } = useQuery({
     queryKey: ['tickets', proyectoId, (activeSprint as any)?.id],
     queryFn: () => ticketService.getAll(proyectoId, (activeSprint as any)?.id),
@@ -172,7 +180,9 @@ const ProyectoDetalle = ({ proyectoId, onBack, trimestreId }: { proyectoId: numb
       ...dto,
       proyecto_id: proyectoId,
       creado_por_id: user?.id,
-      sprint_id: (activeSprint as any)?.id ?? undefined,
+      // Si el usuario eligió un módulo específico, usa ese.
+      // Si no eligió, usa el primer activo. Si no hay activos, undefined.
+      sprint_id: selectedSprintId ?? (activeSprint as any)?.id ?? undefined,
     }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['tickets', proyectoId] });
@@ -740,14 +750,65 @@ const ProyectoDetalle = ({ proyectoId, onBack, trimestreId }: { proyectoId: numb
               className="p-6"
             >
               <div className="max-w-lg">
-                {/* Sprint activo info */}
-                <div className={`flex items-center gap-2 p-3 rounded-md text-[11px] font-bold mb-6 ${sprint ? 'bg-emerald-500/8 border border-emerald-500/15 text-emerald-400' : 'bg-amber-500/8 border border-amber-500/15 text-amber-400'}`}>
-                  {sprint ? <CheckCircle2 size={13} /> : <AlertTriangle size={13} />}
-                  {sprint
-                    ? <>La tarea se creará en el módulo activo: <strong>{sprint.nombre}</strong></>
-                    : <>Sin módulo activo — la tarea quedará en la cola de trabajo</>
+                {/* Selector de módulo (cuando hay varios activos) */}
+                {(() => {
+                  const sprintsActivos = (allSprints as any[]).filter((s: any) => s.esta_activo && !s.esta_finalizado);
+
+                  if (sprintsActivos.length === 0) {
+                    return (
+                      <div className="flex items-center gap-2 p-3 rounded-md text-[11px] font-bold mb-6 bg-amber-500/8 border border-amber-500/15 text-amber-400">
+                        <AlertTriangle size={13} />
+                        Sin módulo activo — la tarea quedará en la cola de trabajo
+                      </div>
+                    );
                   }
-                </div>
+
+                  if (sprintsActivos.length === 1) {
+                    return (
+                      <div className="flex items-center gap-2 p-3 rounded-md text-[11px] font-bold mb-6 bg-emerald-500/8 border border-emerald-500/15 text-emerald-400">
+                        <CheckCircle2 size={13} />
+                        La tarea se creará en el módulo activo: <strong>{sprintsActivos[0].nombre}</strong>
+                      </div>
+                    );
+                  }
+
+                  // 2 o más activos → mostrar botones para elegir
+                  const elegido = selectedSprintId ?? sprintsActivos[0].id;
+                  return (
+                    <div className="mb-6 p-4 rounded-md bg-blue-500/8 border border-blue-500/20">
+                      <p className="text-[11px] font-black uppercase tracking-widest text-blue-400 mb-3 flex items-center gap-1.5">
+                        <CheckCircle2 size={13} />
+                        Hay {sprintsActivos.length} módulos activos — elige a cuál va la tarea
+                      </p>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        {sprintsActivos.map((s: any) => {
+                          const sel = elegido === s.id;
+                          const totalTareas = (s.tickets ?? []).length;
+                          return (
+                            <button
+                              key={s.id}
+                              type="button"
+                              onClick={() => setSelectedSprintId(s.id)}
+                              className={`text-left px-3 py-2.5 rounded-lg border transition-all ${
+                                sel
+                                  ? 'bg-blue-500/20 border-blue-500/50 ring-1 ring-blue-500/30'
+                                  : 'bg-emerald-500/5 border-emerald-500/20 hover:border-emerald-500/40'
+                              }`}
+                            >
+                              <div className="flex items-center justify-between gap-2">
+                                <span className={`text-[12px] font-black truncate ${sel ? 'text-white' : 'text-zinc-200'}`}>{s.nombre}</span>
+                                {sel && (
+                                  <span className="text-[9px] font-black uppercase tracking-widest text-blue-300 shrink-0">✓ Elegido</span>
+                                )}
+                              </div>
+                              <p className="text-[10px] text-zinc-500 mt-0.5">{totalTareas} tarea{totalTareas !== 1 ? 's' : ''}</p>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 <form
                   onSubmit={e => {
