@@ -858,27 +858,107 @@ export const BacklogPage = () => {
                 </FormField>
               </div>
 
-              {/* Selector de módulo — controla los constraints de fecha */}
-              <FormField label="Módulo (opcional)">
-                <select
-                  {...regTicket('sprint_id' as any)}
-                  className={inCls}
-                  defaultValue=""
-                  onChange={e => setTaskSprintId(e.target.value ? Number(e.target.value) : '')}
-                >
-                  <option value="">Sin módulo — cola de trabajo</option>
-                  {sprintsDelTrimestre.filter(s => !s.esta_finalizado).map((s: any) => (
-                    <option key={s.id} value={s.id}>
-                      {s.nombre}{s.esta_activo ? ' ★' : ''}
-                    </option>
-                  ))}
-                </select>
-                <p className="text-[10px] text-zinc-600 mt-1">
-                  {taskSprintId
-                    ? 'La tarea irá directamente a este módulo.'
-                    : 'Sin módulo → aparecerá en "Sin módulo asignado".'}
-                </p>
-              </FormField>
+              {/* Selector de módulo — chips visibles para los activos, dropdown para planificados */}
+              {(() => {
+                const modulosActivos = sprintsDelTrimestre.filter((s: any) => s.esta_activo && !s.esta_finalizado);
+                const modulosPlanificados = sprintsDelTrimestre.filter((s: any) => !s.esta_activo && !s.esta_finalizado);
+
+                return (
+                  <FormField label="Asignar a un módulo">
+                    {/* Hidden input para react-hook-form */}
+                    <input type="hidden" {...regTicket('sprint_id' as any)} value={taskSprintId || ''} />
+
+                    {/* Botones para los módulos activos (uno por cada activo) */}
+                    {modulosActivos.length > 0 && (
+                      <div className="space-y-2 mb-3">
+                        <p className="text-[10px] font-black uppercase tracking-widest text-emerald-400 flex items-center gap-1">
+                          <Play size={9} fill="currentColor" /> Módulos activos ({modulosActivos.length})
+                        </p>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          {modulosActivos.map((s: any) => {
+                            const selected = taskSprintId === s.id;
+                            const totalTareas = (s.tickets ?? []).length;
+                            return (
+                              <button
+                                key={s.id}
+                                type="button"
+                                onClick={() => setTaskSprintId(s.id)}
+                                className={`text-left px-3 py-2.5 rounded-lg border transition-all ${
+                                  selected
+                                    ? 'bg-blue-500/15 border-blue-500/50 ring-1 ring-blue-500/30'
+                                    : 'bg-emerald-500/5 border-emerald-500/20 hover:border-emerald-500/40 hover:bg-emerald-500/10'
+                                }`}
+                              >
+                                <div className="flex items-center justify-between gap-2">
+                                  <span className={`text-[12px] font-black truncate ${selected ? 'text-white' : 'text-zinc-200'}`}>
+                                    {s.nombre}
+                                  </span>
+                                  {selected && (
+                                    <span className="text-[9px] font-black uppercase tracking-widest text-blue-400 shrink-0">
+                                      ✓ Elegido
+                                    </span>
+                                  )}
+                                </div>
+                                <p className="text-[10px] text-zinc-500 mt-0.5">{totalTareas} tarea{totalTareas !== 1 ? 's' : ''}</p>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Opción: sin módulo */}
+                    <button
+                      type="button"
+                      onClick={() => setTaskSprintId('')}
+                      className={`w-full text-left px-3 py-2 rounded-lg border transition-all mb-2 ${
+                        !taskSprintId
+                          ? 'bg-zinc-700/30 border-zinc-500 ring-1 ring-zinc-500/30 text-zinc-100'
+                          : 'bg-zinc-900 border-zinc-700 text-zinc-400 hover:border-zinc-600 hover:text-zinc-200'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <div>
+                          <p className="text-[12px] font-black">Sin módulo (Cola de trabajo)</p>
+                          <p className="text-[10px] text-zinc-500 mt-0.5">La tarea queda en espera de asignación</p>
+                        </div>
+                        {!taskSprintId && (
+                          <span className="text-[9px] font-black uppercase tracking-widest text-zinc-300 shrink-0">
+                            ✓ Elegido
+                          </span>
+                        )}
+                      </div>
+                    </button>
+
+                    {/* Dropdown para módulos planificados (menos prominentes) */}
+                    {modulosPlanificados.length > 0 && (
+                      <div>
+                        <p className="text-[10px] font-bold text-zinc-600 mb-1.5">
+                          O asignar a un módulo planificado:
+                        </p>
+                        <select
+                          value={modulosPlanificados.some((s: any) => s.id === taskSprintId) ? String(taskSprintId) : ''}
+                          onChange={e => setTaskSprintId(e.target.value ? Number(e.target.value) : '')}
+                          className={inCls}
+                        >
+                          <option value="">— Seleccionar módulo planificado —</option>
+                          {modulosPlanificados.map((s: any) => (
+                            <option key={s.id} value={s.id}>
+                              {s.nombre} (planificado)
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+
+                    {modulosActivos.length === 0 && modulosPlanificados.length === 0 && (
+                      <p className="text-[11px] text-amber-400 bg-amber-500/5 border border-amber-500/20 px-3 py-2 rounded-lg">
+                        ⚠️ No hay módulos en este trimestre. La tarea irá a la cola de trabajo.
+                      </p>
+                    )}
+                  </FormField>
+                );
+              })()}
 
               {/* Asignar a un miembro del equipo */}
               {(miembros as any[]).length > 0 && (
