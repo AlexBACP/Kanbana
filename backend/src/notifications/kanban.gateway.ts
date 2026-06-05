@@ -162,6 +162,11 @@ export class KanbanGateway
     this.server.to(`board:${proyectoId}`).emit('ticket:updated', ticket);
   }
 
+  /** Tarea eliminada → todos en el tablero (frontend la quita) */
+  broadcastTicketDeleted(proyectoId: number, ticketId: number) {
+    this.server.to(`board:${proyectoId}`).emit('ticket:deleted', { ticketId });
+  }
+
   /** Nuevo comentario → todos viendo esa tarea */
   broadcastCommentNew(ticketId: number, comment: any) {
     this.server.to(`ticket:${ticketId}`).emit('comment:new', comment);

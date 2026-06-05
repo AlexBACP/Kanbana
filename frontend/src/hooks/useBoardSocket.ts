@@ -58,10 +58,18 @@ export function useBoardSocket({ proyectoId, user, queryKeys }: UseBoardSocketOp
     socket.on('connect', joinBoard);
 
     // Tarea actualizada en tiempo real → re-fetch del tablero
-    const onTicketUpdated = () => {
+    const onTicketUpdated = (ticket: any) => {
+      console.log('[board-socket] 📋 ticket:updated', ticket?.id);
       queryKeys.forEach(key => qc.invalidateQueries({ queryKey: key }));
     };
     socket.on('ticket:updated', onTicketUpdated);
+
+    // Tarea eliminada → re-fetch del tablero (para que desaparezca)
+    const onTicketDeleted = (data: { ticketId: number }) => {
+      console.log('[board-socket] 🗑️  ticket:deleted', data?.ticketId);
+      queryKeys.forEach(key => qc.invalidateQueries({ queryKey: key }));
+    };
+    socket.on('ticket:deleted', onTicketDeleted);
 
     // Presencia: quién está viendo el tablero ahora mismo
     const onPresence = (users: PresenceUser[]) => {
@@ -73,6 +81,7 @@ export function useBoardSocket({ proyectoId, user, queryKeys }: UseBoardSocketOp
       socket.emit('leave-board', proyectoId);
       socket.off('connect',        joinBoard);
       socket.off('ticket:updated', onTicketUpdated);
+      socket.off('ticket:deleted', onTicketDeleted);
       socket.off('presence:update', onPresence);
     };
   }, [proyectoId, user?.id]); // eslint-disable-line react-hooks/exhaustive-deps

@@ -21,6 +21,7 @@ import { DateTimeInput }   from '../components/DateTimeInput';
 import { RejectModal }     from '../components/RejectModal';
 import { useAuthStore }    from '../store/auth.store';
 import { TicketStatus }    from '../types/ticket.types';
+import { useBoardSocket }  from '../hooks/useBoardSocket';
 
 const FormField = ({ label, children }: { label: string; children: React.ReactNode }) => (
   <div className="space-y-1.5">
@@ -82,6 +83,13 @@ export const KanbanPage = () => {
     queryKey: ['projects', projectId, 'members'],
     queryFn:  () => projectService.getMembers(projectId),
     enabled:  !!projectId,
+  });
+
+  // ── Real-time del tablero (cualquier cambio se refleja al instante) ──────
+  const { presence } = useBoardSocket({
+    proyectoId: projectId,
+    user:       user ? { id: user.id, nombre: user.nombre, avatar_url: (user as any).avatar_url } : undefined,
+    queryKeys:  [['tickets', projectId, activeSprint?.id], ['tickets', projectId]],
   });
 
   // ── Mutations ──────────────────────────────────────────────────────────────

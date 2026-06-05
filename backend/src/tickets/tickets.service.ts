@@ -57,6 +57,25 @@ export class TicketsService {
   ) {}
 
   /**
+   * Helper de tiempo real: carga la tarea actualizada (con relaciones que
+   * usa el tablero) y la emite por WebSocket a todos los que estén viendo el
+   * proyecto. Falla silenciosamente — el broadcast no debe romper la operación.
+   */
+  private async broadcastUpdate(ticketId: number): Promise<void> {
+    try {
+      const fresh = await this.ticketsRepository.findOne({
+        where:     { id: ticketId },
+        relations: ['asignado_a', 'creado_por', 'sprint', 'adjuntos'],
+      });
+      if (fresh?.proyecto_id) {
+        this.gateway.broadcastTicketUpdated(fresh.proyecto_id, fresh);
+      }
+    } catch (err: any) {
+      console.error('[TicketsService] broadcastUpdate falló:', err?.message);
+    }
+  }
+
+  /**
    * Genera un código de referencia único de 5 dígitos (10000-99999).
    * Reintenta hasta 10 veces si colisiona (extremadamente improbable con 90.000 espacios).
    */
@@ -476,6 +495,7 @@ export class TicketsService {
     }
 
     await this.ticketsRepository.update(id, updateTicketDto);
+    await this.broadcastUpdate(id);
 
     // Si se está cambiando el asignado → notificar al nuevo responsable.
     // Envuelto en try/catch para que un fallo de SMTP no devuelva 500.
@@ -543,6 +563,7 @@ export class TicketsService {
     }
 
     await this.ticketsRepository.update(ticketId, patch);
+    await this.broadcastUpdate(ticketId);
     return this.findOne(ticketId);
   }
 
@@ -556,6 +577,7 @@ export class TicketsService {
       // Guardar/limpiar fecha desde cuando está bloqueada (para UI "hace X días")
       bloqueada_desde: flagDto.isBlocked ? new Date() : null,
     });
+    await this.broadcastUpdate(ticketId);
     return this.findOne(ticketId);
   }
 
@@ -572,7 +594,15 @@ export class TicketsService {
     for (const adj of adjuntos) {
       this.eliminarArchivoDisco(adj.nombre_disco);
     }
+    const proyectoId = ticket?.proyecto_id;
     await this.ticketsRepository.delete(id);
+
+    // Real-time: avisar al tablero del proyecto para que la quite
+    if (proyectoId) {
+      try { this.gateway.broadcastTicketDeleted(proyectoId, id); } catch (err: any) {
+        console.error('[TicketsService.remove] broadcast falló:', err?.message);
+      }
+    }
 
     // Notificar al asignado para mantener trazabilidad
     try {
@@ -708,6 +738,7 @@ export class TicketsService {
       console.error('[TicketsService.claimTicket] Error enviando notificación:', err?.message);
     }
 
+    await this.broadcastUpdate(ticketId);
     return this.findOne(ticketId);
   }
 
@@ -781,6 +812,7 @@ export class TicketsService {
       console.error('[TicketsService.markCompleteByAprendiz] Error enviando notificación:', err?.message);
     }
 
+    await this.broadcastUpdate(ticketId);
     return this.findOne(ticketId);
   }
 
@@ -835,6 +867,7 @@ export class TicketsService {
       console.error('[TicketsService.liderApprove] Error enviando notificación:', err?.message);
     }
 
+    await this.broadcastUpdate(ticketId);
     return this.findOne(ticketId);
   }
 
@@ -888,6 +921,7 @@ export class TicketsService {
       console.error('[TicketsService.liderReject] Error enviando notificación:', err?.message);
     }
 
+    await this.broadcastUpdate(ticketId);
     return this.findOne(ticketId);
   }
 
@@ -952,6 +986,7 @@ export class TicketsService {
       console.error('[TicketsService.instructorApprove] Error enviando notificación:', err?.message);
     }
 
+    await this.broadcastUpdate(ticketId);
     return this.findOne(ticketId);
   }
 
@@ -1012,6 +1047,7 @@ export class TicketsService {
       console.error('[TicketsService.instructorReject] Error enviando notificación:', err?.message);
     }
 
+    await this.broadcastUpdate(ticketId);
     return this.findOne(ticketId);
   }
 
