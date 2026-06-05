@@ -34,6 +34,8 @@ export interface User {
   vinculacion_estado?: 'none' | 'pendiente' | 'aprobado' | 'rechazado';
   vinculacion_solicitada_en?: string | null;
   vinculacion_motivo_rechazo?: string | null;
+  /** Onboarding: si el usuario ya completó el tour de bienvenida */
+  tour_completado?: boolean;
 }
 
 export type UserRole = 'coordinador' | 'instructor' | 'aprendiz';

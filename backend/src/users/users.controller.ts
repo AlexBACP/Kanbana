@@ -265,6 +265,12 @@ export class UsersController {
     return this.usersService.confirmAccountsBulk(body.userIds);
   }
 
+  // ── PATCH /users/me/tour-complete — marca el tour de onboarding como hecho ─
+  @Patch('me/tour-complete')
+  setTourCompletado(@Body('completado') completado: boolean, @Request() req: any) {
+    return this.usersService.setTourCompletado(req.user.id, completado !== false);
+  }
+
   // ── POST /users/me/set-password — crear contraseña por primera vez (OAuth) ─
   // No requiere contraseña actual. Solo permitido si el usuario no tiene una propia.
   @Post('me/set-password')

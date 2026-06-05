@@ -45,6 +45,10 @@ export const userService = {
   toggleLiderTecnico: (id: number) =>
     api.patch(`/users/${id}/toggle-lider`).then(r => r.data),
 
+  /** Marca el tour de onboarding como completado/no completado */
+  setTourCompletado: (completado: boolean = true) =>
+    api.patch('/users/me/tour-complete', { completado }).then(r => r.data),
+
   delete: (id: number) => api.delete(`/users/${id}`).then(r => r.data),
 
   getLeaderStats: (id: number) => api.get(`/users/leaders/${id}/stats`).then(r => r.data),

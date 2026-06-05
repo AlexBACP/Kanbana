@@ -24,6 +24,7 @@ import { SolicitarVinculacionPage } from './pages/SolicitarVinculacionPage';
 import { ChatBubble }              from './components/ChatBubble';
 import { SearchModal, useSearchModal }  from './components/SearchModal';
 import { NotificationToast }           from './components/NotificationToast';
+import { WelcomeTour }                 from './components/WelcomeTour';
 import { useSocket }                   from './hooks/useSocket';
 import { useAuthStore }                from './store/auth.store';
 
@@ -119,6 +120,8 @@ function App() {
         <GlobalSearch />
         {/* ── Toasts de notificaciones en tiempo real ────────── */}
         <NotificationToast />
+        {/* ── Tour interactivo de bienvenida (primer login) ───── */}
+        <WelcomeTour />
       </BrowserRouter>
     </QueryClientProvider>
   );

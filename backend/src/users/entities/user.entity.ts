@@ -210,6 +210,12 @@ export class User {
   @Column({ type: 'int', default: 0 })
   password_changes_today: number;
 
+  // ── Onboarding: tour interactivo de bienvenida ─────────────────────────
+  // false = nunca lo ha completado → se le muestra en su próximo login
+  // true  = ya lo terminó (puede re-verlo manualmente desde Perfil)
+  @Column({ default: false })
+  tour_completado: boolean;
+
   @CreateDateColumn()
   creado_en: Date;
 

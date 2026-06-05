@@ -9,8 +9,9 @@ import { useAuthStore } from '../store/auth.store';
 import {
   User as UserIcon, Mail, Shield, Key, Save, CheckCircle2,
   Phone, FileText, GraduationCap, FolderKanban, Ticket,
-  Hash, ExternalLink, Clock, AlertCircle, Camera, Loader2,
+  Hash, ExternalLink, Clock, AlertCircle, Camera, Loader2, Compass,
 } from 'lucide-react';
+import { WelcomeTour } from '../components/WelcomeTour';
 import { AvatarUploader } from '../components/AvatarUploader';
 import { useForm } from 'react-hook-form';
 import { useMutation, useQuery } from '@tanstack/react-query';
@@ -68,6 +69,7 @@ export const ProfilePage = () => {
   const [saved,      setSaved]      = useState(false);
   const [pwdMsg,     setPwdMsg]     = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
   const [bannerUrl,  setBannerUrl]  = useState<string | null>(user?.banner_url || null);
+  const [showTour,   setShowTour]   = useState(false);
   const bannerInputRef = useRef<HTMLInputElement>(null);
 
   const { data: profile } = useQuery({
@@ -579,6 +581,24 @@ export const ProfilePage = () => {
                 </h3>
               </div>
 
+              {/* Botón: volver a ver el tour de bienvenida */}
+              <button
+                type="button"
+                onClick={() => setShowTour(true)}
+                className="w-full flex items-center justify-between p-3 bg-blue-500/5 border border-blue-500/20 hover:bg-blue-500/10 hover:border-blue-500/30 rounded-xl transition-all group"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-lg bg-blue-500/15 border border-blue-500/30 flex items-center justify-center">
+                    <Compass size={16} className="text-blue-400" />
+                  </div>
+                  <div className="text-left">
+                    <p className="text-[13px] font-black text-zinc-200">Ver tutorial</p>
+                    <p className="text-[11px] text-zinc-500">Recorrido guiado por la plataforma</p>
+                  </div>
+                </div>
+                <ExternalLink size={14} className="text-zinc-600 group-hover:text-blue-400 transition-colors" />
+              </button>
+
               {/* Aviso para usuarios de Google/GitHub */}
               {needsCreatePwd && (
                 <div className="flex items-start gap-2 px-3 py-2.5 bg-blue-500/8 border border-blue-500/20 rounded-xl">
@@ -665,6 +685,9 @@ export const ProfilePage = () => {
         )}
 
       </AnimatePresence>
+
+      {/* Tour de bienvenida forzado (cuando el usuario clic "Ver tutorial") */}
+      {showTour && <WelcomeTour forced onClose={() => setShowTour(false)} />}
     </div>
   );
 };

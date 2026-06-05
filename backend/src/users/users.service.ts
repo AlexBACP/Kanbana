@@ -406,7 +406,7 @@ export class UsersService {
                'activo', 'creado_en', 'cuenta_confirmada', 'token_activacion',
                'totp_enabled', 'fichaId', 'documento', 'avatar_url', 'password_set',
                'vinculacion_estado', 'ficha_solicitada_id', 'jornada_solicitada',
-               'vinculacion_motivo_rechazo'],
+               'vinculacion_motivo_rechazo', 'tour_completado'],
     });
   }
 
@@ -917,6 +917,14 @@ export class UsersService {
     }
 
     return this.usersRepository.save(user);
+  }
+
+  /**
+   * Marca el tour de onboarding como completado.
+   * Lo llama el frontend al terminar (o saltar) el tour.
+   */
+  async setTourCompletado(userId: number, completado: boolean): Promise<void> {
+    await this.usersRepository.update(userId, { tour_completado: completado });
   }
 
   async toggleActive(id: number): Promise<User> {
