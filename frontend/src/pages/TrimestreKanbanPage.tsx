@@ -78,9 +78,12 @@ export const TrimestreKanbanPage = () => {
     queryFn:  async () => {
       if (sprintIds.length === 0) return [];
       const all = await ticketService.getAll(proyectoId);
-      return all.filter((t: any) => sprintIds.includes(t.sprint_id));
+      // Doble filtro: pertenece al trimestre Y al sprint correcto (anti-bug)
+      return all.filter((t: any) =>
+        t.trimestre_id === trimId && sprintIds.includes(t.sprint_id)
+      );
     },
-    enabled:  !!proyectoId && sprintIds.length > 0,
+    enabled:  !!proyectoId && sprintIds.length > 0 && !!trimId,
     staleTime: 30_000,
   });
 

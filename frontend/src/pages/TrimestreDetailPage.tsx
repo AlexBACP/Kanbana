@@ -30,6 +30,7 @@ import { SugerenciasCompactas } from '../components/SugerenciasCompactas';
 import type { Trimestre } from '../types/trimestre.types';
 import { AnimatePresence, motion } from 'framer-motion';
 import { permisosService } from '../services/permisos.service';
+import { ModuloExpandible } from '../components/ModuloExpandible';
 
 const FormField = ({ label, children }: { label: string; children: React.ReactNode }) => (
   <div className="space-y-1.5">
@@ -111,6 +112,12 @@ export const TrimestreDetailPage = () => {
     mutationFn: (sprintId: number) => projectService.closeSprint(sprintId),
     onSuccess:  invalidate,
     onError:    (e: any) => alert(e?.response?.data?.message ?? 'No se pudo cerrar el módulo'),
+  });
+
+  const startModMut = useMutation({
+    mutationFn: (sprintId: number) => projectService.startSprint(sprintId),
+    onSuccess:  invalidate,
+    onError:    (e: any) => alert(e?.response?.data?.message ?? 'No se pudo activar el módulo'),
   });
 
   const closeTrimMut = useMutation({
@@ -372,67 +379,17 @@ export const TrimestreDetailPage = () => {
                 </p>
               </div>
             ) : (
-              <div className="space-y-2">
-                {modulos.map((mod: any) => {
-                  const tickets    = mod.tickets ?? [];
-                  const done       = tickets.filter((t: any) => t.estado === 'done').length;
-                  const progreso   = tickets.length > 0 ? Math.round(done / tickets.length * 100) : 0;
-
-                  return (
-                    <div
-                      key={mod.id}
-                      className={`rounded-2xl border p-4 transition-all ${
-                        mod.esta_finalizado
-                          ? 'border-zinc-800 bg-zinc-900/50 opacity-75'
-                          : 'border-zinc-800 bg-zinc-900 hover:border-primary-500/30'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between mb-3">
-                        <div className="flex items-center gap-2">
-                          {mod.esta_finalizado
-                            ? <CheckCircle2 size={14} className="text-emerald-400" />
-                            : mod.esta_activo
-                              ? <Clock size={14} className="text-primary-400" />
-                              : <Clock size={14} className="text-zinc-500" />
-                          }
-                          <span className="text-sm font-bold text-zinc-100">{mod.nombre}</span>
-                          {mod.esta_activo && !mod.esta_finalizado && (
-                            <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-primary-500/15 text-primary-400 border border-primary-500/20">
-                              Activo
-                            </span>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-[10px] text-zinc-500">
-                            {fmt(mod.fecha_inicio)} → {fmt(mod.fecha_fin)}
-                          </span>
-                          {canEdit && mod.esta_activo && !mod.esta_finalizado && (
-                            <button
-                              onClick={() => { if (confirm(`¿Cerrar módulo "${mod.nombre}"?`)) closeModMut.mutate(mod.id); }}
-                              className="text-[10px] font-bold text-zinc-500 hover:text-emerald-400 transition-all px-2 py-1 rounded-lg border border-zinc-800 hover:border-emerald-500/30"
-                            >
-                              Cerrar
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                      {tickets.length > 0 && (
-                        <div className="space-y-1">
-                          <div className="flex justify-between text-[10px] text-zinc-500">
-                            <span>{tickets.length} tareas</span>
-                            <span>{done} completadas · {progreso}%</span>
-                          </div>
-                          <div className="h-1 bg-zinc-950 rounded-full overflow-hidden">
-                            <div
-                              className="h-full bg-primary-500 rounded-full transition-all"
-                              style={{ width: `${progreso}%` }}
-                            />
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
+              <div className="space-y-2.5">
+                {modulos.map((mod: any) => (
+                  <ModuloExpandible
+                    key={mod.id}
+                    mod={mod}
+                    proyectoId={proyectoId}
+                    canEdit={canEdit}
+                    onClose={(sprintId) => closeModMut.mutate(sprintId)}
+                    onActivate={(sprintId) => startModMut.mutate(sprintId)}
+                  />
+                ))}
               </div>
             )}
           </div>
