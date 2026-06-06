@@ -165,6 +165,7 @@ export const TopBar = ({
 }: TopBarProps) => {
   const [showMenu,    setShowMenu]    = useState(false);
   const [showActions, setShowActions] = useState(false);
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [query,       setQuery]       = useState('');
   const [debouncedQ,  setDebouncedQ]  = useState('');
   const [showSearch,  setShowSearch]  = useState(false);
@@ -764,7 +765,7 @@ export const TopBar = ({
 
               <div className="border-t border-zinc-800 mt-1 pt-1">
                 <button
-                  onClick={onLogout}
+                  onClick={() => { setShowMenu(false); setShowLogoutConfirm(true); }}
                   className="flex items-center gap-2.5 w-full px-4 py-2.5 mb-1 text-[13px] text-zinc-300 hover:text-rose-400 hover:bg-rose-500/5 transition-colors"
                 >
                   <LogOut size={15} className="text-zinc-500" /> Cerrar sesión
@@ -774,6 +775,62 @@ export const TopBar = ({
           )}
         </AnimatePresence>
       </div>
+
+      {/* ── Modal de confirmación de logout ────────────────────────────────── */}
+      <AnimatePresence>
+        {showLogoutConfirm && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.15 }}
+              onClick={() => setShowLogoutConfirm(false)}
+              className="fixed inset-0 z-[200] bg-black/70 backdrop-blur-sm"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              transition={{ type: 'spring', stiffness: 400, damping: 28 }}
+              className="fixed inset-0 z-[201] flex items-center justify-center p-4 pointer-events-none"
+            >
+              <div className="bg-zinc-900 border border-zinc-700 rounded-2xl shadow-2xl shadow-rose-500/10 max-w-sm w-full pointer-events-auto overflow-hidden">
+
+                {/* Cabecera con ícono */}
+                <div className="flex items-start gap-4 p-6 pb-4">
+                  <div className="shrink-0 w-12 h-12 rounded-xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center">
+                    <LogOut size={22} className="text-rose-400" />
+                  </div>
+                  <div className="flex-1 min-w-0 pt-1">
+                    <h3 className="text-base font-black text-white">¿Cerrar sesión?</h3>
+                    <p className="text-[13px] text-zinc-400 mt-1.5 leading-relaxed">
+                      Vas a salir de Kanbana. Tendrás que volver a iniciar sesión para acceder.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Botones */}
+                <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-zinc-800 bg-zinc-950/40">
+                  <button
+                    onClick={() => setShowLogoutConfirm(false)}
+                    className="px-4 py-2 text-[13px] font-black text-zinc-300 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={() => { setShowLogoutConfirm(false); onLogout(); }}
+                    className="flex items-center gap-2 px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white text-[13px] font-black rounded-lg transition-all shadow-md shadow-rose-600/30 active:scale-95"
+                  >
+                    <LogOut size={13} />
+                    Sí, cerrar sesión
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
     </header>
   );
 };
