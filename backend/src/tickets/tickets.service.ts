@@ -370,6 +370,12 @@ export class TicketsService {
       if (esLiderActor && statusDto.estado === TicketStatus.DONE) {
         throw new ForbiddenException('El líder técnico no puede marcar tareas como "Finalizado". Eso corresponde al instructor.');
       }
+      // ── Validación de propiedad ──────────────────────────────────────────
+      // Un aprendiz no-líder solo puede cambiar el estado de sus propias tareas.
+      // El líder técnico sí puede gestionar el estado de cualquier tarea del proyecto.
+      if (!esLiderActor && actor?.id && ticket.asignado_a_id !== actor.id) {
+        throw new ForbiddenException('Solo puedes cambiar el estado de tareas que estén asignadas a ti.');
+      }
     }
 
     // ── Validación de adjunto obligatorio ────────────────────────────────
