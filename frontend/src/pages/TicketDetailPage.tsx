@@ -805,6 +805,8 @@ export const TicketDetailPage = () => {
                     <GitWorkflowCard
                       codigoReferencia={(t as any).codigo_referencia}
                       titulo={t.titulo}
+                      sprintNombre={(t as any).sprint?.nombre ?? null}
+                      ticketNumber={(t as any).ticket_number ?? null}
                     />
 
                     {ghCount === 0 ? (
