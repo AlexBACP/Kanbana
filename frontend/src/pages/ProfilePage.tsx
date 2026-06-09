@@ -14,7 +14,7 @@ import {
 import { WelcomeTour } from '../components/WelcomeTour';
 import { AvatarUploader } from '../components/AvatarUploader';
 import { useForm } from 'react-hook-form';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { userService } from '../services/user.service';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -64,6 +64,7 @@ const inputIconCls = "w-full bg-zinc-800/60 border border-zinc-700 rounded-xl pl
 
 export const ProfilePage = () => {
   const { user, updateUser } = useAuthStore();
+  const qc = useQueryClient();
   const navigate = useNavigate();
   const [activeTab,  setActiveTab]  = useState<Tab>('general');
   const [saved,      setSaved]      = useState(false);
@@ -110,6 +111,8 @@ export const ProfilePage = () => {
     onSuccess: () => {
       setPwdMsg({ type: 'ok', text: 'Contraseña actualizada correctamente' });
       resetPwd();
+      // Refrescar el contador de cambios del día
+      qc.invalidateQueries({ queryKey: ['user-profile', user?.id] });
       setTimeout(() => setPwdMsg(null), 4000);
     },
     onError: (err: any) => {
@@ -124,6 +127,8 @@ export const ProfilePage = () => {
       setPwdMsg({ type: 'ok', text: 'Contraseña creada. Ya puedes iniciar sesión con tu correo desde la landing.' });
       resetPwd();
       updateUser({ password_set: true } as any);
+      // Refrescar el contador de cambios del día
+      qc.invalidateQueries({ queryKey: ['user-profile', user?.id] });
       setTimeout(() => setPwdMsg(null), 5000);
     },
     onError: (err: any) => {
@@ -144,6 +149,15 @@ export const ProfilePage = () => {
 
   // Usuario de Google/GitHub que aún no ha creado su contraseña propia
   const needsCreatePwd = user.password_set === false;
+
+  // ── Límite de cambios de contraseña ──────────────────────────────────────
+  // Calculamos cuántos cambios usó el usuario HOY para mostrarlo proactivamente.
+  const today = new Date().toISOString().slice(0, 10);
+  const pwdLastDate = profile?.password_last_change_date
+    ? new Date(profile.password_last_change_date).toISOString().slice(0, 10)
+    : null;
+  const changesUsedToday  = pwdLastDate === today ? (profile?.password_changes_today ?? 0) : 0;
+  const changesRemaining  = Math.max(0, 2 - changesUsedToday);
 
   const nueva = watchPwd('nueva');
   const rolEfectivo = user.rol === 'aprendiz' && (user as any).es_lider_tecnico ? 'lider_tecnico' : user.rol;
@@ -580,6 +594,43 @@ export const ProfilePage = () => {
                   {needsCreatePwd ? 'Crear contraseña' : 'Cambiar contraseña'}
                 </h3>
               </div>
+
+              {/* Indicador de cambios de contraseña restantes hoy */}
+              {!needsCreatePwd && (
+                <div className={`flex items-center justify-between px-3 py-2.5 rounded-xl border text-[11px] font-semibold ${
+                  changesUsedToday === 0
+                    ? 'bg-zinc-800/40 border-zinc-700/40 text-zinc-500'
+                    : changesUsedToday === 1
+                      ? 'bg-amber-500/8 border-amber-500/25 text-amber-400'
+                      : 'bg-rose-500/10 border-rose-500/25 text-rose-400'
+                }`}>
+                  <div className="flex items-center gap-2">
+                    <Clock size={12} className="shrink-0" />
+                    <span>
+                      {changesUsedToday === 0
+                        ? '2 cambios disponibles hoy'
+                        : changesUsedToday === 1
+                          ? '1 de 2 cambios usados hoy'
+                          : 'Límite diario alcanzado'}
+                    </span>
+                  </div>
+                  {/* Indicador visual de "slots" */}
+                  <div className="flex items-center gap-1">
+                    {[1, 2].map(n => (
+                      <div
+                        key={n}
+                        className={`w-3 h-3 rounded-full border ${
+                          n <= changesUsedToday
+                            ? changesRemaining === 0
+                              ? 'bg-rose-500 border-rose-500'
+                              : 'bg-amber-500 border-amber-500'
+                            : 'bg-transparent border-zinc-600'
+                        }`}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Botón: volver a ver el tour de bienvenida */}
               <button

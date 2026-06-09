@@ -225,4 +225,38 @@ export const fichaService = {
   /** [Legacy] Estado de permiso (ahora siempre devuelve puede_crear: true) */
   getPermisoCrear: (): Promise<{ puede_crear: boolean; solicitud_pendiente: boolean }> =>
     api.get('/fichas/permiso-crear').then(r => r.data),
+
+  // ── Wizard de trimestres históricos ──────────────────────────────────────
+
+  /**
+   * Declara trimestres históricos para una ficha que ya estaba en curso
+   * cuando se adoptó Kanbana. Los trimestres < trimestre_actual quedan como
+   * 'historico', el trimestre_actual como 'activo' y el resto 'planificado'.
+   */
+  declararHistorico: (
+    fichaId: number,
+    dto: {
+      trimestre_actual: number;
+      anteriores: Array<{
+        numero: number;
+        nombre?: string;
+        fecha_inicio?: string;
+        fecha_fin?: string;
+        evidencia_url?: string;
+        evidencia_nombre?: string;
+      }>;
+    },
+  ) => api.post(`/fichas/${fichaId}/declarar-historico`, dto).then(r => r.data),
+
+  /**
+   * Sube un archivo de evidencia para un trimestre histórico.
+   * Devuelve { url, nombre, mime, size }.
+   */
+  uploadEvidencia: (file: File): Promise<{ url: string; nombre: string; mime: string; size: number }> => {
+    const fd = new FormData();
+    fd.append('file', file);
+    return api
+      .post('/fichas/upload-evidencia', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
+      .then(r => r.data);
+  },
 };

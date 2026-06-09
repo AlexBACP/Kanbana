@@ -28,7 +28,7 @@ import {
   Crown, UserMinus, Check, FileSpreadsheet, Upload, Download,
   AlertTriangle, Layers, Ticket, Send, Clock, LayoutGrid, Loader2,
   Pencil, X, Save, Link2,
-  Github, HardDrive, Figma, BookOpen, MailX,
+  Github, HardDrive, Figma, BookOpen, MailX, History,
 } from 'lucide-react';
 import { fichaService } from '../../services/ficha.service';
 import { InstructorCrearFichaForm } from './InstructorCrearFichaForm';
@@ -46,6 +46,7 @@ import { SolicitudesPendientesPanel } from '../../components/SolicitudesPendient
 import { ExcelAprendicesPreview, parseExcelPreview, type ExcelPreview } from '../../components/ExcelAprendicesPreview';
 import { recursoService } from '../../services/recurso.service';
 import { useAuthStore } from '../../store/auth.store';
+import { WizardHistorico } from '../../components/WizardHistorico';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type MainTab = 'todas' | 'nueva' | 'solicitar';
@@ -1505,6 +1506,8 @@ const FichaDetalleInline = ({
 
   // ── Inline edit state ─────────────────────────────────────────────────────
   const [isEditing, setIsEditing] = useState(false);
+  // ── Wizard de históricos ───────────────────────────────────────────────────
+  const [showWizardHistorico, setShowWizardHistorico] = useState(false);
   const [editForm, setEditForm] = useState({
     codigo: '', programa: '', fecha_inicio: '', fecha_fin: '', instructor_id: '', jornada: 'mañana',
   });
@@ -1590,6 +1593,15 @@ const FichaDetalleInline = ({
     : 0;
 
   return (
+    <>
+    {/* Wizard de trimestres históricos — portal sobre todo el panel */}
+    {showWizardHistorico && (
+      <WizardHistorico
+        fichaId={fichaId}
+        trimestres={trimestresArr}
+        onClose={() => setShowWizardHistorico(false)}
+      />
+    )}
     <div className="animate-[fadeIn_0.2s_ease-out] ">
       <div className="min-w-0 mt-3 flex justify-between gap-4 felx-col-2 mr-6 ml-5 rounded">
         <div>
@@ -1826,6 +1838,16 @@ const FichaDetalleInline = ({
           <div className="space-y-5">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-black text-zinc-400 uppercase tracking-widest flex items-center gap-2"><Layers size={14} /> Trimestres ({trimestresArr.length})</h3>
+              {/* Botón wizard históricos: solo para instructor/coordinador cuando
+                  hay trimestres y ninguno ha sido declarado histórico todavía */}
+              {canCreate && trimestresArr.length > 0 && !trimestresArr.some((t: any) => t.estado === 'historico') && (
+                <button
+                  onClick={() => setShowWizardHistorico(true)}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-500/10 border border-amber-500/25 text-amber-400 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-amber-500/20 hover:border-amber-500/40 transition-all"
+                >
+                  <History size={11} /> Declarar históricos
+                </button>
+              )}
             </div>
             {loadingTrim ? <div className="grid grid-cols-1 md:grid-cols-2 gap-4">{[1, 2, 3, 4].map(n => <div key={n} className="h-36 bg-zinc-800/40 rounded-md animate-pulse" />)}</div>
               : trimestresArr.length === 0 ? (
@@ -1969,6 +1991,7 @@ const FichaDetalleInline = ({
 
       {/* Modal de configuración de trimestres eliminado — se generan automáticamente al crear la ficha */}
     </div>
+    </>
   );
 };
 

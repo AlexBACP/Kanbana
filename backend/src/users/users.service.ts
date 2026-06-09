@@ -529,6 +529,10 @@ export class UsersService {
       activo: user.activo,
       creado_en: user.creado_en,
       ficha: user.ficha,
+      // Límite de cambios de contraseña — usado por ProfilePage para mostrar
+      // proactivamente cuántos cambios restan al usuario en el día actual.
+      password_changes_today:    user.password_changes_today,
+      password_last_change_date: user.password_last_change_date,
     };
 
     if (user.rol === UserRole.INSTRUCTOR) {

@@ -10,6 +10,7 @@
  *   6. Perfil con tarjeta banner + menú desplegable
  */
 import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Bell, Settings, LogOut, User as UserIcon,
   Search, FolderKanban, GraduationCap, CheckCircle2, X,
@@ -394,6 +395,7 @@ export const TopBar = ({
   let globalIdx = 0;
 
   return (
+    <>
     <header className="bg-zinc-900 border-b border-zinc-800 flex items-center gap-2 md:gap-4 pl-16 pr-3 md:px-5 py-3 md:py-3.5 shrink-0 relative z-40">
 
       {/* ── 1. Búsqueda universal ─────────────────────────────────────────────── */}
@@ -776,61 +778,68 @@ export const TopBar = ({
         </AnimatePresence>
       </div>
 
-      {/* ── Modal de confirmación de logout ────────────────────────────────── */}
+    </header>
+
+    {/* ── Modal de confirmación de logout ─────────────────────────────────────
+        Renderizado vía createPortal en document.body para garantizar que
+        queda fuera de cualquier stacking context del header (z-40) o del
+        sidebar, y el z-index se evalúa siempre en el root. */}
+    {createPortal(
       <AnimatePresence>
         {showLogoutConfirm && (
-          <>
+          <motion.div
+            key="logout-overlay"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.18 }}
+            onClick={() => setShowLogoutConfirm(false)}
+            className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
+          >
             <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.15 }}
-              onClick={() => setShowLogoutConfirm(false)}
-              className="fixed inset-0 z-[200] bg-black/70 backdrop-blur-sm"
-            />
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              key="logout-dialog"
+              initial={{ opacity: 0, scale: 0.95, y: 12 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 10 }}
-              transition={{ type: 'spring', stiffness: 400, damping: 28 }}
-              className="fixed inset-0 z-[201] flex items-center justify-center p-4 pointer-events-none"
+              exit={{ opacity: 0, scale: 0.95, y: 8 }}
+              transition={{ type: 'spring', stiffness: 420, damping: 30 }}
+              onClick={e => e.stopPropagation()}
+              className="bg-zinc-900 border border-zinc-700 rounded-2xl shadow-2xl shadow-rose-500/10 max-w-sm w-full overflow-hidden"
             >
-              <div className="bg-zinc-900 border border-zinc-700 rounded-2xl shadow-2xl shadow-rose-500/10 max-w-sm w-full pointer-events-auto overflow-hidden">
-
-                {/* Cabecera con ícono */}
-                <div className="flex items-start gap-4 p-6 pb-4">
-                  <div className="shrink-0 w-12 h-12 rounded-xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center">
-                    <LogOut size={22} className="text-rose-400" />
-                  </div>
-                  <div className="flex-1 min-w-0 pt-1">
-                    <h3 className="text-base font-black text-white">¿Cerrar sesión?</h3>
-                    <p className="text-[13px] text-zinc-400 mt-1.5 leading-relaxed">
-                      Vas a salir de Kanbana. Tendrás que volver a iniciar sesión para acceder.
-                    </p>
-                  </div>
+              {/* Cabecera con ícono */}
+              <div className="flex items-start gap-4 p-6 pb-4">
+                <div className="shrink-0 w-12 h-12 rounded-xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center">
+                  <LogOut size={22} className="text-rose-400" />
                 </div>
-
-                {/* Botones */}
-                <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-zinc-800 bg-zinc-950/40">
-                  <button
-                    onClick={() => setShowLogoutConfirm(false)}
-                    className="px-4 py-2 text-[13px] font-black text-zinc-300 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors"
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    onClick={() => { setShowLogoutConfirm(false); onLogout(); }}
-                    className="flex items-center gap-2 px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white text-[13px] font-black rounded-lg transition-all shadow-md shadow-rose-600/30 active:scale-95"
-                  >
-                    <LogOut size={13} />
-                    Sí, cerrar sesión
-                  </button>
+                <div className="flex-1 min-w-0 pt-1">
+                  <h3 className="text-base font-black text-white">¿Cerrar sesión?</h3>
+                  <p className="text-[13px] text-zinc-400 mt-1.5 leading-relaxed">
+                    Vas a salir de Kanbana. Tendrás que volver a iniciar sesión para acceder.
+                  </p>
                 </div>
               </div>
+
+              {/* Botones */}
+              <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-zinc-800 bg-zinc-950/40">
+                <button
+                  onClick={() => setShowLogoutConfirm(false)}
+                  className="px-4 py-2 text-[13px] font-black text-zinc-300 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={() => { setShowLogoutConfirm(false); onLogout(); }}
+                  className="flex items-center gap-2 px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white text-[13px] font-black rounded-lg transition-all shadow-md shadow-rose-600/30 active:scale-95"
+                >
+                  <LogOut size={13} />
+                  Sí, cerrar sesión
+                </button>
+              </div>
             </motion.div>
-          </>
+          </motion.div>
         )}
-      </AnimatePresence>
-    </header>
+      </AnimatePresence>,
+      document.body,
+    )}
+  </>
   );
 };
