@@ -67,8 +67,8 @@ export const TicketCard = ({ ticket, actions }: TicketCardProps) => {
   const daysUntil = ticket.fecha_limite
     ? Math.ceil((new Date(ticket.fecha_limite).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
     : null;
-  const isOverdue = daysUntil !== null && daysUntil < 0;
-  const isNear    = daysUntil !== null && daysUntil >= 0 && daysUntil <= 2;
+  const isOverdue = daysUntil !== null && daysUntil < 0 && ticket.estado !== 'done';
+  const isNear    = daysUntil !== null && daysUntil >= 0 && daysUntil <= 2 && ticket.estado !== 'done';
 
   // ── Estados especiales ─────────────────────────────────────────────────────
   const assigneeName          = (ticket as any).asignado_a?.nombre ?? ticket.asignado_a_rel?.nombre;

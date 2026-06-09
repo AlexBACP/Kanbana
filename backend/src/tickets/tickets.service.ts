@@ -898,6 +898,9 @@ export class TicketsService {
       esta_bloqueado:          true,
       motivo_bloqueo,
       bloqueada_desde:         new Date(),
+      // Al devolver para corrección se limpia el flag de vencida:
+      // el aprendiz tiene otra oportunidad, no tiene sentido que siga marcada.
+      vencida:                 false,
     });
 
     // Notificar al aprendiz que debe corregir. try/catch para SMTP.
@@ -956,6 +959,8 @@ export class TicketsService {
     await this.ticketsRepository.update(ticketId, {
       estado:         TicketStatus.DONE,
       actualizado_en: new Date(),
+      // Tarea finalizada: nunca debe mostrarse como vencida.
+      vencida:        false,
     });
 
     try {
