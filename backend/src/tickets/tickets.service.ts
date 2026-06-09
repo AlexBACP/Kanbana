@@ -891,27 +891,41 @@ export class TicketsService {
 
     const motivo_bloqueo = motivo?.trim() || 'Devuelta por el líder. Revisa los comentarios y corrige.';
 
+    // Si la tarea ya estaba vencida al momento del rechazo, le damos al
+    // aprendiz 2 días frescos desde hoy para corregir. Si todavía está
+    // dentro del plazo original, no se toca la fecha.
+    const ahora = new Date();
+    const estabaVencida =
+      ticket.fecha_limite && new Date(ticket.fecha_limite).getTime() < ahora.getTime();
+    const nuevaFechaLimite = estabaVencida
+      ? new Date(ahora.getTime() + 2 * 24 * 60 * 60 * 1000)
+      : ticket.fecha_limite;
+
     await this.ticketsRepository.update(ticketId, {
       completado_por_aprendiz: false,
       estado:                  TicketStatus.IN_PROGRESS,
       // Marcar en rojo: el aprendiz ve la tarjeta roja hasta que la reenvíe
       esta_bloqueado:          true,
       motivo_bloqueo,
-      bloqueada_desde:         new Date(),
+      bloqueada_desde:         ahora,
       // Al devolver para corrección se limpia el flag de vencida:
       // el aprendiz tiene otra oportunidad, no tiene sentido que siga marcada.
       vencida:                 false,
+      fecha_limite:            nuevaFechaLimite,
     });
 
     // Notificar al aprendiz que debe corregir. try/catch para SMTP.
     try {
       if (ticket.asignado_a_id) {
         const proyectoNombre = (ticket as any).proyecto?.nombre ?? '';
-        // In-app
+        // In-app — si se extendió el plazo, se lo decimos en el mensaje.
+        const sufijoPlazo = estabaVencida
+          ? ' Se extendió el plazo 2 días desde hoy.'
+          : '';
         await this.notificationsService.create({
           usuario_id: ticket.asignado_a_id,
           titulo:  `Tarea devuelta con correcciones: "${ticket.titulo}"`,
-          mensaje: `Tu líder necesita correcciones en "${ticket.titulo}". Motivo: ${motivo_bloqueo}`,
+          mensaje: `Tu líder necesita correcciones en "${ticket.titulo}". Motivo: ${motivo_bloqueo}.${sufijoPlazo}`,
           action_data: JSON.stringify({ ticket_id: ticket.id, proyecto_id: (ticket as any).proyecto_id }),
           tipo:    'warning' as any,
         });
@@ -1015,23 +1029,37 @@ export class TicketsService {
 
     const motivo_bloqueo = motivo?.trim() || 'Rechazado por el instructor. Revisa los comentarios y corrige.';
 
+    // Misma lógica que liderReject: si estaba vencida, extender +2 días desde hoy.
+    const ahora = new Date();
+    const estabaVencida =
+      ticket.fecha_limite && new Date(ticket.fecha_limite).getTime() < ahora.getTime();
+    const nuevaFechaLimite = estabaVencida
+      ? new Date(ahora.getTime() + 2 * 24 * 60 * 60 * 1000)
+      : ticket.fecha_limite;
+
     await this.ticketsRepository.update(ticketId, {
       estado:                  TicketStatus.IN_PROGRESS,
       esta_bloqueado:          true,
       motivo_bloqueo,
-      bloqueada_desde:         new Date(),
+      bloqueada_desde:         ahora,
       completado_por_aprendiz: false,
-      actualizado_en:          new Date(),
+      actualizado_en:          ahora,
+      // Limpiar flag de vencida y extender plazo si la tarea ya estaba expirada.
+      vencida:                 false,
+      fecha_limite:            nuevaFechaLimite,
     });
 
     try {
       const proyectoNombre = (ticket as any).proyecto?.nombre ?? '';
       // Notificar al aprendiz asignado
       if (ticket.asignado_a_id) {
+        const sufijoPlazo = estabaVencida
+          ? ' Se extendió el plazo 2 días desde hoy.'
+          : '';
         await this.notificationsService.create({
           usuario_id: ticket.asignado_a_id,
           titulo:  `Tarea devuelta por instructor: "${ticket.titulo}"`,
-          mensaje: `El instructor devolvió "${ticket.titulo}". Motivo: ${motivo_bloqueo}`,
+          mensaje: `El instructor devolvió "${ticket.titulo}". Motivo: ${motivo_bloqueo}.${sufijoPlazo}`,
           action_data: JSON.stringify({ ticket_id: ticket.id, proyecto_id: (ticket as any).proyecto_id }),
           tipo:    'warning' as any,
         });
