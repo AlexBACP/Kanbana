@@ -14,7 +14,11 @@ import { GitPullRequest, PullRequestEstado } from './entities/pull-request.entit
 import { WebhookEvent }             from './entities/webhook-event.entity';
 import { GithubAuthService }        from './github-auth.service';
 import { Ticket, TicketStatus }     from '../tickets/entities/ticket.entity';
+import { Sprint }                   from '../projects/entities/sprint.entity';
+import { Project }                  from '../projects/entities/project.entity';
+import { User }                     from '../users/entities/user.entity';
 import { NotificationsService }     from '../notifications/notifications.service';
+import { EmailService }             from '../email/email.service';
 import { parseTicketRefs, parseFirstTicketRef } from './github.refs';
 import { verifyWebhookSignature }   from './github.crypto';
 
@@ -37,8 +41,12 @@ export class GithubService {
     @InjectRepository(GitPullRequest)  private readonly prsRepo:      OrmRepository<GitPullRequest>,
     @InjectRepository(WebhookEvent)    private readonly eventsRepo:   OrmRepository<WebhookEvent>,
     @InjectRepository(Ticket)          private readonly ticketsRepo:  OrmRepository<Ticket>,
+    @InjectRepository(Sprint)          private readonly sprintsRepo:  OrmRepository<Sprint>,
+    @InjectRepository(Project)         private readonly projectsRepo: OrmRepository<Project>,
+    @InjectRepository(User)             private readonly usersRepo:    OrmRepository<User>,
     private readonly authService:   GithubAuthService,
     private readonly notifications: NotificationsService,
+    private readonly emailService:  EmailService,
   ) {}
 
   // ── Config webhook ──────────────────────────────────────────────────────────
@@ -472,25 +480,32 @@ export class GithubService {
     if (!pr) return 'Payload de PR vacío.';
     const action = payload.action;
 
+    // Soporte para PRs con MÚLTIPLES tickets en el título o el cuerpo
+    // (estrategia "una rama por sprint" — el PR del sprint cierra varios KAN).
     const refs = parseTicketRefs(`${pr.title} ${pr.head?.ref} ${pr.body ?? ''}`);
-    const ticketId = refs.length ? await this.resolveTicketForRepo(refs, repo) : null;
+    const ticketIds: number[] = [];
+    for (const num of refs) {
+      const id = await this.resolveTicketForRepo([num], repo);
+      if (id && !ticketIds.includes(id)) ticketIds.push(id);
+    }
+    const primaryTicketId = ticketIds[0] ?? null;
 
     // Determinar estado
     let estado = PullRequestEstado.OPEN;
     if (pr.merged_at || (action === 'closed' && pr.merged)) estado = PullRequestEstado.MERGED;
     else if (pr.state === 'closed' || action === 'closed') estado = PullRequestEstado.CLOSED;
 
-    // Upsert del PR
+    // Upsert del PR (el ticket_id principal queda como puntero para la UI)
     let entity = await this.prsRepo.findOne({ where: { repository_id: repo.id, numero: pr.number } });
     if (entity) {
       entity.estado       = estado;
       entity.titulo       = (pr.title || '').slice(0, 2000);
-      entity.ticket_id    = ticketId ?? entity.ticket_id ?? null;
+      entity.ticket_id    = primaryTicketId ?? entity.ticket_id ?? null;
       entity.mergeado_en  = pr.merged_at ? new Date(pr.merged_at) : entity.mergeado_en;
     } else {
       entity = this.prsRepo.create({
         repository_id: repo.id,
-        ticket_id:     ticketId ?? null,
+        ticket_id:     primaryTicketId ?? null,
         numero:        pr.number,
         titulo:        (pr.title || '').slice(0, 2000),
         estado,
@@ -505,17 +520,110 @@ export class GithubService {
     }
     await this.prsRepo.save(entity);
 
-    // Automatización de estado del ticket
-    const targetTicketId = entity.ticket_id;
-    if (targetTicketId) {
-      if (action === 'opened' || action === 'reopened' || action === 'ready_for_review') {
-        await this.transitionTicket(targetTicketId, repo, TicketStatus.TESTING, `PR #${pr.number} abierto`);
-      } else if (estado === PullRequestEstado.MERGED) {
-        await this.transitionTicket(targetTicketId, repo, TicketStatus.DONE, `PR #${pr.number} mergeado`);
+    // Automatización de estado del ticket — aplicamos a TODOS los tickets referenciados
+    if (ticketIds.length) {
+      const isOpening = action === 'opened' || action === 'reopened' || action === 'ready_for_review';
+      const isMerged  = estado === PullRequestEstado.MERGED;
+
+      for (const tid of ticketIds) {
+        if (isOpening) {
+          await this.transitionTicket(tid, repo, TicketStatus.TESTING, `PR #${pr.number} abierto`);
+        } else if (isMerged) {
+          await this.transitionTicket(tid, repo, TicketStatus.DONE, `PR #${pr.number} mergeado`);
+        }
+      }
+
+      // ── Auto-envío del sprint a revisión del instructor ────────────────
+      // Si el merge completó TODAS las tareas de un sprint, lo enviamos
+      // automáticamente a revisión (pendiente_revision = true) y avisamos
+      // al instructor — igual que si el líder hubiera hecho clic manualmente.
+      if (isMerged) {
+        const sprintIds = await this.sprintIdsAfectados(ticketIds);
+        for (const sprintId of sprintIds) {
+          await this.autoEnviarSprintARevision(sprintId, repo, pr.number);
+        }
       }
     }
 
-    return `PR #${pr.number} (${action}) → estado ${estado}${targetTicketId ? `, ticket #${targetTicketId}` : ''}.`;
+    return `PR #${pr.number} (${action}) → estado ${estado}, ${ticketIds.length} ticket(s) afectado(s).`;
+  }
+
+  // ── Devuelve los sprint_ids únicos de los tickets recibidos ──────────────
+  private async sprintIdsAfectados(ticketIds: number[]): Promise<number[]> {
+    if (!ticketIds.length) return [];
+    const rows = await this.ticketsRepo.find({
+      where: { id: In(ticketIds) },
+      select: ['id', 'sprint_id'],
+    });
+    const ids = new Set<number>();
+    for (const r of rows) {
+      if (r.sprint_id) ids.add(r.sprint_id);
+    }
+    return [...ids];
+  }
+
+  // ── Marca el sprint como pendiente de revisión si todas sus tareas están done ──
+  // Idempotente: no hace nada si el sprint ya fue enviado a revisión, ya está
+  // finalizado, o si quedan tareas sin completar.
+  private async autoEnviarSprintARevision(
+    sprintId: number,
+    repo:     RepoEntity,
+    prNumber: number,
+  ): Promise<void> {
+    try {
+      const sprint = await this.sprintsRepo.findOne({
+        where: { id: sprintId },
+        relations: ['tickets', 'proyecto', 'proyecto.instructor', 'proyecto.lider'],
+      });
+      if (!sprint) return;
+      if (sprint.esta_finalizado || sprint.pendiente_revision) return;
+
+      const tickets = sprint.tickets ?? [];
+      if (!tickets.length) return;
+      const todasDone = tickets.every(t => t.estado === TicketStatus.DONE);
+      if (!todasDone) return;
+
+      // Marcar como pendiente_revision
+      sprint.pendiente_revision = true;
+      await this.sprintsRepo.save(sprint);
+      this.logger.log(
+        `🚀 Sprint #${sprintId} ("${sprint.nombre}") enviado a revisión automáticamente tras merge del PR #${prNumber}.`,
+      );
+
+      // Notificar al instructor (in-app + email) — misma plantilla que el flujo manual
+      const proyecto   = (sprint as any).proyecto;
+      const instructor = proyecto?.instructor;
+      const lider      = proyecto?.lider;
+      if (!instructor) return;
+
+      const ad = JSON.stringify({ proyecto_id: proyecto.id, sprint_id: sprint.id });
+
+      await this.notifications.create({
+        usuario_id:  instructor.id,
+        titulo:      `Módulo listo para revisión: "${sprint.nombre}"`,
+        mensaje:     `El equipo cerró todas las tareas del módulo "${sprint.nombre}" en "${proyecto.nombre}" tras mergear el PR #${prNumber}. Revísalo en el panel.`,
+        tipo:        'info' as any,
+        action_data: ad,
+      });
+
+      if (instructor.correo) {
+        try {
+          await this.emailService.notificarModuloListo({
+            destinatario:     instructor.correo,
+            instructorNombre: instructor.nombre,
+            liderNombre:      lider?.nombre ?? 'El líder técnico',
+            sprintNombre:     sprint.nombre,
+            proyectoNombre:   proyecto.nombre,
+            totalTickets:     tickets.length,
+            testingTickets:   tickets.length, // todas en done = todas pasaron testing
+          });
+        } catch (e: any) {
+          this.logger.warn(`No se pudo enviar correo al instructor del sprint ${sprintId}: ${e.message}`);
+        }
+      }
+    } catch (e: any) {
+      this.logger.error(`Error en autoEnviarSprintARevision(${sprintId}): ${e.message}`);
+    }
   }
 
   /**
