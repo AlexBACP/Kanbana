@@ -34,6 +34,7 @@ import { AttachmentUploader }  from '../components/AttachmentUploader';
 import { AttachmentGallery }   from '../components/AttachmentGallery';
 import { useTicketSocket }     from '../hooks/useTicketSocket';
 import { ProjectResourcesCard } from '../components/ProjectResourcesCard';
+import { GitWorkflowCard }      from '../components/GitWorkflowCard';
 import { TicketStatus }     from '../types/ticket.types';
 
 // ── Mapas de estado ──────────────────────────────────────────────────────────
@@ -799,15 +800,20 @@ export const TicketDetailPage = () => {
                 {/* ── GitHub: actividad enlazada ───────────────────────────── */}
                 {activeTab === 'github' && (
                   <div className="space-y-6">
+
+                    {/* Guía contextual con comandos copiables — siempre visible */}
+                    <GitWorkflowCard
+                      codigoReferencia={(t as any).codigo_referencia}
+                      titulo={t.titulo}
+                    />
+
                     {ghCount === 0 ? (
-                      <div className="py-12 text-center">
-                        <Github size={32} className="mx-auto mb-4 text-zinc-700" />
+                      <div className="py-8 text-center border-t border-zinc-800/50">
+                        <Github size={28} className="mx-auto mb-3 text-zinc-700" />
                         <p className="text-sm text-zinc-400 font-bold">Sin actividad de GitHub todavía</p>
                         <p className="text-xs text-zinc-600 mt-2 max-w-md mx-auto leading-relaxed">
-                          Referencia esta tarea desde tu código usando{' '}
-                          <code className="px-1.5 py-0.5 rounded bg-zinc-800 text-blue-400 font-mono">KAN-{t.id}</code>{' '}
-                          en el nombre de la rama, el mensaje del commit o el título del PR.
-                          Los commits, ramas y pull requests aparecerán aquí automáticamente.
+                          Cuando alguien del equipo haga un commit, abra una rama o un PR
+                          referenciando esta tarea, aparecerá aquí en tiempo real.
                         </p>
                       </div>
                     ) : (
