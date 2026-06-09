@@ -51,7 +51,8 @@ export class EmailCronService {
           estado:        Not(TicketStatus.DONE) as any,
           asignado_a_id: Not(IsNull()) as any,
         },
-        relations: ['asignado_a', 'proyecto'],
+        // Cargamos también al líder técnico del proyecto para avisarle.
+        relations: ['asignado_a', 'proyecto', 'proyecto.lider'],
       });
     } catch (err: any) {
       this.logger.error(`Error al consultar tickets para recordatorio: ${err.message}`);
@@ -66,25 +67,45 @@ export class EmailCronService {
     this.logger.log(`📧 Enviando recordatorio a ${tickets.length} ticket(s) próximos a vencer…`);
 
     for (const ticket of tickets) {
-      if (!ticket.asignado_a?.correo) continue;
-
       const horasRestantes = Math.max(
         0,
         Math.round((ticket.fecha_limite.getTime() - ahora.getTime()) / (1000 * 60 * 60)),
       );
+      const proyectoNombre = (ticket as any).proyecto?.nombre ?? '';
 
-      try {
-        await this.emailService.notificarRecordatorioPlazo({
-          destinatario:   ticket.asignado_a.correo,
-          aprendizNombre: ticket.asignado_a.nombre,
-          tareaTitle:     ticket.titulo,
-          fechaLimite:    ticket.fecha_limite,
-          horasRestantes,
-          proyectoNombre: (ticket as any).proyecto?.nombre ?? '',
-          estado:         ticket.estado,
-        });
-      } catch (err: any) {
-        this.logger.error(`No se pudo enviar recordatorio para ticket ${ticket.id}: ${err.message}`);
+      // ── 1) Email al aprendiz asignado ──────────────────────────────────
+      if (ticket.asignado_a?.correo) {
+        try {
+          await this.emailService.notificarRecordatorioPlazo({
+            destinatario:   ticket.asignado_a.correo,
+            aprendizNombre: ticket.asignado_a.nombre,
+            tareaTitle:     ticket.titulo,
+            fechaLimite:    ticket.fecha_limite,
+            horasRestantes,
+            proyectoNombre,
+            estado:         ticket.estado,
+          });
+        } catch (err: any) {
+          this.logger.error(`No se pudo enviar recordatorio al aprendiz (ticket ${ticket.id}): ${err.message}`);
+        }
+      }
+
+      // ── 2) Email al líder técnico del proyecto (si es distinto del asignado) ──
+      const lider = (ticket as any).proyecto?.lider;
+      if (lider?.correo && lider.id !== ticket.asignado_a_id) {
+        try {
+          await this.emailService.notificarRecordatorioPlazo({
+            destinatario:   lider.correo,
+            aprendizNombre: lider.nombre,
+            tareaTitle:     `[Equipo] ${ticket.titulo}`,
+            fechaLimite:    ticket.fecha_limite,
+            horasRestantes,
+            proyectoNombre,
+            estado:         ticket.estado,
+          });
+        } catch (err: any) {
+          this.logger.error(`No se pudo enviar recordatorio al líder (ticket ${ticket.id}): ${err.message}`);
+        }
       }
     }
 
@@ -178,6 +199,7 @@ export class EmailCronService {
           'proyecto',
           'proyecto.ficha',
           'proyecto.ficha.instructor',
+          'proyecto.lider',
           'tickets',
         ],
       });
@@ -197,28 +219,133 @@ export class EmailCronService {
       return;
     }
 
-    this.logger.log(`📧 Notificando ${completados.length} módulo(s) completado(s) al instructor…`);
+    this.logger.log(`📧 Notificando ${completados.length} módulo(s) completado(s)…`);
 
     for (const sprint of completados) {
+      const proyectoNombre = (sprint as any).proyecto?.nombre ?? '';
+      const totalTickets   = ((sprint as any).tickets ?? []).length;
+
+      // ── 1) Instructor de la ficha ─────────────────────────────────────
       const instructor = (sprint as any).proyecto?.ficha?.instructor;
-      if (!instructor?.correo) continue;
+      if (instructor?.correo) {
+        try {
+          await this.emailService.notificarModuloCompletado({
+            destinatario:     instructor.correo,
+            instructorNombre: instructor.nombre,
+            sprintNombre:     sprint.nombre,
+            proyectoNombre,
+            totalTickets,
+          });
+        } catch (err: any) {
+          this.logger.error(`No se pudo notificar al instructor del módulo ${sprint.id}: ${err.message}`);
+        }
+      }
 
-      const totalTickets = ((sprint as any).tickets ?? []).length;
-
-      try {
-        await this.emailService.notificarModuloCompletado({
-          destinatario:     instructor.correo,
-          instructorNombre: instructor.nombre,
-          sprintNombre:     sprint.nombre,
-          proyectoNombre:   (sprint as any).proyecto?.nombre ?? '',
-          totalTickets,
-        });
-      } catch (err: any) {
-        this.logger.error(`No se pudo notificar módulo completado ${sprint.id}: ${err.message}`);
+      // ── 2) Líder técnico del proyecto (si es distinto del instructor) ──
+      const lider = (sprint as any).proyecto?.lider;
+      if (lider?.correo && lider.id !== instructor?.id) {
+        try {
+          await this.emailService.notificarModuloCompletado({
+            destinatario:     lider.correo,
+            instructorNombre: lider.nombre,
+            sprintNombre:     sprint.nombre,
+            proyectoNombre,
+            totalTickets,
+          });
+        } catch (err: any) {
+          this.logger.error(`No se pudo notificar al líder del módulo ${sprint.id}: ${err.message}`);
+        }
       }
     }
 
     this.logger.log('✅ Notificaciones de módulos completados enviadas.');
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // 5. MÓDULOS PRÓXIMOS A VENCER — 8:15 AM Bogotá
+  // Detecta módulos cuya fecha_fin está entre hoy y dentro de 3 días,
+  // no finalizados ni en revisión. Notifica al líder técnico del proyecto
+  // (y también al instructor, por si acaso).
+  // ══════════════════════════════════════════════════════════════════════════
+  @Cron('15 13 * * *', { timeZone: 'America/Bogota' })
+  async notificarModulosProximosAVencer(): Promise<void> {
+    this.logger.log('🟡 Ejecutando cron de módulos próximos a vencer…');
+
+    const hoy = new Date();
+    hoy.setHours(0, 0, 0, 0);
+    const en3dias = new Date(hoy.getTime() + 3 * 24 * 60 * 60 * 1000);
+
+    let sprints: Sprint[];
+    try {
+      sprints = await this.sprintsRepo.find({
+        where: {
+          esta_finalizado:    false,
+          pendiente_revision: false,
+          fecha_fin:          Between(hoy, en3dias) as any,
+        },
+        relations: [
+          'proyecto',
+          'proyecto.ficha',
+          'proyecto.ficha.instructor',
+          'proyecto.lider',
+          'tickets',
+        ],
+      });
+    } catch (err: any) {
+      this.logger.error(`Error al consultar módulos próximos a vencer: ${err.message}`);
+      return;
+    }
+
+    if (!sprints.length) {
+      this.logger.log('ℹ  Sin módulos próximos a vencer.');
+      return;
+    }
+
+    this.logger.log(`📧 Notificando ${sprints.length} módulo(s) próximos a vencer…`);
+
+    for (const sprint of sprints) {
+      const tickets        = (sprint as any).tickets ?? [];
+      const tareasDone     = tickets.filter((t: any) => t.estado === TicketStatus.DONE).length;
+      const proyectoNombre = (sprint as any).proyecto?.nombre ?? '';
+      const instructor     = (sprint as any).proyecto?.ficha?.instructor;
+      const lider          = (sprint as any).proyecto?.lider;
+
+      // ── Líder técnico (principal destinatario) ────────────────────────
+      if (lider?.correo) {
+        try {
+          await this.emailService.notificarVencimientoModulo({
+            destinatario:     lider.correo,
+            instructorNombre: lider.nombre,
+            sprintNombre:     sprint.nombre,
+            proyectoNombre,
+            fechaFin:         sprint.fecha_fin,
+            tareasTotal:      tickets.length,
+            tareasDone,
+          });
+        } catch (err: any) {
+          this.logger.error(`No se pudo notificar al líder del módulo próximo ${sprint.id}: ${err.message}`);
+        }
+      }
+
+      // ── Instructor (también, si es distinto del líder) ────────────────
+      if (instructor?.correo && instructor.id !== lider?.id) {
+        try {
+          await this.emailService.notificarVencimientoModulo({
+            destinatario:     instructor.correo,
+            instructorNombre: instructor.nombre,
+            sprintNombre:     sprint.nombre,
+            proyectoNombre,
+            fechaFin:         sprint.fecha_fin,
+            tareasTotal:      tickets.length,
+            tareasDone,
+          });
+        } catch (err: any) {
+          this.logger.error(`No se pudo notificar al instructor del módulo próximo ${sprint.id}: ${err.message}`);
+        }
+      }
+    }
+
+    this.logger.log('✅ Notificaciones de módulos próximos a vencer enviadas.');
   }
 
   // ══════════════════════════════════════════════════════════════════════════
