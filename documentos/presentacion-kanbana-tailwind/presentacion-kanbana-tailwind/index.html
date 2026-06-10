@@ -1687,7 +1687,7 @@
                             <div class="mk2-col-h">Completado</div>
                             <div class="mk2-card">Login / Registro ✓</div>
                             <div class="mk2-card">Guard JWT ✓</div>
-                            <div class="mk2-card">RBAC básico ✓</div>
+                            <div class="mk2-card">Permisos por rol ✓</div>
                           </div>
                         </div>
                       </div>
@@ -2278,7 +2278,7 @@
             <span class="ic-fstep">done</span>
           </div>
           <div class="ic-commit">git commit -m "KAN-42 login"</div>
-          <div class="ic-desc">Un commit con el código detectado avanza la tarea. Un PR mergeado la cierra.</div>
+          <div class="ic-desc">Un commit detectado avanza la tarea. Una solicitud de cambio aprobada la cierra.</div>
         </div>
 
         <!-- 4 · Líder Técnico — ancho 2 cols, jerarquía de roles -->
@@ -2299,8 +2299,7 @@
         <div class="ic ic-red ic-evid">
           <div class="ic-pill pil-red"><span>📎</span>Evidencia</div>
           <div class="ic-title">Sin adjunto, la tarea no cierra</div>
-          <div class="ic-desc">Si la tarea requiere adjunto, el merge del PR no la cierra. El código solo no es
-            suficiente evidencia.</div>
+          <div class="ic-desc">Si la tarea requiere adjunto, la solicitud de cambio aprobada no la cierra. El código solo no es suficiente evidencia.</div>
           <div class="ic-blocked">⛔ Bloqueada · Falta adjunto</div>
         </div>
 
@@ -2474,9 +2473,9 @@
           <h3 style="color:#2D6A4F;">✓ Incluye</h3>
           <ul>
             <li>Tablero Kanban con módulos y gestión de proyectos</li>
-            <li>Sistema RBAC con 4 roles diferenciados</li>
+            <li>Sistema con 3 perfiles y acceso diferenciado por jerarquía</li>
             <li>Flujo completo de aprobación de tareas</li>
-            <li>Integración con GitHub (webhooks, PRs, auto-estados)</li>
+            <li>Integración con GitHub (eventos, solicitudes y estados automáticos)</li>
             <li>Chat IA integrado con Gemini API</li>
             <li>Notificaciones en tiempo real vía WebSocket y correo</li>
             <li>Seguimiento de plazos con alertas automáticas</li>
@@ -2488,7 +2487,6 @@
         <div style="margin-top:18px;">
           <h3 style="color:#1f2a17;font-size:13px;font-weight:700;margin-bottom:8px;">👥 Roles del sistema</h3>
           <div class="roles-row">
-            <span class="role-chip">🏛️ Coordinador</span>
             <span class="role-chip">👨‍🏫 Instructor</span>
             <span class="role-chip">⚡ Líder Técnico</span>
             <span class="role-chip">🎓 Aprendiz</span>
@@ -3249,7 +3247,7 @@
             d="M12 2C6.477 2 2 6.477 2 12c0 4.42 2.865 8.17 6.839 9.49.5.092.682-.217.682-.482 0-.237-.008-.866-.013-1.7-2.782.604-3.369-1.34-3.369-1.34-.454-1.156-1.11-1.463-1.11-1.463-.908-.62.069-.608.069-.608 1.003.07 1.531 1.03 1.531 1.03.892 1.529 2.341 1.087 2.91.831.092-.646.35-1.086.636-1.336-2.22-.253-4.555-1.11-4.555-4.943 0-1.091.39-1.984 1.029-2.683-.103-.253-.446-1.27.098-2.647 0 0 .84-.269 2.75 1.025A9.578 9.578 0 0112 6.836c.85.004 1.705.114 2.504.337 1.909-1.294 2.747-1.025 2.747-1.025.546 1.377.203 2.394.1 2.647.64.699 1.028 1.592 1.028 2.683 0 3.842-2.339 4.687-4.566 4.935.359.309.678.919.678 1.852 0 1.336-.012 2.415-.012 2.743 0 .267.18.578.688.48C19.138 20.167 22 16.418 22 12c0-5.523-4.477-10-10-10z" />
         </svg>
         <span class="nd-label" style="color:#c8d3de;">GitHub</span>
-        <div class="tip">Commits → tareas · webhooks</div>
+        <div class="tip">Confirmaciones → tareas · eventos automáticos</div>
       </div>
 
       <!-- Gemini AI -->
@@ -3774,7 +3772,7 @@
         <div class="ee" id="ee-u"
           style="left:17%;top:10%;border:1.5px solid rgba(57,169,0,.55);box-shadow:0 0 22px rgba(57,169,0,.14);">
           <div class="ee-h" style="background:#2c8200;"><span>👤</span> Usuario</div>
-          <div class="ee-desc" style="background:#2c8200;">Raíz del sistema · 4 roles con RBAC</div>
+          <div class="ee-desc" style="background:#2c8200;">Raíz del sistema · 3 perfiles con acceso diferenciado</div>
           <div class="ee-b">
             <span class="pk">🔑 id</span>
             <span>rol · es_lider_tecnico</span>
@@ -3813,7 +3811,7 @@
         <div class="ee" id="ee-ghr"
           style="left:75%;top:35%;border:1.5px solid rgba(208,215,222,.32);box-shadow:0 0 12px rgba(208,215,222,.07);">
           <div class="ee-h" style="background:#21262d;"><span>📦</span> Repositorio GitHub</div>
-          <div class="ee-desc" style="background:#21262d;">Webhooks que mueven tareas solos</div>
+          <div class="ee-desc" style="background:#21262d;">Eventos automáticos que mueven tareas</div>
           <div class="ee-b">
             <span class="pk">🔑 id</span>
             <span>nombre_repo</span>
@@ -4180,7 +4178,7 @@
                 <span
                   class="chip-alta inline-block text-[10px] font-extrabold tracking-[1px] uppercase px-[9px] py-[3px] rounded-full bg-k-red/10 text-k-red ml-1">Alta</span>
               </h4>
-              <p class="text-[13px] text-[#5d6b50]">Webhooks, PRs y commits mueven tareas automáticamente.</p>
+              <p class="text-[13px] text-[#5d6b50]">Los eventos de GitHub actualizan las tareas automáticamente.</p>
             </div>
           </div>
           <div class="flex gap-[14px] items-start py-3 border-b border-black/10">
@@ -4212,7 +4210,7 @@
                 <span
                   class="chip-alta inline-block text-[10px] font-extrabold tracking-[1px] uppercase px-[9px] py-[3px] rounded-full bg-k-red/10 text-k-red ml-1">Alta</span>
               </h4>
-              <p class="text-[13px] text-[#5d6b50]">Inicio de sesión seguro con JWT y refresh tokens.</p>
+              <p class="text-[13px] text-[#5d6b50]">Inicio de sesión seguro con token de acceso renovable.</p>
             </div>
           </div>
           <div class="flex gap-[14px] items-start py-3 border-b border-black/10">
@@ -4221,12 +4219,12 @@
                 <span
                   class="chip-alta inline-block text-[10px] font-extrabold tracking-[1px] uppercase px-[9px] py-[3px] rounded-full bg-k-red/10 text-k-red ml-1">Alta</span>
               </h4>
-              <p class="text-[13px] text-[#5d6b50]">Control de acceso jerárquico por rol (RBAC).</p>
+              <p class="text-[13px] text-[#5d6b50]">Control de acceso jerárquico por rol.</p>
             </div>
           </div>
           <div class="flex gap-[14px] items-start py-3">
             <div>
-              <h4 class="text-[15px] font-extrabold">Doble factor (2FA)
+              <h4 class="text-[15px] font-extrabold">Verificación en dos pasos
                 <span
                   class="inline-block text-[10px] font-extrabold tracking-[1px] uppercase px-[9px] py-[3px] rounded-full bg-k-amber/15 text-[#b9791a] ml-1">Media</span>
               </h4>
@@ -6336,12 +6334,6 @@
         transform: none;
         transition-delay: .80s;
       }
-
-      #s-alcance.active .role-item:nth-child(4) {
-        opacity: 1;
-        transform: none;
-        transition-delay: .95s;
-      }
     </style>
     <div class="slide-inner max-w-[1080px] w-full mx-auto relative z-[2]">
       <span
@@ -6366,7 +6358,7 @@
         </div>
         <div class="stat">
           <div class="num text-[clamp(38px,5vw,60px)] font-black tracking-tight text-white leading-none"><span
-              id="stat-roles" class="stat-num">4</span></div>
+              id="stat-roles" class="stat-num">3</span></div>
           <div class="lbl text-xs text-white/85 max-w-[200px] mt-[6px]">roles en el sistema</div>
         </div>
         <div class="stat">
@@ -6380,15 +6372,6 @@
           <span class="lvl w-[30px] h-[30px] rounded-[9px] flex items-center justify-center font-black text-[13px]"
             style="background:#fff;color:var(--sena-d);">1</span>
           <div>
-            <div class="rn font-extrabold text-[14px] text-white">Coordinador</div>
-            <div class="rd text-xs text-white/80">Administra fichas, usuarios e instructores a nivel global del programa.</div>
-          </div>
-        </div>
-        <div class="role-item role flex items-center gap-3 rounded-[11px] px-[15px] py-[11px] border"
-          style="background:rgba(255,255,255,.12);border-color:rgba(255,255,255,.2);">
-          <span class="lvl w-[30px] h-[30px] rounded-[9px] flex items-center justify-center font-black text-[13px]"
-            style="background:#fff;color:var(--sena-d);">2</span>
-          <div>
             <div class="rn font-extrabold text-[14px] text-white">Instructor</div>
             <div class="rd text-xs text-white/80">Gestiona sus proyectos; aprueba módulos y cierre de trimestre.</div>
           </div>
@@ -6396,7 +6379,7 @@
         <div class="role-item role flex items-center gap-3 rounded-[11px] px-[15px] py-[11px] border"
           style="background:rgba(255,255,255,.12);border-color:rgba(255,255,255,.2);">
           <span class="lvl w-[30px] h-[30px] rounded-[9px] flex items-center justify-center font-black text-[13px]"
-            style="background:#fff;color:var(--sena-d);">3</span>
+            style="background:#fff;color:var(--sena-d);">2</span>
           <div>
             <div class="rn font-extrabold text-[14px] text-white">Líder técnico</div>
             <div class="rd text-xs text-white/80">Organiza el equipo, crea tareas y revisa el trabajo antes de enviarlo al instructor.</div>
@@ -6405,7 +6388,7 @@
         <div class="role-item role flex items-center gap-3 rounded-[11px] px-[15px] py-[11px] border"
           style="background:rgba(255,255,255,.12);border-color:rgba(255,255,255,.2);">
           <span class="lvl w-[30px] h-[30px] rounded-[9px] flex items-center justify-center font-black text-[13px]"
-            style="background:#fff;color:var(--sena-d);">4</span>
+            style="background:#fff;color:var(--sena-d);">3</span>
           <div>
             <div class="rn font-extrabold text-[14px] text-white">Aprendiz</div>
             <div class="rd text-xs text-white/80">Toma tareas, trabaja, sube evidencias y conecta su cuenta de GitHub.</div>
@@ -6421,7 +6404,7 @@
           [
             { id: 'stat-tests', target: 87, dur: 1100 },
             { id: 'stat-ef', target: 93, dur: 1100 },
-            { id: 'stat-roles', target: 4, dur: 600 }
+            { id: 'stat-roles', target: 3, dur: 600 }
           ].forEach(function (c) {
             var el = document.getElementById(c.id);
             if (!el) return;
