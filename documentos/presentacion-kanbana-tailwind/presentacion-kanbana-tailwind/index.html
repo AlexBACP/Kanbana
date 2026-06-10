@@ -2474,7 +2474,7 @@
           <h3 style="color:#2D6A4F;">✓ Incluye</h3>
           <ul>
             <li>Tablero Kanban con módulos y gestión de proyectos</li>
-            <li>Sistema RBAC con 3 roles diferenciados</li>
+            <li>Sistema RBAC con 4 roles diferenciados</li>
             <li>Flujo completo de aprobación de tareas</li>
             <li>Integración con GitHub (webhooks, PRs, auto-estados)</li>
             <li>Chat IA integrado con Gemini API</li>
@@ -2488,6 +2488,7 @@
         <div style="margin-top:18px;">
           <h3 style="color:#1f2a17;font-size:13px;font-weight:700;margin-bottom:8px;">👥 Roles del sistema</h3>
           <div class="roles-row">
+            <span class="role-chip">🏛️ Coordinador</span>
             <span class="role-chip">👨‍🏫 Instructor</span>
             <span class="role-chip">⚡ Líder Técnico</span>
             <span class="role-chip">🎓 Aprendiz</span>
@@ -4241,125 +4242,234 @@
       SENA · ADSO</div>
   </section>
 
-  <!-- 11 · UML / FLUJO -->
+  <!-- 11 · UML – DIAGRAMA DE CASOS DE USO -->
   <section class="slide slide-dark" id="s-uml">
     <style>
-      /* Cada nodo y flecha del UML aparece en secuencia */
-      #s-uml .uml-step {
+      /* ── Actores ── */
+      .ucd-actor {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 5px;
         opacity: 0;
+        transform: translateY(14px);
+        transition: opacity .45s ease, transform .45s ease;
       }
+      #s-uml.active #act-coord  { opacity:1; transform:none; transition-delay:.22s; }
+      #s-uml.active #act-inst   { opacity:1; transform:none; transition-delay:.38s; }
+      #s-uml.active #act-lider  { opacity:1; transform:none; transition-delay:.22s; }
+      #s-uml.active #act-ap     { opacity:1; transform:none; transition-delay:.38s; }
 
-      #s-uml.active .uml-step {
-        animation: uml-in .38s ease forwards;
+      /* ── System boundary ── */
+      #ucd-sys {
+        opacity: 0;
+        transform: scale(.97);
+        transition: opacity .35s ease .12s, transform .35s ease .12s;
       }
+      #s-uml.active #ucd-sys { opacity: 1; transform: none; }
 
-      @keyframes uml-in {
-        from {
-          opacity: 0;
-          transform: translateY(10px);
-        }
-
-        to {
-          opacity: 1;
-          transform: none;
-        }
-      }
-
-      #s-uml .role-badge {
-        font-size: 12px;
-        background: rgba(255, 255, 255, .10);
-        color: rgba(255, 255, 255, .72);
-        border: 1px solid rgba(255, 255, 255, .15);
-        border-radius: 99px;
-        padding: 2px 9px;
-        margin-top: 8px;
-        white-space: nowrap;
-      }
-
-      #s-uml .reject-note {
-        font-size: 15px;
-        color: #a9bb9a;
+      /* ── Use case ovals ── */
+      .ucd-uc {
+        border-radius: 999px;
+        padding: 6px 22px;
+        font-size: 11px;
+        font-weight: 700;
+        color: #eef3e8;
+        background: rgba(255,255,255,.07);
+        border: 1.5px solid rgba(255,255,255,.22);
         text-align: center;
-        border: 1px dashed rgba(255, 255, 255, .18);
-        border-radius: 10px;
-        padding: 9px 18px;
-        margin-top: 26px;
+        white-space: nowrap;
+        opacity: 0;
+        transform: scale(.88);
+        transition: opacity .35s ease, transform .35s ease;
+        cursor: default;
+        max-width: 330px;
+        width: 100%;
+        box-sizing: border-box;
+      }
+      .ucd-uc:hover { background: rgba(255,255,255,.12); border-color: rgba(255,255,255,.38); }
+
+      #s-uml.active #uc1 { opacity:1; transform:none; transition-delay:.48s; }
+      #s-uml.active #uc2 { opacity:1; transform:none; transition-delay:.58s; }
+      #s-uml.active #uc3 { opacity:1; transform:none; transition-delay:.68s; }
+      #s-uml.active #uc4 { opacity:1; transform:none; transition-delay:.78s; }
+      #s-uml.active #uc5 { opacity:1; transform:none; transition-delay:.88s; }
+      #s-uml.active #uc6 { opacity:1; transform:none; transition-delay:.98s; }
+      #s-uml.active #uc7 { opacity:1; transform:none; transition-delay:1.08s; }
+      #s-uml.active #uc8 { opacity:1; transform:none; transition-delay:1.18s; }
+
+      /* uc4 resaltado — conecta instructor ↔ líder (punto de transferencia) */
+      #uc4 {
+        border-color: rgba(255,255,255,.40) !important;
+        background: rgba(255,255,255,.11) !important;
       }
     </style>
-    <div class="blob blob-green" style="width:340px;height:340px;bottom:-90px;right:-40px;opacity:.16;"></div>
+
+    <div class="blob blob-green"  style="width:320px;height:320px;bottom:-80px;right:-40px;opacity:.15;"></div>
+    <div class="blob blob-purple" style="width:240px;height:240px;top:-60px;left:-30px;opacity:.12;"></div>
+
     <div class="slide-inner max-w-[1080px] w-full mx-auto relative z-[2]">
-      <span
-        class="eyebrow fade-up d1 inline-flex items-center gap-[9px] px-[14px] py-[6px] rounded-full text-[11px] font-extrabold tracking-[2.5px] uppercase bg-white/10 text-white border border-white/25 mb-5">
-        <span class="dot-i"></span> Modelado del sistema (UML)
+
+      <span class="eyebrow fade-up d1 inline-flex items-center gap-[9px] px-[14px] py-[6px] rounded-full text-[11px] font-extrabold tracking-[2.5px] uppercase bg-white/10 text-white border border-white/25 mb-4">
+        <span class="dot-i"></span> Modelado del sistema · UML
       </span>
-      <h2
-        class="section-title fade-up d2 text-[clamp(30px,4.6vw,52px)] font-extrabold tracking-tight leading-tight mb-[10px] text-[#eef3e8]">
-        Ciclo de vida de una <span class="accent text-sena-l">tarea</span>
+      <h2 class="section-title fade-up d2 text-[clamp(26px,3.8vw,46px)] font-extrabold tracking-tight leading-tight mb-2 text-[#eef3e8]">
+        Casos de uso <span class="accent text-sena-l">por rol</span>
       </h2>
-      <p class="lead fade-up d3 text-[clamp(16px,1.7vw,20px)] text-[#a9bb9a] max-w-[820px] leading-[1.65] mb-[32px]">
-        Cada tarea avanza por estados controlados; los permisos cambian según el rol.
+      <p class="lead fade-up d3 text-[14px] text-[#a9bb9a] max-w-[680px] leading-[1.6] mb-[14px]">
+        Cuatro actores con permisos diferenciados según su jerarquía en el sistema.
       </p>
 
-      <!-- Flujo principal: nodo por nodo -->
-      <div class="flow flex items-start justify-center gap-0 flex-wrap">
+      <!-- ── Diagram area ── -->
+      <div id="ucd-wrap" class="relative w-full fade-up d3" style="height:368px;">
 
-        <!-- Estado 1: Por hacer -->
-        <div class="uml-step flex flex-col items-center" style="animation-delay:.30s">
-          <div
-            class="node bg-white border-2 border-sena text-sena-d rounded-xl px-5 py-[14px] font-extrabold text-[14px] text-center shadow-[0_6px_18px_rgba(57,169,0,.12)]">
-            Por hacer<small class="block text-[12px] font-semibold text-[#5d6b50] mt-[2px]">por_hacer</small>
+        <!-- LEFT actors -->
+        <div class="absolute left-0 top-0 h-full flex flex-col justify-around items-center py-5" style="width:115px;">
+          <div class="ucd-actor" id="act-coord">
+            <div style="width:40px;height:40px;border-radius:50%;background:rgba(57,169,0,.18);border:1.5px solid rgba(57,169,0,.55);display:flex;align-items:center;justify-content:center;">
+              <svg viewBox="0 0 24 24" fill="none" width="22" height="22">
+                <circle cx="12" cy="6.5" r="2.8" stroke="#39A900" stroke-width="1.6"/>
+                <path d="M5.5 20c0-3.59 2.91-6.5 6.5-6.5s6.5 2.91 6.5 6.5" stroke="#39A900" stroke-width="1.6" stroke-linecap="round"/>
+              </svg>
+            </div>
+            <span style="font-size:10.5px;font-weight:800;color:#6bdf3a;text-align:center;">Coordinador</span>
+            <span style="font-size:9px;color:rgba(169,187,154,.55);text-align:center;line-height:1.2;">Admin global</span>
           </div>
-          <span class="role-badge">Aprendiz toma</span>
-        </div>
-
-        <!-- Flecha 1 -->
-        <div class="uml-step flex items-center" style="animation-delay:.52s; padding-bottom:30px">
-          <span class="arr text-sena text-[22px] px-3 font-black">→</span>
-        </div>
-
-        <!-- Estado 2: En desarrollo -->
-        <div class="uml-step flex flex-col items-center" style="animation-delay:.68s">
-          <div
-            class="node bg-white border-2 border-sena text-sena-d rounded-xl px-5 py-[14px] font-extrabold text-[14px] text-center shadow-[0_6px_18px_rgba(57,169,0,.12)]">
-            En desarrollo<small class="block text-[12px] font-semibold text-[#5d6b50] mt-[2px]">en_progreso</small>
+          <div class="ucd-actor" id="act-inst">
+            <div style="width:40px;height:40px;border-radius:50%;background:rgba(47,136,255,.15);border:1.5px solid rgba(47,136,255,.50);display:flex;align-items:center;justify-content:center;">
+              <svg viewBox="0 0 24 24" fill="none" width="22" height="22">
+                <circle cx="12" cy="6.5" r="2.8" stroke="#2f88ff" stroke-width="1.6"/>
+                <path d="M5.5 20c0-3.59 2.91-6.5 6.5-6.5s6.5 2.91 6.5 6.5" stroke="#2f88ff" stroke-width="1.6" stroke-linecap="round"/>
+              </svg>
+            </div>
+            <span style="font-size:10.5px;font-weight:800;color:#60a5fa;text-align:center;">Instructor</span>
+            <span style="font-size:9px;color:rgba(169,187,154,.55);text-align:center;line-height:1.2;">Gestiona proyectos</span>
           </div>
-          <span class="role-badge">Aprendiz trabaja</span>
         </div>
 
-        <!-- Flecha 2 -->
-        <div class="uml-step flex items-center" style="animation-delay:.90s; padding-bottom:30px">
-          <span class="arr text-sena text-[22px] px-3 font-black">→</span>
-        </div>
-
-        <!-- Estado 3: En revisión -->
-        <div class="uml-step flex flex-col items-center" style="animation-delay:1.06s">
-          <div
-            class="node bg-white border-2 border-sena text-sena-d rounded-xl px-5 py-[14px] font-extrabold text-[14px] text-center shadow-[0_6px_18px_rgba(57,169,0,.12)]">
-            En revisión<small class="block text-[12px] font-semibold text-[#5d6b50] mt-[2px]">revisión líder</small>
+        <!-- SYSTEM BOUNDARY -->
+        <div id="ucd-sys" class="absolute flex flex-col justify-center gap-[8px] items-center"
+             style="left:130px;right:130px;top:6px;bottom:6px;border:1.5px solid rgba(255,255,255,.18);border-radius:14px;padding:14px 24px;position:absolute;">
+          <div style="position:absolute;top:-10px;left:50%;transform:translateX(-50%);background:#0f1a08;padding:0 12px;font-size:9.5px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:rgba(255,255,255,.32);white-space:nowrap;">
+            «sistema» Kanbana
           </div>
-          <span class="role-badge">Líder técnico revisa</span>
+          <div class="ucd-uc" id="uc1">Gestionar fichas y usuarios</div>
+          <div class="ucd-uc" id="uc2">Crear y gestionar proyectos</div>
+          <div class="ucd-uc" id="uc3">Supervisar módulos y trimestres</div>
+          <div class="ucd-uc" id="uc4">Aprobar / rechazar sprints</div>
+          <div class="ucd-uc" id="uc5">Crear y asignar tareas</div>
+          <div class="ucd-uc" id="uc6">Revisar trabajo del equipo</div>
+          <div class="ucd-uc" id="uc7">Actualizar estado de tareas</div>
+          <div class="ucd-uc" id="uc8">Subir evidencias · GitHub · IA</div>
         </div>
 
-        <!-- Flecha 3 -->
-        <div class="uml-step flex items-center" style="animation-delay:1.28s; padding-bottom:30px">
-          <span class="arr text-sena text-[22px] px-3 font-black">→</span>
-        </div>
-
-        <!-- Estado 4: Hecho -->
-        <div class="uml-step flex flex-col items-center" style="animation-delay:1.44s">
-          <div
-            class="node bg-white border-2 border-sena text-sena-d rounded-xl px-5 py-[14px] font-extrabold text-[14px] text-center shadow-[0_6px_18px_rgba(57,169,0,.12)]">
-            Hecho<small class="block text-[12px] font-semibold text-[#5d6b50] mt-[2px]">aprobado instructor</small>
+        <!-- RIGHT actors -->
+        <div class="absolute right-0 top-0 h-full flex flex-col justify-around items-center py-5" style="width:115px;">
+          <div class="ucd-actor" id="act-lider">
+            <div style="width:40px;height:40px;border-radius:50%;background:rgba(134,59,255,.15);border:1.5px solid rgba(134,59,255,.50);display:flex;align-items:center;justify-content:center;">
+              <svg viewBox="0 0 24 24" fill="none" width="22" height="22">
+                <circle cx="12" cy="6.5" r="2.8" stroke="#863bff" stroke-width="1.6"/>
+                <path d="M5.5 20c0-3.59 2.91-6.5 6.5-6.5s6.5 2.91 6.5 6.5" stroke="#863bff" stroke-width="1.6" stroke-linecap="round"/>
+              </svg>
+            </div>
+            <span style="font-size:10.5px;font-weight:800;color:#a78bfa;text-align:center;">Líder Técnico</span>
+            <span style="font-size:9px;color:rgba(169,187,154,.55);text-align:center;line-height:1.2;">Organiza el equipo</span>
           </div>
-          <span class="role-badge">Instructor aprueba</span>
+          <div class="ucd-actor" id="act-ap">
+            <div style="width:40px;height:40px;border-radius:50%;background:rgba(255,176,31,.12);border:1.5px solid rgba(255,176,31,.45);display:flex;align-items:center;justify-content:center;">
+              <svg viewBox="0 0 24 24" fill="none" width="22" height="22">
+                <circle cx="12" cy="6.5" r="2.8" stroke="#ffb01f" stroke-width="1.6"/>
+                <path d="M5.5 20c0-3.59 2.91-6.5 6.5-6.5s6.5 2.91 6.5 6.5" stroke="#ffb01f" stroke-width="1.6" stroke-linecap="round"/>
+              </svg>
+            </div>
+            <span style="font-size:10.5px;font-weight:800;color:#fcd34d;text-align:center;">Aprendiz</span>
+            <span style="font-size:9px;color:rgba(169,187,154,.55);text-align:center;line-height:1.2;">Ejecuta tareas</span>
+          </div>
         </div>
-      </div>
 
-      <!-- Nota de rechazo -->
-      <div class="uml-step reject-note max-w-[680px] mx-auto" style="animation-delay:1.70s">
-        ↩ Si el líder o el instructor rechazan, la tarea regresa al estado anterior con un comentario de revisión.
-      </div>
-    </div>
+        <!-- SVG overlay: líneas animadas actor → caso de uso -->
+        <svg id="ucd-svg" style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible;"></svg>
+
+      </div><!-- /ucd-wrap -->
+    </div><!-- /slide-inner -->
+
+    <script>
+    (function () {
+      /* [actorId, ucId, color, isLeftActor] */
+      var CONNS = [
+        ['act-coord', 'uc1', 'rgba(57,169,0,.75)',   true],
+        ['act-coord', 'uc2', 'rgba(57,169,0,.50)',   true],
+        ['act-inst',  'uc2', 'rgba(47,136,255,.65)', true],
+        ['act-inst',  'uc3', 'rgba(47,136,255,.65)', true],
+        ['act-inst',  'uc4', 'rgba(47,136,255,.50)', true],
+        ['act-lider', 'uc4', 'rgba(134,59,255,.65)', false],
+        ['act-lider', 'uc5', 'rgba(134,59,255,.78)', false],
+        ['act-lider', 'uc6', 'rgba(134,59,255,.58)', false],
+        ['act-ap',    'uc7', 'rgba(255,176,31,.72)',  false],
+        ['act-ap',    'uc8', 'rgba(255,176,31,.85)',  false],
+      ];
+
+      function buildLines() {
+        var svg  = document.getElementById('ucd-svg');
+        var wrap = document.getElementById('ucd-wrap');
+        if (!svg || !wrap) return;
+        svg.innerHTML = '';
+        var wr = wrap.getBoundingClientRect();
+
+        CONNS.forEach(function (c, i) {
+          var actor = document.getElementById(c[0]);
+          var uc    = document.getElementById(c[1]);
+          if (!actor || !uc) return;
+          var ar = actor.getBoundingClientRect();
+          var ur = uc.getBoundingClientRect();
+          var isLeft = c[3];
+
+          /* Actor edge → nearest UC edge */
+          var x1 = isLeft ? ar.right  - wr.left : ar.left  - wr.left;
+          var y1 = ar.top  + ar.height / 2 - wr.top;
+          var x2 = isLeft ? ur.left   - wr.left : ur.right  - wr.left;
+          var y2 = ur.top  + ur.height / 2 - wr.top;
+
+          /* Cubic S-curve: control points bend horizontally */
+          var mx = (x1 + x2) / 2;
+          var d  = 'M' + x1.toFixed(1) + ',' + y1.toFixed(1)
+                 + ' C' + mx.toFixed(1) + ',' + y1.toFixed(1)
+                 + ' '  + mx.toFixed(1) + ',' + y2.toFixed(1)
+                 + ' '  + x2.toFixed(1) + ',' + y2.toFixed(1);
+
+          var path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+          path.setAttribute('d', d);
+          path.setAttribute('fill', 'none');
+          path.setAttribute('stroke', c[2]);
+          path.setAttribute('stroke-width', '1.4');
+          path.setAttribute('stroke-dasharray', '700');
+          path.setAttribute('stroke-dashoffset', '700');
+          path.style.transition = 'stroke-dashoffset .55s ease ' + (.50 + i * .07) + 's';
+          svg.appendChild(path);
+        });
+
+        /* Force reflow → trigger draw animation */
+        svg.getBoundingClientRect();
+        svg.querySelectorAll('path').forEach(function (p) {
+          p.style.strokeDashoffset = '0';
+        });
+      }
+
+      document.addEventListener('slideChange', function (e) {
+        if (e && e.detail && e.detail.id === 's-uml') {
+          var svg = document.getElementById('ucd-svg');
+          if (svg) svg.innerHTML = '';
+          setTimeout(buildLines, 130);
+        }
+      });
+
+      /* Si el slide ya está activo al cargar (sessionStorage) */
+      var slide = document.getElementById('s-uml');
+      if (slide && slide.classList.contains('active')) {
+        setTimeout(buildLines, 300);
+      }
+    })();
+    </script>
   </section>
 
 
@@ -6244,6 +6354,12 @@
         transform: none;
         transition-delay: .80s;
       }
+
+      #s-alcance.active .role-item:nth-child(4) {
+        opacity: 1;
+        transform: none;
+        transition-delay: .95s;
+      }
     </style>
     <div class="slide-inner max-w-[1080px] w-full mx-auto relative z-[2]">
       <span
@@ -6268,8 +6384,8 @@
         </div>
         <div class="stat">
           <div class="num text-[clamp(38px,5vw,60px)] font-black tracking-tight text-white leading-none"><span
-              id="stat-roles" class="stat-num">3</span></div>
-          <div class="lbl text-xs text-white/85 max-w-[200px] mt-[6px]">roles en la ficha</div>
+              id="stat-roles" class="stat-num">4</span></div>
+          <div class="lbl text-xs text-white/85 max-w-[200px] mt-[6px]">roles en el sistema</div>
         </div>
         <div class="stat">
           <div class="num text-[clamp(38px,5vw,60px)] font-black tracking-tight text-white leading-none">v1.3.0</div>
@@ -6282,9 +6398,8 @@
           <span class="lvl w-[30px] h-[30px] rounded-[9px] flex items-center justify-center font-black text-[13px]"
             style="background:#fff;color:var(--sena-d);">1</span>
           <div>
-            <div class="rn font-extrabold text-[14px] text-white">Instructor</div>
-            <div class="rd text-xs text-white/80">Gestiona sus fichas y proyectos; aprueba módulos y cierre de
-              trimestre.</div>
+            <div class="rn font-extrabold text-[14px] text-white">Coordinador</div>
+            <div class="rd text-xs text-white/80">Administra fichas, usuarios e instructores a nivel global del programa.</div>
           </div>
         </div>
         <div class="role-item role flex items-center gap-3 rounded-[11px] px-[15px] py-[11px] border"
@@ -6292,9 +6407,8 @@
           <span class="lvl w-[30px] h-[30px] rounded-[9px] flex items-center justify-center font-black text-[13px]"
             style="background:#fff;color:var(--sena-d);">2</span>
           <div>
-            <div class="rn font-extrabold text-[14px] text-white">Líder técnico</div>
-            <div class="rd text-xs text-white/80">Organiza el equipo, crea tareas y revisa el trabajo antes de enviarlo
-              al instructor.</div>
+            <div class="rn font-extrabold text-[14px] text-white">Instructor</div>
+            <div class="rd text-xs text-white/80">Gestiona sus proyectos; aprueba módulos y cierre de trimestre.</div>
           </div>
         </div>
         <div class="role-item role flex items-center gap-3 rounded-[11px] px-[15px] py-[11px] border"
@@ -6302,9 +6416,17 @@
           <span class="lvl w-[30px] h-[30px] rounded-[9px] flex items-center justify-center font-black text-[13px]"
             style="background:#fff;color:var(--sena-d);">3</span>
           <div>
+            <div class="rn font-extrabold text-[14px] text-white">Líder técnico</div>
+            <div class="rd text-xs text-white/80">Organiza el equipo, crea tareas y revisa el trabajo antes de enviarlo al instructor.</div>
+          </div>
+        </div>
+        <div class="role-item role flex items-center gap-3 rounded-[11px] px-[15px] py-[11px] border"
+          style="background:rgba(255,255,255,.12);border-color:rgba(255,255,255,.2);">
+          <span class="lvl w-[30px] h-[30px] rounded-[9px] flex items-center justify-center font-black text-[13px]"
+            style="background:#fff;color:var(--sena-d);">4</span>
+          <div>
             <div class="rn font-extrabold text-[14px] text-white">Aprendiz</div>
-            <div class="rd text-xs text-white/80">Toma tareas, trabaja, sube evidencias y conecta su cuenta de GitHub.
-            </div>
+            <div class="rd text-xs text-white/80">Toma tareas, trabaja, sube evidencias y conecta su cuenta de GitHub.</div>
           </div>
         </div>
       </div>
@@ -6317,7 +6439,7 @@
           [
             { id: 'stat-tests', target: 87, dur: 1100 },
             { id: 'stat-ef', target: 93, dur: 1100 },
-            { id: 'stat-roles', target: 3, dur: 600 }
+            { id: 'stat-roles', target: 4, dur: 600 }
           ].forEach(function (c) {
             var el = document.getElementById(c.id);
             if (!el) return;
