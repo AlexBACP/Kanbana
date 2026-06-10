@@ -121,7 +121,26 @@ export class TicketsController {
     @Query('proyecto_id') proyecto_id?: string,
     @Query('sprint_id')   sprint_id?:   string,
     @Query('backlog')     backlog?:     string,
+    @Request() req?: any,
   ) {
+    const rol     = req?.user?.rol;
+    const esLider = rol === 'aprendiz' && req?.user?.es_lider_tecnico === true;
+
+    // Sin proyecto_id: aplicar auto-scope según el rol.
+    if (!proyecto_id) {
+      if (rol === 'aprendiz' && !esLider) {
+        // Aprendiz normal → solo sus propias tareas asignadas (nunca el sistema completo).
+        return this.ticketsService.findAll(
+          undefined, undefined, false, req.user.id,
+        );
+      }
+      // Líder técnico sin proyecto_id también podría caer aquí; se le permite porque
+      // su dashboard sí pasa proyecto_id. Si no lo hace, caerá al path sin filtro.
+      if (rol !== 'coordinador' && rol !== 'instructor' && !esLider) {
+        throw new ForbiddenException('Se requiere proyecto_id para listar tickets.');
+      }
+    }
+
     return this.ticketsService.findAll(
       proyecto_id ? +proyecto_id : undefined,
       sprint_id   ? +sprint_id   : undefined,
@@ -252,15 +271,27 @@ export class TicketsController {
   }
 
   // POST /tickets/:id/lider-approve — líder aprueba → pasa a testing
+  // Solo líder técnico, instructor o coordinador.
   @Post(':id/lider-approve')
-  liderApprove(@Param('id') id: string) {
+  liderApprove(@Param('id') id: string, @Request() req: any) {
+    const usuario = req.user;
+    const esLider = usuario?.rol === 'aprendiz' && usuario?.es_lider_tecnico === true;
+    if (!esLider && usuario?.rol !== 'instructor' && usuario?.rol !== 'coordinador') {
+      throw new ForbiddenException('Solo el líder técnico, instructor o coordinador puede aprobar tareas.');
+    }
     return this.ticketsService.liderApprove(+id);
   }
 
   // POST /tickets/:id/lider-reject — líder rechaza → devuelve en rojo (in_progress + bloqueado)
   // Body opcional: { motivo: string }
+  // Solo líder técnico, instructor o coordinador.
   @Post(':id/lider-reject')
-  liderReject(@Param('id') id: string, @Body('motivo') motivo: string | undefined) {
+  liderReject(@Param('id') id: string, @Body('motivo') motivo: string | undefined, @Request() req: any) {
+    const usuario = req.user;
+    const esLider = usuario?.rol === 'aprendiz' && usuario?.es_lider_tecnico === true;
+    if (!esLider && usuario?.rol !== 'instructor' && usuario?.rol !== 'coordinador') {
+      throw new ForbiddenException('Solo el líder técnico, instructor o coordinador puede rechazar tareas.');
+    }
     return this.ticketsService.liderReject(+id, motivo);
   }
 

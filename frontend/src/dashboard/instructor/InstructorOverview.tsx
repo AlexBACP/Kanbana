@@ -202,7 +202,7 @@ export const InstructorOverview = ({ onNavigate }: Props) => {
           <div className="hidden sm:flex flex-col items-center gap-3">
             <div className="flex flex-col items-center gap-1 bg-white/10 backdrop-blur-md px-5 py-3 rounded-md border border-white/20 min-w-[120px]">
               <span className="text-3xl font-black">{isLoading ? '—' : `${avancePct}%`}</span>
-              <span className="text-xs font-semibold uppercase tracking-wider opacity-80">Completadas</span>
+              <span className="text-xs font-semibold uppercase tracking-wider opacity-80">Avance</span>
             </div>
             {!isLoading && en_progreso > 0 && (
               <div className="flex items-center gap-1.5 bg-teal-500/20 border border-teal-400/30 rounded-md px-3 py-1.5">
@@ -258,7 +258,7 @@ export const InstructorOverview = ({ onNavigate }: Props) => {
             />
           </div>
           <div className="flex items-center gap-3 mt-2.5 text-xs text-zinc-500 flex-wrap">
-            <span className="text-blue-400 font-medium">{completadas} completadas</span>
+            <span className="text-cyan-400 font-medium">{completadas} completadas</span>
             <span>·</span>
             <span className="text-blue-400 font-medium">{en_progreso} en progreso</span>
             <span>·</span>

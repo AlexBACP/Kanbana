@@ -1,6 +1,6 @@
 import {
   Controller, Get, Post, Patch, Delete,
-  Body, Param, UseGuards, ParseIntPipe, Request,
+  Body, Param, UseGuards, ParseIntPipe, Request, ForbiddenException,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { RecursosService } from './recursos.service';
@@ -33,19 +33,35 @@ export class RecursosController {
     @Body() dto: any,
     @Request() req: any,
   ) {
-    return this.svc.create(proyectoId, dto, req.user?.id);
+    const usuario = req.user;
+    const esLider = usuario?.rol === 'aprendiz' && usuario?.es_lider_tecnico === true;
+    if (usuario?.rol !== 'coordinador' && usuario?.rol !== 'instructor' && !esLider) {
+      throw new ForbiddenException('Solo coordinadores, instructores o el líder técnico pueden añadir recursos.');
+    }
+    return this.svc.create(proyectoId, dto, usuario?.id);
   }
 
   @Patch(':id')
   update(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: any,
+    @Request() req: any,
   ) {
+    const usuario = req.user;
+    const esLider = usuario?.rol === 'aprendiz' && usuario?.es_lider_tecnico === true;
+    if (usuario?.rol !== 'coordinador' && usuario?.rol !== 'instructor' && !esLider) {
+      throw new ForbiddenException('Solo coordinadores, instructores o el líder técnico pueden editar recursos.');
+    }
     return this.svc.update(id, dto);
   }
 
   @Delete(':id')
-  remove(@Param('id', ParseIntPipe) id: number) {
+  remove(@Param('id', ParseIntPipe) id: number, @Request() req: any) {
+    const usuario = req.user;
+    const esLider = usuario?.rol === 'aprendiz' && usuario?.es_lider_tecnico === true;
+    if (usuario?.rol !== 'coordinador' && usuario?.rol !== 'instructor' && !esLider) {
+      throw new ForbiddenException('Solo coordinadores, instructores o el líder técnico pueden eliminar recursos.');
+    }
     return this.svc.remove(id);
   }
 
@@ -53,7 +69,12 @@ export class RecursosController {
   saveToken(
     @Param('id', ParseIntPipe) id: number,
     @Body('token') token: string,
+    @Request() req: any,
   ) {
+    const rol = req.user?.rol;
+    if (rol !== 'coordinador' && rol !== 'instructor') {
+      throw new ForbiddenException('Solo coordinadores e instructores pueden guardar tokens de GitHub.');
+    }
     return this.svc.saveToken(id, token);
   }
 

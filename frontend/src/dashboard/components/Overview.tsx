@@ -324,7 +324,7 @@ export const Overview = () => {
           <div className="mt-4 pt-4 border-t border-zinc-800 flex items-center gap-2">
             <BarChart3 size={12} className="text-zinc-600" />
             <span className="text-xs text-zinc-600">
-              {stats.tickets_completados} completadas de {(stats.tickets_completados ?? 0) + (stats.tickets_en_progreso ?? 0) + (stats.tickets_bloqueados ?? 0)} tickets registrados
+              {stats.tickets_completados} completadas de {stats.tickets_total ?? 0} tickets en total
             </span>
           </div>
         </div>

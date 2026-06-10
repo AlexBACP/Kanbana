@@ -91,6 +91,10 @@ export const AprendizOverview = () => {
   });
 
   // ── Mis tickets asignados ─────────────────────────────────────────────────
+  // El backend auto-scopea el resultado cuando el aprendiz llama sin proyecto_id:
+  // devuelve solo las tareas donde asignado_a_id = usuario.id.
+  // El select es un filtro de seguridad extra en caso de que la respuesta incluya
+  // tareas de otros aprendices (no debería ocurrir con el backend actualizado).
   const { data: tickets = [], isLoading } = useQuery<Ticket[]>({
     queryKey: ['mis-tareas'],
     queryFn:  () => ticketService.getAll(),
@@ -208,7 +212,7 @@ export const AprendizOverview = () => {
           <div className="hidden sm:flex flex-col items-center gap-3">
             <div className="flex flex-col items-center gap-1 bg-white/10 backdrop-blur-md px-5 py-3 rounded-md border border-white/20 min-w-[120px]">
               <span className="text-3xl font-black">{isLoading ? '—' : `${avance}%`}</span>
-              <span className="text-xs font-semibold uppercase tracking-wider opacity-80">Mi avance</span>
+              <span className="text-xs font-semibold uppercase tracking-wider opacity-80">Completadas</span>
             </div>
             {!isLoading && counts.in_progress > 0 && (
               <div className="flex items-center gap-1.5 bg-indigo-500/20 border border-indigo-400/30 rounded-md px-3 py-1.5">
@@ -403,7 +407,7 @@ export const AprendizOverview = () => {
       {!isLoading && total > 0 && (
         <div className="mx-6 bg-zinc-900 border border-zinc-800 rounded-md p-5">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-sm font-bold text-zinc-200">Progreso general</span>
+            <span className="text-sm font-bold text-zinc-200">Mis tareas asignadas</span>
             <span className="text-sm font-black text-blue-400">{avance}%</span>
           </div>
           <div className="h-2 bg-zinc-800 rounded-full overflow-hidden">

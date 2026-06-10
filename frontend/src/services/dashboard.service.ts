@@ -12,6 +12,7 @@ export interface TicketPorUsuario {
 }
 
 export interface DashboardStats {
+  tickets_total: number;
   tickets_abiertos: number;
   tickets_en_progreso: number;
   tickets_completados: number;

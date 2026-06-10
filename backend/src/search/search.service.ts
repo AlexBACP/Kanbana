@@ -151,7 +151,7 @@ export class SearchService {
           id:       t.id,
           label:    t.titulo,
           subtitle: tAny.proyecto?.nombre,
-          path:     `/projects/${tAny.proyecto_id}/kanban`,
+          path:     `/tickets/${t.id}`,
           meta:     { estado: t.estado },
         });
       }

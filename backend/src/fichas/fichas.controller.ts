@@ -191,12 +191,18 @@ export class FichasController {
   }
 
   @Patch(':id')
-  update(@Param('id') id: string, @Body() updateFichaDto: any) {
+  update(@Param('id') id: string, @Body() updateFichaDto: any, @Request() req: any) {
+    if (req.user?.rol !== 'coordinador' && req.user?.rol !== 'instructor') {
+      throw new ForbiddenException('Solo coordinadores e instructores pueden editar fichas.');
+    }
     return this.fichasService.update(+id, updateFichaDto);
   }
 
   @Delete(':id')
-  remove(@Param('id') id: string) {
+  remove(@Param('id') id: string, @Request() req: any) {
+    if (req.user?.rol !== 'coordinador' && req.user?.rol !== 'instructor') {
+      throw new ForbiddenException('Solo coordinadores e instructores pueden eliminar fichas.');
+    }
     return this.fichasService.remove(+id);
   }
 
@@ -210,7 +216,10 @@ export class FichasController {
 
   @Post(':id/members')
   @ApiOperation({ summary: 'Añadir uno o varios aprendices a la ficha en una sola operación' })
-  addMembers(@Param('id') id: string, @Body() body: { userIds: number[] }) {
+  addMembers(@Param('id') id: string, @Body() body: { userIds: number[] }, @Request() req: any) {
+    if (req.user?.rol !== 'coordinador' && req.user?.rol !== 'instructor') {
+      throw new ForbiddenException('Solo coordinadores e instructores pueden añadir aprendices.');
+    }
     return this.fichasService.addMembers(+id, body.userIds);
   }
 
@@ -249,25 +258,37 @@ export class FichasController {
 
   @Delete(':id/members')
   @ApiOperation({ summary: 'Desvincular múltiples aprendices de la ficha en masa' })
-  removeMembers(@Param('id') id: string, @Body() body: { userIds: number[] }) {
+  removeMembers(@Param('id') id: string, @Body() body: { userIds: number[] }, @Request() req: any) {
+    if (req.user?.rol !== 'coordinador' && req.user?.rol !== 'instructor') {
+      throw new ForbiddenException('Solo coordinadores e instructores pueden desvincular aprendices.');
+    }
     return this.fichasService.removeMembers(+id, body.userIds);
   }
 
   @Delete(':id/members/:userId')
   @ApiOperation({ summary: 'Desvincular aprendiz de la ficha' })
-  removeMember(@Param('id') id: string, @Param('userId') userId: string) {
+  removeMember(@Param('id') id: string, @Param('userId') userId: string, @Request() req: any) {
+    if (req.user?.rol !== 'coordinador' && req.user?.rol !== 'instructor') {
+      throw new ForbiddenException('Solo coordinadores e instructores pueden desvincular aprendices.');
+    }
     return this.fichasService.removeMember(+id, +userId);
   }
 
   @Patch(':id/members/:userId/promote')
   @ApiOperation({ summary: 'Promover aprendiz a líder técnico dentro de esta ficha' })
-  promoteToLider(@Param('id') id: string, @Param('userId') userId: string) {
+  promoteToLider(@Param('id') id: string, @Param('userId') userId: string, @Request() req: any) {
+    if (req.user?.rol !== 'coordinador' && req.user?.rol !== 'instructor') {
+      throw new ForbiddenException('Solo coordinadores e instructores pueden promover a líder técnico.');
+    }
     return this.fichasService.promoteToLider(+id, +userId);
   }
 
   @Patch(':id/members/:userId/demote')
   @ApiOperation({ summary: 'Degradar líder técnico a aprendiz dentro de esta ficha' })
-  demoteToAprendiz(@Param('id') id: string, @Param('userId') userId: string) {
+  demoteToAprendiz(@Param('id') id: string, @Param('userId') userId: string, @Request() req: any) {
+    if (req.user?.rol !== 'coordinador' && req.user?.rol !== 'instructor') {
+      throw new ForbiddenException('Solo coordinadores e instructores pueden degradar un líder técnico.');
+    }
     return this.fichasService.demoteToAprendiz(+id, +userId);
   }
 
@@ -302,7 +323,11 @@ export class FichasController {
   generateTrimestres(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: { num: number; trimestres?: any[] },
+    @Request() req: any,
   ) {
+    if (req.user?.rol !== 'coordinador' && req.user?.rol !== 'instructor') {
+      throw new ForbiddenException('Solo coordinadores e instructores pueden generar trimestres.');
+    }
     return this.fichasService.generateTrimestres(id, dto);
   }
 
@@ -310,7 +335,11 @@ export class FichasController {
   updateTrimestre(
     @Param('tid', ParseIntPipe) tid: number,
     @Body() dto: any,
+    @Request() req: any,
   ) {
+    if (req.user?.rol !== 'coordinador' && req.user?.rol !== 'instructor') {
+      throw new ForbiddenException('Solo coordinadores e instructores pueden editar trimestres.');
+    }
     return this.fichasService.updateTrimestre(tid, dto);
   }
 
@@ -319,7 +348,10 @@ export class FichasController {
   @Post('upload-evidencia')
   @ApiOperation({ summary: 'Sube un archivo y devuelve su URL pública (para evidencias de cierre)' })
   @UseInterceptors(FileInterceptor('file', { storage: evidenciasStorage }))
-  uploadEvidencia(@UploadedFile() file: Express.Multer.File) {
+  uploadEvidencia(@UploadedFile() file: Express.Multer.File, @Request() req: any) {
+    if (req.user?.rol !== 'coordinador' && req.user?.rol !== 'instructor') {
+      throw new ForbiddenException('Solo coordinadores e instructores pueden subir evidencias.');
+    }
     if (!file) throw new BadRequestException('No se recibió archivo.');
     return {
       url:    `/uploads/evidencias/${file.filename}`,

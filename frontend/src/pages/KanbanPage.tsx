@@ -295,8 +295,8 @@ export const KanbanPage = () => {
               </button>
             )}
 
-            {/* Finalizar módulo */}
-            {activeSprint && canManage && (
+            {/* Finalizar módulo — solo instructor/coordinador */}
+            {activeSprint && esInstructor && (
               <button
                 onClick={() => {
                   if (confirm('¿Finalizar el módulo actual? Se verificará que todas las tareas estén completadas.')) {

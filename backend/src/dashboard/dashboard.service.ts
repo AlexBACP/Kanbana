@@ -17,6 +17,7 @@ export interface TicketPorUsuario {
 }
 
 export interface DashboardStats {
+  tickets_total: number;
   tickets_abiertos: number;
   tickets_en_progreso: number;
   tickets_completados: number;
@@ -245,12 +246,13 @@ export class DashboardService {
     });
 
     return {
+      tickets_total:         total_tickets,
       tickets_abiertos,
       tickets_en_progreso,
       tickets_completados,
       tickets_bloqueados,
       proyectos_activos,
-      proyectos_total: proyectos.length,
+      proyectos_total:       proyectos.length,
       avance_porcentual,
       tickets_por_usuario,
       tickets_por_prioridad,
@@ -261,6 +263,7 @@ export class DashboardService {
   // ── Helper: stats vacías cuando el usuario no tiene proyectos aún ────────
   private emptyStats(): DashboardStats {
     return {
+      tickets_total:        0,
       tickets_abiertos:     0,
       tickets_en_progreso:  0,
       tickets_completados:  0,

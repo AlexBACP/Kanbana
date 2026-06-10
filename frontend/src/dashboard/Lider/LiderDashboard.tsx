@@ -265,6 +265,11 @@ export const LiderDashboard = () => {
       )}
 
       {/* ── Tarjetas de estado ──────────────────────────────────────────────── */}
+      <div className="mx-6 mb-2 flex items-center gap-2">
+        <p className="text-[10px] font-black text-zinc-600 uppercase tracking-widest">
+          {activeSprint ? `Módulo activo: ${activeSprint.nombre}` : 'Todas las tareas del proyecto'}
+        </p>
+      </div>
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mx-6">
         {STAT_CONFIG.map(({ key, label, icon: Icon, color, bg }) => (
           <div key={key} className="bg-zinc-900 border border-zinc-800 rounded-md p-4 flex flex-col gap-2">

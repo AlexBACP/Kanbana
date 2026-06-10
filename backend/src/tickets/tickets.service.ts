@@ -265,14 +265,16 @@ export class TicketsService {
   }
 
   async findAll(
-    proyecto_id?: number,
-    sprint_id?:   number,
-    backlog?:     boolean,
+    proyecto_id?:    number,
+    sprint_id?:      number,
+    backlog?:        boolean,
+    asignado_a_id?:  number,   // Auto-scope: filtra solo los tickets del usuario (aprendiz)
   ): Promise<Ticket[]> {
     const where: any = {};
-    if (proyecto_id) where.proyecto_id = proyecto_id;
-    if (sprint_id)   where.sprint_id   = sprint_id;
-    if (backlog)     where.sprint_id   = null;
+    if (proyecto_id)   where.proyecto_id   = proyecto_id;
+    if (sprint_id)     where.sprint_id     = sprint_id;
+    if (backlog)       where.sprint_id     = null;
+    if (asignado_a_id) where.asignado_a_id = asignado_a_id;
 
     return this.ticketsRepository.find({
       where,

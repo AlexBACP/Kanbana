@@ -45,7 +45,11 @@ export class ProjectsController {
   // Solo accesible para coordinadores o instructores.
   // IMPORTANTE: Debe estar ANTES de las rutas con :id para no ser capturado como parámetro.
   @Post('trimestres/bulk-generate')
-  bulkGenerateTrimestres(@Body() dto: { projectIds: number[]; num: number; trimestres?: any[] }) {
+  bulkGenerateTrimestres(@Body() dto: { projectIds: number[]; num: number; trimestres?: any[] }, @Request() req: any) {
+    const rol = req.user?.rol;
+    if (rol !== 'coordinador' && rol !== 'instructor') {
+      throw new ForbiddenException('Solo coordinadores e instructores pueden generar trimestres en masa.');
+    }
     return this.projectsService.bulkGenerateTrimestres(dto);
   }
 
@@ -90,7 +94,11 @@ export class ProjectsController {
   }
 
   @Post()
-  create(@Body() dto: any) {
+  create(@Body() dto: any, @Request() req: any) {
+    const rol = req.user?.rol;
+    if (rol !== 'coordinador' && rol !== 'instructor') {
+      throw new ForbiddenException('Solo coordinadores e instructores pueden crear proyectos.');
+    }
     return this.projectsService.create(dto);
   }
 
@@ -134,12 +142,20 @@ export class ProjectsController {
   }
 
   @Patch(':id')
-  update(@Param('id', ParseIntPipe) id: number, @Body() dto: any) {
+  update(@Param('id', ParseIntPipe) id: number, @Body() dto: any, @Request() req: any) {
+    const rol = req.user?.rol;
+    if (rol !== 'coordinador' && rol !== 'instructor') {
+      throw new ForbiddenException('Solo coordinadores e instructores pueden editar proyectos.');
+    }
     return this.projectsService.update(id, dto);
   }
 
   @Patch(':id/status')
-  updateStatus(@Param('id', ParseIntPipe) id: number, @Body('estado') estado: string) {
+  updateStatus(@Param('id', ParseIntPipe) id: number, @Body('estado') estado: string, @Request() req: any) {
+    const rol = req.user?.rol;
+    if (rol !== 'coordinador' && rol !== 'instructor') {
+      throw new ForbiddenException('Solo coordinadores e instructores pueden cambiar el estado de un proyecto.');
+    }
     return this.projectsService.updateStatus(id, estado);
   }
 
@@ -149,6 +165,10 @@ export class ProjectsController {
     @Body('liderId') liderId: number | null,
     @Request() req: any,
   ) {
+    const rol = req.user?.rol;
+    if (rol !== 'coordinador' && rol !== 'instructor') {
+      throw new ForbiddenException('Solo coordinadores e instructores pueden asignar líder técnico.');
+    }
     return this.projectsService.assignLider(id, liderId ?? null, req.user.id);
   }
 
@@ -177,7 +197,11 @@ export class ProjectsController {
   }
 
   @Post(':id/members')
-  addMember(@Param('id', ParseIntPipe) id: number, @Body('userId') userId: number) {
+  addMember(@Param('id', ParseIntPipe) id: number, @Body('userId') userId: number, @Request() req: any) {
+    const rol = req.user?.rol;
+    if (rol !== 'coordinador' && rol !== 'instructor') {
+      throw new ForbiddenException('Solo coordinadores e instructores pueden añadir miembros a un proyecto.');
+    }
     return this.projectsService.addMember(id, userId);
   }
 
@@ -185,7 +209,12 @@ export class ProjectsController {
   removeMember(
     @Param('id', ParseIntPipe) id: number,
     @Param('userId', ParseIntPipe) userId: number,
+    @Request() req: any,
   ) {
+    const rol = req.user?.rol;
+    if (rol !== 'coordinador' && rol !== 'instructor') {
+      throw new ForbiddenException('Solo coordinadores e instructores pueden eliminar miembros de un proyecto.');
+    }
     return this.projectsService.removeMember(id, userId);
   }
 
@@ -200,7 +229,11 @@ export class ProjectsController {
   }
 
   @Post(':id/sprints')
-  createSprint(@Param('id', ParseIntPipe) id: number, @Body() dto: any) {
+  createSprint(@Param('id', ParseIntPipe) id: number, @Body() dto: any, @Request() req: any) {
+    const rol = req.user?.rol;
+    if (rol !== 'coordinador' && rol !== 'instructor') {
+      throw new ForbiddenException('Solo coordinadores e instructores pueden crear módulos directamente.');
+    }
     return this.projectsService.createSprint(id, dto);
   }
 
@@ -208,17 +241,33 @@ export class ProjectsController {
   updateSprint(
     @Param('sprintId', ParseIntPipe) sprintId: number,
     @Body() dto: any,
+    @Request() req: any,
   ) {
+    const rol = req.user?.rol;
+    if (rol !== 'coordinador' && rol !== 'instructor') {
+      throw new ForbiddenException('Solo coordinadores e instructores pueden editar módulos.');
+    }
     return this.projectsService.updateSprint(sprintId, dto);
   }
 
   @Patch('sprints/:sprintId/start')
-  startSprint(@Param('sprintId', ParseIntPipe) sprintId: number) {
+  startSprint(@Param('sprintId', ParseIntPipe) sprintId: number, @Request() req: any) {
+    const rol = req.user?.rol;
+    if (rol !== 'coordinador' && rol !== 'instructor') {
+      throw new ForbiddenException('Solo coordinadores e instructores pueden activar módulos.');
+    }
     return this.projectsService.startSprint(sprintId);
   }
 
   @Patch('sprints/:sprintId/close')
-  closeSprint(@Param('sprintId', ParseIntPipe) sprintId: number) {
+  closeSprint(
+    @Param('sprintId', ParseIntPipe) sprintId: number,
+    @Request() req: any,
+  ) {
+    const rol = req.user?.rol;
+    if (rol !== 'coordinador' && rol !== 'instructor') {
+      throw new ForbiddenException('Solo el instructor o coordinador puede finalizar un módulo.');
+    }
     return this.projectsService.closeSprint(sprintId);
   }
 
@@ -265,7 +314,12 @@ export class ProjectsController {
   updateTrimestre(
     @Param('tid', ParseIntPipe) tid: number,
     @Body() dto: any,
+    @Request() req: any,
   ) {
+    const rol = req.user?.rol;
+    if (rol !== 'coordinador' && rol !== 'instructor') {
+      throw new ForbiddenException('Solo coordinadores e instructores pueden editar trimestres.');
+    }
     return this.projectsService.updateTrimestre(tid, dto);
   }
 
@@ -274,7 +328,11 @@ export class ProjectsController {
   // Solo es posible si todos sus sprints están finalizados.
   // IMPORTANTE: va DESPUÉS de trimestres/:tid para que NestJS lo resuelva correctamente.
   @Patch('trimestres/:tid/close')
-  closeTrimestre(@Param('tid', ParseIntPipe) tid: number) {
+  closeTrimestre(@Param('tid', ParseIntPipe) tid: number, @Request() req: any) {
+    const rol = req.user?.rol;
+    if (rol !== 'coordinador' && rol !== 'instructor') {
+      throw new ForbiddenException('Solo coordinadores e instructores pueden cerrar trimestres.');
+    }
     return this.projectsService.closeTrimestre(tid);
   }
 
@@ -285,7 +343,12 @@ export class ProjectsController {
   assignSprintToTrimestre(
     @Param('sprintId', ParseIntPipe) sprintId: number,
     @Body('trimestreId') trimestreId: number | null,
+    @Request() req: any,
   ) {
+    const rol = req.user?.rol;
+    if (rol !== 'coordinador' && rol !== 'instructor') {
+      throw new ForbiddenException('Solo coordinadores e instructores pueden vincular módulos a trimestres.');
+    }
     return this.projectsService.assignSprintToTrimestre(sprintId, trimestreId ?? null);
   }
   // ══════════════════════════════════════════════════════════════════════════════
@@ -312,7 +375,12 @@ export class ProjectsController {
     @Param('sprintId', ParseIntPipe) sprintId: number,
     @Request() req: any,
   ) {
-    return this.projectsService.solicitarRevisionSprint(sprintId, req.user.id);
+    const usuario = req.user;
+    const esLider = usuario?.rol === 'aprendiz' && usuario?.es_lider_tecnico === true;
+    if (!esLider) {
+      throw new ForbiddenException('Solo el líder técnico puede enviar un módulo a revisión.');
+    }
+    return this.projectsService.solicitarRevisionSprint(sprintId, usuario.id);
   }
 
   /**
@@ -326,6 +394,10 @@ export class ProjectsController {
     @Body('mensaje') mensaje: string,
     @Request() req: any,
   ) {
+    const rol = req.user?.rol;
+    if (rol !== 'coordinador' && rol !== 'instructor') {
+      throw new ForbiddenException('Solo instructores o coordinadores pueden solicitar correcciones.');
+    }
     if (!mensaje?.trim()) {
       throw new Error('Debes indicar el motivo de las correcciones.');
     }
@@ -343,6 +415,10 @@ export class ProjectsController {
     @Param('notifId', ParseIntPipe) notifId: number,
     @Request() req: any,
   ) {
+    const rol = req.user?.rol;
+    if (rol !== 'coordinador' && rol !== 'instructor') {
+      throw new ForbiddenException('Solo instructores o coordinadores pueden aceptar solicitudes de módulo.');
+    }
     return this.projectsService.acceptSprintSolicitud(notifId, req.user.id);
   }
 
@@ -357,6 +433,10 @@ export class ProjectsController {
     @Body('motivo') motivo: string,
     @Request() req: any,
   ) {
+    const rol = req.user?.rol;
+    if (rol !== 'coordinador' && rol !== 'instructor') {
+      throw new ForbiddenException('Solo instructores o coordinadores pueden rechazar solicitudes de módulo.');
+    }
     return this.projectsService.rejectSprintSolicitud(notifId, req.user.id, motivo || undefined);
   }
 

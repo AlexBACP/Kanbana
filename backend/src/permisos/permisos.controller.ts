@@ -1,6 +1,6 @@
 import {
   Controller, Post, Get, Param, Body,
-  UseGuards, Request, ParseIntPipe, Query,
+  UseGuards, Request, ParseIntPipe, Query, ForbiddenException,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { PermisosService } from './permisos.service';
@@ -46,6 +46,10 @@ export class PermisosController {
     @Body('dias') dias: number,
     @Request() req: any,
   ) {
+    const rol = req.user?.rol;
+    if (rol !== 'coordinador' && rol !== 'instructor') {
+      throw new ForbiddenException('Solo instructores o coordinadores pueden aceptar permisos.');
+    }
     return this.permisosService.aceptar(id, req.user.id, dias ?? 5);
   }
 
@@ -60,6 +64,10 @@ export class PermisosController {
     @Body('motivo') motivo: string,
     @Request() req: any,
   ) {
+    const rol = req.user?.rol;
+    if (rol !== 'coordinador' && rol !== 'instructor') {
+      throw new ForbiddenException('Solo instructores o coordinadores pueden rechazar permisos.');
+    }
     return this.permisosService.rechazar(id, req.user.id, motivo);
   }
 
